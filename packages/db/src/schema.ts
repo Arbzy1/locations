@@ -9,7 +9,10 @@ import {
   index,
   serial,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
+
+export type TenantId = "personal" | "demo";
 
 /* ─── Better Auth tables ─── */
 
@@ -72,12 +75,13 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-/* ─── Location data ─── */
+/* ─── Location data (tenant-scoped) ─── */
 
 export const visits = pgTable(
   "visits",
   {
     id: serial("id").primaryKey(),
+    tenant: text("tenant").notNull().default("personal"),
     start: text("start").notNull(),
     end: text("end").notNull(),
     date: text("date").notNull(),
@@ -89,7 +93,7 @@ export const visits = pgTable(
     durationMinutes: real("duration_minutes").notNull(),
   },
   (t) => [
-    index("visits_date_idx").on(t.date),
+    index("visits_tenant_date_idx").on(t.tenant, t.date),
     index("visits_place_id_idx").on(t.placeId),
   ],
 );
@@ -98,6 +102,7 @@ export const activities = pgTable(
   "activities",
   {
     id: serial("id").primaryKey(),
+    tenant: text("tenant").notNull().default("personal"),
     start: text("start").notNull(),
     end: text("end").notNull(),
     date: text("date").notNull(),
@@ -109,23 +114,36 @@ export const activities = pgTable(
     distanceMeters: real("distance_meters").notNull(),
     durationMinutes: real("duration_minutes").notNull(),
   },
-  (t) => [index("activities_date_idx").on(t.date), index("activities_mode_idx").on(t.mode)],
+  (t) => [
+    index("activities_tenant_date_idx").on(t.tenant, t.date),
+    index("activities_mode_idx").on(t.mode),
+  ],
 );
 
-export const dayStats = pgTable("day_stats", {
-  date: text("date").primaryKey(),
-  totalDistanceMiles: real("total_distance_miles").notNull(),
-  modes: jsonb("modes").$type<Record<string, number>>().notNull(),
-  clusters: jsonb("clusters").$type<string[]>().notNull(),
-  visitCount: integer("visit_count").notNull(),
-  activityCount: integer("activity_count").notNull(),
-});
+export const dayStats = pgTable(
+  "day_stats",
+  {
+    tenant: text("tenant").notNull().default("personal"),
+    date: text("date").notNull(),
+    totalDistanceMiles: real("total_distance_miles").notNull(),
+    modes: jsonb("modes").$type<Record<string, number>>().notNull(),
+    clusters: jsonb("clusters").$type<string[]>().notNull(),
+    visitCount: integer("visit_count").notNull(),
+    activityCount: integer("activity_count").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.tenant, t.date] })],
+);
 
-export const analyticsCache = pgTable("analytics_cache", {
-  key: text("key").primaryKey(),
-  data: jsonb("data").notNull(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+export const analyticsCache = pgTable(
+  "analytics_cache",
+  {
+    tenant: text("tenant").notNull().default("personal"),
+    key: text("key").notNull(),
+    data: jsonb("data").notNull(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tenant, t.key] })],
+);
 
 export const routeCache = pgTable("route_cache", {
   key: text("key").primaryKey(),
@@ -155,3 +173,7 @@ export type RouteStep = {
 export type VisitRow = typeof visits.$inferSelect;
 export type ActivityRow = typeof activities.$inferSelect;
 export type DayStatsRow = typeof dayStats.$inferSelect;
+
+export function tenantFromRole(role: string | null | undefined): TenantId {
+  return role === "demo" ? "demo" : "personal";
+}

@@ -1,4 +1,4 @@
-import { eq, sql, desc } from "drizzle-orm";
+import { and, eq, sql, desc } from "drizzle-orm";
 import {
   createDb,
   activities,
@@ -16,6 +16,7 @@ import {
   type RouteStep,
   type ActivityRow,
   type VisitRow,
+  type TenantId,
 } from "@locations/db";
 import type { Env } from "./env";
 
@@ -207,17 +208,28 @@ function activityToApi(a: ActivityRow) {
   };
 }
 
-export async function getOverview(db: ReturnType<typeof createDb>) {
-  const [visitCount] = await db.select({ count: sql<number>`count(*)::int` }).from(visits);
-  const [activityCount] = await db.select({ count: sql<number>`count(*)::int` }).from(activities);
+export async function getOverview(db: ReturnType<typeof createDb>, tenant: TenantId) {
+  const [visitCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(visits)
+    .where(eq(visits.tenant, tenant));
+  const [activityCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(activities)
+    .where(eq(activities.tenant, tenant));
   const [distRow] = await db
     .select({ total: sql<number>`coalesce(sum(${dayStats.totalDistanceMiles}), 0)` })
-    .from(dayStats);
-  const dates = await db.select({ date: dayStats.date }).from(dayStats).orderBy(dayStats.date);
+    .from(dayStats)
+    .where(eq(dayStats.tenant, tenant));
+  const dates = await db
+    .select({ date: dayStats.date })
+    .from(dayStats)
+    .where(eq(dayStats.tenant, tenant))
+    .orderBy(dayStats.date);
   const [places] = await db
     .select({ count: sql<number>`count(distinct ${visits.placeId})::int` })
     .from(visits)
-    .where(sql`${visits.placeId} is not null`);
+    .where(and(eq(visits.tenant, tenant), sql`${visits.placeId} is not null`));
 
   const allDates = dates.map((d) => d.date);
   return {
@@ -233,13 +245,20 @@ export async function getOverview(db: ReturnType<typeof createDb>) {
   };
 }
 
-export async function getDays(db: ReturnType<typeof createDb>) {
-  const rows = await db.select({ date: dayStats.date }).from(dayStats).orderBy(dayStats.date);
+export async function getDays(db: ReturnType<typeof createDb>, tenant: TenantId) {
+  const rows = await db
+    .select({ date: dayStats.date })
+    .from(dayStats)
+    .where(eq(dayStats.tenant, tenant))
+    .orderBy(dayStats.date);
   return rows.map((r) => r.date);
 }
 
-export async function getHeatmap(db: ReturnType<typeof createDb>) {
-  const rows = await db.select({ lat: visits.lat, lon: visits.lon }).from(visits);
+export async function getHeatmap(db: ReturnType<typeof createDb>, tenant: TenantId) {
+  const rows = await db
+    .select({ lat: visits.lat, lon: visits.lon })
+    .from(visits)
+    .where(eq(visits.tenant, tenant));
   const counts = new Map<string, { lat: number; lon: number; count: number }>();
   for (const r of rows) {
     const lat = Math.round(r.lat * 1e5) / 1e5;
@@ -252,13 +271,24 @@ export async function getHeatmap(db: ReturnType<typeof createDb>) {
   return [...counts.values()].sort((a, b) => b.count - a.count);
 }
 
-export async function getAnalytics(db: ReturnType<typeof createDb>, key: string) {
-  const rows = await db.select().from(analyticsCache).where(eq(analyticsCache.key, key)).limit(1);
+export async function getAnalytics(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  key: string,
+) {
+  const rows = await db
+    .select()
+    .from(analyticsCache)
+    .where(and(eq(analyticsCache.tenant, tenant), eq(analyticsCache.key, key)))
+    .limit(1);
   return rows[0]?.data ?? [];
 }
 
-export async function getRouteProgress(db: ReturnType<typeof createDb>) {
-  const [activityCount] = await db.select({ count: sql<number>`count(*)::int` }).from(activities);
+export async function getRouteProgress(db: ReturnType<typeof createDb>, tenant: TenantId) {
+  const [activityCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(activities)
+    .where(eq(activities.tenant, tenant));
   const [cachedCount] = await db.select({ count: sql<number>`count(*)::int` }).from(routeCache);
   const total = activityCount?.count ?? 0;
   const cached = cachedCount?.count ?? 0;
@@ -271,16 +301,24 @@ export async function getRouteProgress(db: ReturnType<typeof createDb>) {
   };
 }
 
-export async function getDay(db: ReturnType<typeof createDb>, date: string) {
-  const dayRows = await db.select().from(dayStats).where(eq(dayStats.date, date)).limit(1);
+export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, date: string) {
+  const dayRows = await db
+    .select()
+    .from(dayStats)
+    .where(and(eq(dayStats.tenant, tenant), eq(dayStats.date, date)))
+    .limit(1);
   const day = dayRows[0];
   if (!day) return { error: "No data for this date" };
 
-  const dayVisits = await db.select().from(visits).where(eq(visits.date, date)).orderBy(visits.start);
+  const dayVisits = await db
+    .select()
+    .from(visits)
+    .where(and(eq(visits.tenant, tenant), eq(visits.date, date)))
+    .orderBy(visits.start);
   const dayActivities = await db
     .select()
     .from(activities)
-    .where(eq(activities.date, date))
+    .where(and(eq(activities.tenant, tenant), eq(activities.date, date)))
     .orderBy(activities.start);
 
   type Event =

@@ -45,6 +45,12 @@ async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is required");
 
+  const tenant = (process.env.TENANT || "personal").trim();
+  if (tenant !== "personal" && tenant !== "demo") {
+    throw new Error('TENANT must be "personal" or "demo"');
+  }
+  console.log(`Importing into tenant="${tenant}"`);
+
   const root = resolve(__dirname, "../../..");
   const samplePath = resolve(root, "data/sample-location-history.json");
   const personalDefault = resolve(root, "../location-history.json");
@@ -52,6 +58,8 @@ async function main() {
   let dataPath: string;
   if (process.env.DATA_PATH) {
     dataPath = resolve(root, process.env.DATA_PATH);
+  } else if (tenant === "demo") {
+    dataPath = samplePath;
   } else if (existsSync(personalDefault)) {
     dataPath = personalDefault;
   } else {
@@ -78,6 +86,7 @@ async function main() {
       const endDt = new Date(endTime);
       const duration = (endDt.getTime() - startDt.getTime()) / 60000;
       visitRows.push({
+        tenant,
         start: startTime,
         end: endTime,
         date: startTime.slice(0, 10),
@@ -98,6 +107,7 @@ async function main() {
       const endDt = new Date(endTime);
       const duration = (endDt.getTime() - startDt.getTime()) / 60000;
       activityRows.push({
+        tenant,
         start: startTime,
         end: endTime,
         date: startTime.slice(0, 10),
@@ -142,6 +152,7 @@ async function main() {
       if (!clusters.includes(v.cluster)) clusters.push(v.cluster);
     }
     dayStatRows.push({
+      tenant,
       date,
       totalDistanceMiles: Math.round(totalDist * 10) / 10,
       modes,
@@ -153,8 +164,11 @@ async function main() {
 
   const db = drizzle(neon(url));
 
-  console.log("Clearing existing location tables...");
-  await db.execute(sql`TRUNCATE visits, activities, day_stats, analytics_cache RESTART IDENTITY`);
+  console.log(`Clearing existing data for tenant="${tenant}"...`);
+  await db.execute(sql`DELETE FROM visits WHERE tenant = ${tenant}`);
+  await db.execute(sql`DELETE FROM activities WHERE tenant = ${tenant}`);
+  await db.execute(sql`DELETE FROM day_stats WHERE tenant = ${tenant}`);
+  await db.execute(sql`DELETE FROM analytics_cache WHERE tenant = ${tenant}`);
 
   console.log("Inserting visits...");
   const BATCH = 500;
@@ -175,25 +189,25 @@ async function main() {
   }
 
   console.log("Computing analytics...");
-  // Need rows with ids — re-query or synthesize
-  const visitSelect = await db.select().from(visits);
-  const activitySelect = await db.select().from(activities);
-  const daySelect = await db.select().from(dayStats);
+  const visitSelect = await db.select().from(visits).where(sql`tenant = ${tenant}`);
+  const activitySelect = await db.select().from(activities).where(sql`tenant = ${tenant}`);
+  const daySelect = await db.select().from(dayStats).where(sql`tenant = ${tenant}`);
   const store = buildStore(visitSelect, activitySelect, daySelect);
   const analytics = computeAllAnalytics(store);
 
   for (const [key, data] of Object.entries(analytics)) {
     await db
       .insert(analyticsCache)
-      .values({ key, data })
+      .values({ tenant, key, data })
       .onConflictDoUpdate({
-        target: analyticsCache.key,
+        target: [analyticsCache.tenant, analyticsCache.key],
         set: { data, updatedAt: new Date() },
       });
   }
 
   console.log("Import complete.");
   console.log({
+    tenant,
     visits: visitRows.length,
     activities: activityRows.length,
     days: dayStatRows.length,

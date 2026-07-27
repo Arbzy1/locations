@@ -6,14 +6,14 @@ Built on **Cloudflare Workers**, **Neon**, and **Better Auth**.
 
 ![Locations](docs/screenshot.png)
 
-## Two different things
+## Live site: demo + private
 
-| | |
-|--|--|
-| **[locations.aden.website](https://locations.aden.website)** | The author's **invite-only** personal journal. Strangers cannot upload data here. |
-| **This GitHub repo** | Fork it, import **your** Takeout JSON into **your** Neon DB, deploy **your** Worker. |
+[locations.aden.website](https://locations.aden.website) hosts **both**:
 
-Your location history never goes into this git repo and never mixes with the live demo.
+1. **Public demo** — click “Try the demo” for sample journeys (no invite needed)
+2. **Personal data** — invite-only accounts see the owner’s real timeline
+
+Datasets are isolated by tenant in Neon (`demo` vs `personal`).
 
 ## Use your own data (recommended)
 

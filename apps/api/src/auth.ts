@@ -13,6 +13,16 @@ export function createAuth(env: Env) {
       enabled: true,
       disableSignUp: true,
     },
+    user: {
+      additionalFields: {
+        role: {
+          type: "string",
+          required: false,
+          defaultValue: "user",
+          input: false,
+        },
+      },
+    },
     trustedOrigins: [
       env.BETTER_AUTH_URL,
       "http://localhost:5173",

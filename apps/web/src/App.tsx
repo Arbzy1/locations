@@ -40,6 +40,7 @@ function AppContent() {
   const [dayViewDate, setDayViewDate] = useState('');
   const { data: routeProgress } = useRouteProgress();
   const { data: session } = useSession();
+  const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
 
   const handleSelectDate = (date: string) => {
     setDayViewDate(date);
@@ -47,7 +48,26 @@ function AppContent() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-bg">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-bg">
+      {isDemo && (
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-accent/30 bg-accent/10 px-4 py-2 text-xs text-accent">
+          <span>
+            You’re viewing the <strong className="font-semibold">public demo</strong> with sample
+            places — not real personal history.
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              queryClient.clear();
+              void signOut();
+            }}
+            className="shrink-0 rounded-md border border-accent/40 px-2 py-1 hover:bg-accent/20"
+          >
+            Exit demo
+          </button>
+        </div>
+      )}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
       <div className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-surface py-4">
         <div
           className="mb-4 font-display text-lg font-bold tracking-tight text-accent"
@@ -95,6 +115,7 @@ function AppContent() {
         {activeTab === 'day' && <DayView initialDate={dayViewDate} />}
         {activeTab === 'trips' && <DayTripsView onSelectDate={handleSelectDate} />}
         {activeTab === 'insights' && <InsightsView />}
+      </div>
       </div>
     </div>
   );

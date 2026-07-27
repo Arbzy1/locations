@@ -1,14 +1,17 @@
 import { useState, type FormEvent } from 'react';
 import { signIn } from '../lib/auth';
-import { MapPinned, Lock, ExternalLink } from 'lucide-react';
+import { MapPinned, Lock, ExternalLink, Play } from 'lucide-react';
 
 const GITHUB_URL = 'https://github.com/Arbzy1/locations';
+const DEMO_EMAIL = 'demo@locations.app';
+const DEMO_PASSWORD = 'demo1234';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -23,6 +26,24 @@ export default function LoginPage() {
       setError('Unable to sign in. Check your connection.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const tryDemo = async () => {
+    setError('');
+    setDemoLoading(true);
+    try {
+      const result = await signIn.email({
+        email: DEMO_EMAIL,
+        password: DEMO_PASSWORD,
+      });
+      if (result.error) {
+        setError(result.error.message || 'Demo unavailable right now');
+      }
+    } catch {
+      setError('Unable to start demo. Try again shortly.');
+    } finally {
+      setDemoLoading(false);
     }
   };
 
@@ -53,9 +74,19 @@ export default function LoginPage() {
             Locations
           </h1>
           <p className="mt-2 text-sm text-text-muted">
-            Private map journal — invite only
+            Private map journal — try the public demo or sign in
           </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => void tryDemo()}
+          disabled={demoLoading || loading}
+          className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-60"
+        >
+          <Play size={16} />
+          {demoLoading ? 'Starting demo…' : 'Try the demo (sample journeys)'}
+        </button>
 
         <form
           onSubmit={onSubmit}
@@ -63,7 +94,7 @@ export default function LoginPage() {
         >
           <div className="mb-4 flex items-center gap-2 text-xs uppercase tracking-wider text-text-muted">
             <Lock size={12} />
-            Sign in
+            Invite sign in
           </div>
 
           <label className="mb-1 block text-xs text-text-muted">Email</label>
@@ -94,7 +125,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || demoLoading}
             className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-[#0d1117] transition hover:brightness-110 disabled:opacity-60"
           >
             {loading ? 'Signing in…' : 'Enter'}
@@ -103,8 +134,8 @@ export default function LoginPage() {
 
         <div className="mt-6 rounded-xl border border-border/80 bg-surface/50 px-4 py-3 text-center">
           <p className="text-xs text-text-muted">
-            Want to explore <span className="text-text">your</span> Google Timeline?
-            This site is a private demo — fork the project and run it with your own data.
+            Want this with <span className="text-text">your</span> Google Timeline?
+            Fork the repo and deploy your own instance.
           </p>
           <a
             href={GITHUB_URL}
