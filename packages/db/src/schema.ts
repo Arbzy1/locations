@@ -12,7 +12,10 @@ import {
   primaryKey,
 } from "drizzle-orm/pg-core";
 
-export type TenantId = "personal" | "demo";
+/** Tenant id: `"demo"` for the public demo, otherwise the Better Auth user id. */
+export type TenantId = string;
+
+export type ImportJobStatus = "pending" | "processing" | "ready" | "error";
 
 /* ─── Better Auth tables ─── */
 
@@ -75,6 +78,44 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+/* ─── Data sources (one Google account export per row) ─── */
+
+export const dataSources = pgTable(
+  "data_sources",
+  {
+    id: text("id").primaryKey(),
+    tenant: text("tenant").notNull(),
+    label: text("label").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("data_sources_tenant_label_uidx").on(t.tenant, t.label),
+    index("data_sources_tenant_idx").on(t.tenant),
+  ],
+);
+
+export const importJobs = pgTable(
+  "import_jobs",
+  {
+    id: text("id").primaryKey(),
+    tenant: text("tenant").notNull(),
+    sourceId: text("source_id").notNull(),
+    userId: text("user_id").notNull(),
+    status: text("status").notNull().$type<ImportJobStatus>(),
+    error: text("error"),
+    visitCount: integer("visit_count"),
+    activityCount: integer("activity_count"),
+    r2Key: text("r2_key"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("import_jobs_tenant_idx").on(t.tenant),
+    index("import_jobs_user_id_idx").on(t.userId),
+  ],
+);
+
 /* ─── Location data (tenant-scoped) ─── */
 
 export const visits = pgTable(
@@ -82,6 +123,7 @@ export const visits = pgTable(
   {
     id: serial("id").primaryKey(),
     tenant: text("tenant").notNull().default("personal"),
+    sourceId: text("source_id"),
     start: text("start").notNull(),
     end: text("end").notNull(),
     date: text("date").notNull(),
@@ -95,6 +137,7 @@ export const visits = pgTable(
   (t) => [
     index("visits_tenant_date_idx").on(t.tenant, t.date),
     index("visits_place_id_idx").on(t.placeId),
+    index("visits_tenant_source_idx").on(t.tenant, t.sourceId),
   ],
 );
 
@@ -103,6 +146,7 @@ export const activities = pgTable(
   {
     id: serial("id").primaryKey(),
     tenant: text("tenant").notNull().default("personal"),
+    sourceId: text("source_id"),
     start: text("start").notNull(),
     end: text("end").notNull(),
     date: text("date").notNull(),
@@ -117,6 +161,7 @@ export const activities = pgTable(
   (t) => [
     index("activities_tenant_date_idx").on(t.tenant, t.date),
     index("activities_mode_idx").on(t.mode),
+    index("activities_tenant_source_idx").on(t.tenant, t.sourceId),
   ],
 );
 
@@ -173,7 +218,13 @@ export type RouteStep = {
 export type VisitRow = typeof visits.$inferSelect;
 export type ActivityRow = typeof activities.$inferSelect;
 export type DayStatsRow = typeof dayStats.$inferSelect;
+export type DataSourceRow = typeof dataSources.$inferSelect;
+export type ImportJobRow = typeof importJobs.$inferSelect;
 
-export function tenantFromRole(role: string | null | undefined): TenantId {
-  return role === "demo" ? "demo" : "personal";
+/** Resolve the data tenant for an authenticated app user. */
+export function tenantForUser(user: {
+  id: string;
+  role?: string | null;
+}): TenantId {
+  return user.role === "demo" ? "demo" : user.id;
 }

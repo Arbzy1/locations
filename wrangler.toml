@@ -20,6 +20,11 @@ BETTER_AUTH_URL = "https://locations.aden.website"
 #   DATABASE_URL
 #   BETTER_AUTH_SECRET
 
+[[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "locations-uploads"
+preview_bucket_name = "locations-uploads-preview"
+
 # Owner demo domain — remove or replace when deploying your own fork
 [[routes]]
 pattern = "locations.aden.website"
