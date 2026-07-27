@@ -1,0 +1,4 @@
+# Local Wrangler secrets (gitignored). Copy from .env.example values.
+DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+BETTER_AUTH_SECRET=dev-secret-change-me-to-a-long-random-string
+BETTER_AUTH_URL=http://localhost:8787

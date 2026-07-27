@@ -1,0 +1,32 @@
+{
+  "name": "@locations/db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts",
+    "./geo": "./src/geo.ts",
+    "./analytics": "./src/analytics.ts"
+  },
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "migrate": "tsx src/migrate.ts",
+    "import": "tsx src/import.ts",
+    "warm-routes": "tsx src/warm-routes.ts",
+    "create-user": "tsx src/create-user.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.1",
+    "better-auth": "^1.3.4",
+    "drizzle-orm": "^0.44.4",
+    "dotenv": "^17.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "drizzle-kit": "^0.31.4",
+    "tsx": "^4.20.3",
+    "typescript": "~5.9.3"
+  }
+}

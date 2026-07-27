@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.npm/
+.pnpm-store/
+
+# Build
+dist/
+.wrangler/
+.dev.vars
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.generated-secret.txt
+.wrangler-bundle/
+
+# Personal location data — never commit
+location-history.json
+**/location-history.json
+../location-history.json
+cache/
+*.db
+*.sqlite
+
+# Legacy local artifacts
+legacy/cache/
+backend/
+frontend/
+.wrangler/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+.claude/
+
+# Logs
+*.log
+npm-debug.log*

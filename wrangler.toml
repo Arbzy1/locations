@@ -1,0 +1,23 @@
+name = "locations"
+main = "apps/api/src/index.ts"
+compatibility_date = "2025-03-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = true
+
+[assets]
+directory = "apps/web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[vars]
+BETTER_AUTH_URL = "https://locations.aden.website"
+
+# Secrets (set via wrangler secret put):
+#   DATABASE_URL
+#   BETTER_AUTH_SECRET
+
+[[routes]]
+pattern = "locations.aden.website"
+custom_domain = true
