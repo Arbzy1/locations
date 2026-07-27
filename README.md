@@ -1,20 +1,94 @@
 # Locations
 
-Private location-history explorer — a portfolio map journal built on **Cloudflare Workers**, **Neon Postgres**, and **Better Auth**.
+Explore **your** Google Timeline as a private map journal — heatmaps, day views, trips, and insights.
 
-> **Live:** [locations.aden.website](https://locations.aden.website) (invite-only)  
-> Real Google Takeout data stays in Neon. This repo never contains location JSON.
+Built on **Cloudflare Workers**, **Neon**, and **Better Auth**.
 
 ![Locations](docs/screenshot.png)
 
+## Two different things
+
+| | |
+|--|--|
+| **[locations.aden.website](https://locations.aden.website)** | The author's **invite-only** personal journal. Strangers cannot upload data here. |
+| **This GitHub repo** | Fork it, import **your** Takeout JSON into **your** Neon DB, deploy **your** Worker. |
+
+Your location history never goes into this git repo and never mixes with the live demo.
+
+## Use your own data (recommended)
+
+### What you need
+
+- Node 20+
+- Free [Neon](https://neon.tech) Postgres database
+- (Optional) Cloudflare account to deploy
+- Your Google Takeout **Location History** JSON, **or** the bundled sample
+
+### Export from Google (optional)
+
+1. Open [Google Takeout](https://takeout.google.com/)
+2. Select **Location History** / Timeline only
+3. Download and unzip until you find a JSON array of records with `visit` / `activity` (often named like `location-history.json`)
+4. Keep that file **outside** git
+
+### One-command setup
+
+```bash
+git clone https://github.com/Arbzy1/locations.git
+cd locations
+npm install
+npm run setup
+```
+
+The wizard will:
+
+1. Ask for your `DATABASE_URL`
+2. Let you choose the **bundled sample** or a path to **your Takeout JSON**
+3. Run migrate + import
+4. Create your admin login (signup stays disabled)
+
+Then locally:
+
+```bash
+npm run build:web
+npm run dev:api    # open http://localhost:8787 and sign in
+```
+
+### Deploy your own copy
+
+```bash
+# In wrangler.toml: change worker name, BETTER_AUTH_URL, and custom domain
+npx wrangler login
+npx wrangler secret put DATABASE_URL
+npx wrangler secret put BETTER_AUTH_SECRET
+npm run deploy
+```
+
+You get your own `*.workers.dev` URL (or attach your domain). That is separate from `locations.aden.website`.
+
+### Swap in real Takeout later
+
+```bash
+# .env
+DATA_PATH=../my-location-history.json
+
+npm run db:import   # replaces visits/activities/analytics in your Neon DB
+```
+
+Optional: `npm run db:warm-routes` to pre-cache road geometries (slow; otherwise routes fill on demand).
+
+Invite another person to **your** instance:
+
+```bash
+npm run auth:create-user -- friend@email.com 'password' Friend user
+```
+
 ## What it does
 
-- **Hotspots** — visit density heatmap
-- **Day View** — map + timeline with OSRM-snapped journeys
-- **Day Trips** — multi-cluster / long-range days
-- **Insights** — distance, corridors, yearly/monthly stats, fun facts
-
-All data routes require a signed-in session. Public signup is disabled; accounts are created with a CLI invite.
+- **Hotspots** — visit density heatmap  
+- **Day View** — map + timeline with OSRM-snapped journeys  
+- **Day Trips** — multi-cluster / long-range days  
+- **Insights** — distance, corridors, yearly/monthly stats  
 
 ## Stack
 
@@ -27,79 +101,28 @@ All data routes require a signed-in session. Public signup is disabled; accounts
 | UI | React 19, Vite, Tailwind 4, Leaflet, Recharts |
 
 ```
-Browser ──► Worker (assets + /api/*)
+Browser ──► Your Worker (assets + /api/*)
                 │
                 ├── Better Auth session
-                └── Neon (visits, activities, analytics, route/place cache)
+                └── Your Neon DB (imported from your JSON)
 ```
 
-## Quick start
-
-### Prerequisites
-
-- Node 20+
-- Neon project (`DATABASE_URL`)
-- Cloudflare account + Wrangler
-- Local `location-history.json` (Google Takeout) **outside** git
-
-### Setup
-
-```bash
-cp .env.example .env
-# fill DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL=http://localhost:8787
-# set DATA_PATH to your location-history.json
-
-npm install
-npm run db:migrate
-npm run db:import
-npm run auth:create-user -- you@email.com 'your-password' Aden admin
-```
-
-### Develop
-
-```bash
-# Terminal-friendly: builds web once, then vite + wrangler
-npm run build:web
-npm run dev:api    # http://localhost:8787
-npm run dev:web    # http://localhost:5173 (proxies /api → 8787)
-```
-
-Or open the Worker URL directly after `npm run build:web && npm run dev:api` (serves the built SPA + API).
-
-### Deploy
-
-```bash
-# One-time secrets
-npx wrangler secret put DATABASE_URL
-npx wrangler secret put BETTER_AUTH_SECRET
-
-# Ship it
-npm run deploy
-```
-
-DNS: CNAME `locations` → your Worker (or attach custom domain `locations.aden.website` in the Cloudflare dashboard — `wrangler.toml` already declares it).
-
-After first deploy, point `BETTER_AUTH_URL` / wrangler `[vars]` at `https://locations.aden.website`, re-import if needed, and create your admin user against the **production** `DATABASE_URL`.
-
-### Useful scripts
+## Scripts
 
 | Script | Purpose |
 |--------|---------|
+| `npm run setup` | Interactive first-time Neon + import + admin user |
 | `npm run deploy` | Build web + `wrangler deploy` |
-| `npm run db:migrate` | Apply Drizzle migrations |
-| `npm run db:import` | Load gitignored JSON → Neon + analytics |
-| `npm run db:warm-routes` | Optional OSRM backfill into `route_cache` |
-| `npm run auth:create-user` | Invite a user (no public signup) |
+| `npm run db:migrate` | Apply schema |
+| `npm run db:import` | Load JSON → Neon (full replace of location tables) |
+| `npm run db:warm-routes` | Optional OSRM backfill |
+| `npm run auth:create-user` | Invite a user |
 
 ## Privacy
 
-- `location-history.json` and SQLite caches are **gitignored**
-- App is `noindex`; demo is invite-only
-- Do not publish dumps of coordinates, place IDs, or Neon connection strings
-
-## Legacy
-
-The original FastAPI prototype lives under `legacy/backend` for reference only. Production is Workers + Neon.
+- Real Takeout JSON is **gitignored** — only `data/sample-location-history.json` ships in the repo
+- The public live site is invite-only and is **not** a multi-tenant host for other people's timelines
+- Do not commit `.env`, `.dev.vars`, or Neon credentials
 
 ## License
 

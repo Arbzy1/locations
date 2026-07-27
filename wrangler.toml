@@ -1,3 +1,5 @@
+# Forkers: change `name`, BETTER_AUTH_URL, and the custom domain route below
+# so you deploy YOUR worker — not locations.aden.website.
 name = "locations"
 main = "apps/api/src/index.ts"
 compatibility_date = "2025-03-01"
@@ -18,6 +20,7 @@ BETTER_AUTH_URL = "https://locations.aden.website"
 #   DATABASE_URL
 #   BETTER_AUTH_SECRET
 
+# Owner demo domain — remove or replace when deploying your own fork
 [[routes]]
 pattern = "locations.aden.website"
 custom_domain = true

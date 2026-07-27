@@ -1,0 +1,192 @@
+[
+  {
+    "startTime": "2025-06-10T08:15:00.000Z",
+    "endTime": "2025-06-10T09:00:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeLocation": "geo:51.36320,-0.27210",
+        "semanticType": "Home",
+        "placeID": "sample_home_kingston"
+      }
+    }
+  },
+  {
+    "startTime": "2025-06-10T09:05:00.000Z",
+    "endTime": "2025-06-10T09:45:00.000Z",
+    "activity": {
+      "start": "geo:51.36320,-0.27210",
+      "end": "geo:51.50740,-0.12780",
+      "distanceMeters": 18500,
+      "topCandidate": { "type": "in train" }
+    }
+  },
+  {
+    "startTime": "2025-06-10T09:50:00.000Z",
+    "endTime": "2025-06-10T12:30:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeLocation": "geo:51.50740,-0.12780",
+        "semanticType": "Work",
+        "placeID": "sample_work_central"
+      }
+    }
+  },
+  {
+    "startTime": "2025-06-10T12:35:00.000Z",
+    "endTime": "2025-06-10T12:50:00.000Z",
+    "activity": {
+      "start": "geo:51.50740,-0.12780",
+      "end": "geo:51.51320,-0.13050",
+      "distanceMeters": 900,
+      "topCandidate": { "type": "walking" }
+    }
+  },
+  {
+    "startTime": "2025-06-10T12:50:00.000Z",
+    "endTime": "2025-06-10T13:40:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeLocation": "geo:51.51320,-0.13050",
+        "semanticType": "Food and Drink",
+        "placeID": "sample_lunch_soho"
+      }
+    }
+  },
+  {
+    "startTime": "2025-06-10T13:45:00.000Z",
+    "endTime": "2025-06-10T14:00:00.000Z",
+    "activity": {
+      "start": "geo:51.51320,-0.13050",
+      "end": "geo:51.50740,-0.12780",
+      "distanceMeters": 850,
+      "topCandidate": { "type": "walking" }
+    }
+  },
+  {
+    "startTime": "2025-06-10T14:00:00.000Z",
+    "endTime": "2025-06-10T17:30:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeLocation": "geo:51.50740,-0.12780",
+        "semanticType": "Work",
+        "placeID": "sample_work_central"
+      }
+    }
+  },
+  {
+    "startTime": "2025-06-10T17:35:00.000Z",
+    "endTime": "2025-06-10T18:20:00.000Z",
+    "activity": {
+      "start": "geo:51.50740,-0.12780",
+      "end": "geo:51.36320,-0.27210",
+      "distanceMeters": 19000,
+      "topCandidate": { "type": "in train" }
+    }
+  },
+  {
+    "startTime": "2025-06-10T18:25:00.000Z",
+    "endTime": "2025-06-10T22:00:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeLocation": "geo:51.36320,-0.27210",
+        "semanticType": "Home",
+        "placeID": "sample_home_kingston"
+      }
+    }
+  },
+  {
+    "startTime": "2025-06-14T09:00:00.000Z",
+    "endTime": "2025-06-14T09:30:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeLocation": "geo:51.36320,-0.27210",
+        "semanticType": "Home",
+        "placeID": "sample_home_kingston"
+      }
+    }
+  },
+  {
+    "startTime": "2025-06-14T09:35:00.000Z",
+    "endTime": "2025-06-14T11:15:00.000Z",
+    "activity": {
+      "start": "geo:51.36320,-0.27210",
+      "end": "geo:51.48160,-3.17910",
+      "distanceMeters": 225000,
+      "topCandidate": { "type": "in passenger vehicle" }
+    }
+  },
+  {
+    "startTime": "2025-06-14T11:20:00.000Z",
+    "endTime": "2025-06-14T18:00:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeLocation": "geo:51.48160,-3.17910",
+        "semanticType": "Travel",
+        "placeID": "sample_cardiff"
+      }
+    }
+  },
+  {
+    "startTime": "2025-06-14T18:10:00.000Z",
+    "endTime": "2025-06-14T20:00:00.000Z",
+    "activity": {
+      "start": "geo:51.48160,-3.17910",
+      "end": "geo:51.36320,-0.27210",
+      "distanceMeters": 230000,
+      "topCandidate": { "type": "in passenger vehicle" }
+    }
+  },
+  {
+    "startTime": "2025-06-14T20:05:00.000Z",
+    "endTime": "2025-06-14T23:00:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeLocation": "geo:51.36320,-0.27210",
+        "semanticType": "Home",
+        "placeID": "sample_home_kingston"
+      }
+    }
+  },
+  {
+    "startTime": "2025-07-01T10:00:00.000Z",
+    "endTime": "2025-07-01T10:20:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeLocation": "geo:51.47600,-0.20000",
+        "semanticType": "Shopping",
+        "placeID": "sample_south_london"
+      }
+    }
+  },
+  {
+    "startTime": "2025-07-01T10:25:00.000Z",
+    "endTime": "2025-07-01T10:55:00.000Z",
+    "activity": {
+      "start": "geo:51.47600,-0.20000",
+      "end": "geo:51.51000,-0.13000",
+      "distanceMeters": 6200,
+      "topCandidate": { "type": "in bus" }
+    }
+  },
+  {
+    "startTime": "2025-07-01T11:00:00.000Z",
+    "endTime": "2025-07-01T15:00:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeLocation": "geo:51.51000,-0.13000",
+        "semanticType": "Entertainment",
+        "placeID": "sample_central_museum"
+      }
+    }
+  },
+  {
+    "startTime": "2025-07-01T15:10:00.000Z",
+    "endTime": "2025-07-01T15:40:00.000Z",
+    "activity": {
+      "start": "geo:51.51000,-0.13000",
+      "end": "geo:51.47600,-0.20000",
+      "distanceMeters": 6100,
+      "topCandidate": { "type": "cycling" }
+    }
+  }
+]

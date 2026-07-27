@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { signIn } from '../lib/auth';
-import { MapPinned, Lock } from 'lucide-react';
+import { MapPinned, Lock, ExternalLink } from 'lucide-react';
+
+const GITHUB_URL = 'https://github.com/Arbzy1/locations';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -99,9 +101,21 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-text-muted">
-          No public signup. Accounts are created by invitation.
-        </p>
+        <div className="mt-6 rounded-xl border border-border/80 bg-surface/50 px-4 py-3 text-center">
+          <p className="text-xs text-text-muted">
+            Want to explore <span className="text-text">your</span> Google Timeline?
+            This site is a private demo — fork the project and run it with your own data.
+          </p>
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline"
+          >
+            <ExternalLink size={16} />
+            Deploy your own on GitHub
+          </a>
+        </div>
       </div>
     </div>
   );

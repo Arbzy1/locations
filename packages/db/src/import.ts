@@ -1,5 +1,5 @@
 import { config } from "dotenv";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { neon } from "@neondatabase/serverless";
@@ -46,9 +46,17 @@ async function main() {
   if (!url) throw new Error("DATABASE_URL is required");
 
   const root = resolve(__dirname, "../../..");
-  const dataPath = process.env.DATA_PATH
-    ? resolve(root, process.env.DATA_PATH)
-    : resolve(root, "../location-history.json");
+  const samplePath = resolve(root, "data/sample-location-history.json");
+  const personalDefault = resolve(root, "../location-history.json");
+
+  let dataPath: string;
+  if (process.env.DATA_PATH) {
+    dataPath = resolve(root, process.env.DATA_PATH);
+  } else if (existsSync(personalDefault)) {
+    dataPath = personalDefault;
+  } else {
+    dataPath = samplePath;
+  }
 
   console.log(`Reading ${dataPath}...`);
   const raw = JSON.parse(readFileSync(dataPath, "utf-8")) as RawRecord[];

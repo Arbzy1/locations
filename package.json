@@ -20,6 +20,7 @@
     "db:import": "npm run import -w @locations/db",
     "db:warm-routes": "npm run warm-routes -w @locations/db",
     "auth:create-user": "npm run create-user -w @locations/db",
+    "setup": "node scripts/setup.mjs",
     "typecheck": "npm run typecheck -w @locations/web && npm run typecheck -w @locations/api && npm run typecheck -w @locations/db",
     "lint": "npm run lint -w @locations/web"
   },
