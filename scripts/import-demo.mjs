@@ -9,11 +9,15 @@ const env = {
   DATA_PATH: "data/sample-location-history.json",
 };
 
-const result = spawnSync("npm", ["run", "import", "-w", "@locations/db"], {
-  cwd: root,
-  env,
-  stdio: "inherit",
-  shell: true,
-});
+const result = spawnSync(
+  "npm",
+  ["run", "import", "-w", "@locations/db", "--", "--source", "demo"],
+  {
+    cwd: root,
+    env,
+    stdio: "inherit",
+    shell: true,
+  },
+);
 
 process.exit(result.status ?? 1);

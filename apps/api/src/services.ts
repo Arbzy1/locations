@@ -3,7 +3,9 @@ import {
   createDb,
   activities,
   analyticsCache,
+  dataSources,
   dayStats,
+  importJobs,
   visits,
   routeCache,
   placeCache,
@@ -13,10 +15,14 @@ import {
   snapGeometry,
   haversineM,
   METERS_TO_MILES,
+  deleteSourceData,
+  ensureDataSource,
+  importSourceData,
   type RouteStep,
   type ActivityRow,
   type VisitRow,
   type TenantId,
+  type ImportJobStatus,
   landmarkForPlaceId,
 } from "@locations/db";
 import type { Env } from "./env";
@@ -611,6 +617,192 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
   };
 }
 
-// silence unused import warning for desc if any
-void desc;
+export async function getSourceById(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  sourceId: string,
+) {
+  const existing = await db
+    .select()
+    .from(dataSources)
+    .where(and(eq(dataSources.tenant, tenant), eq(dataSources.id, sourceId)))
+    .limit(1);
+  return existing[0] ?? null;
+}
+
+export async function listSources(db: ReturnType<typeof createDb>, tenant: TenantId) {
+  const sources = await db
+    .select()
+    .from(dataSources)
+    .where(eq(dataSources.tenant, tenant));
+  sources.sort(
+    (a: { createdAt: Date }, b: { createdAt: Date }) =>
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+
+  const result = [];
+  for (const s of sources) {
+    const [v] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(visits)
+      .where(and(eq(visits.tenant, tenant), eq(visits.sourceId, s.id)));
+    const [a] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(activities)
+      .where(and(eq(activities.tenant, tenant), eq(activities.sourceId, s.id)));
+    result.push({
+      id: s.id,
+      label: s.label,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      visitCount: v?.count ?? 0,
+      activityCount: a?.count ?? 0,
+    });
+  }
+  return result;
+}
+
+export async function renameSource(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  sourceId: string,
+  label: string,
+) {
+  const trimmed = label.trim();
+  if (!trimmed) return { error: "Label is required" as const };
+
+  const existing = await db
+    .select()
+    .from(dataSources)
+    .where(and(eq(dataSources.tenant, tenant), eq(dataSources.id, sourceId)))
+    .limit(1);
+  if (!existing[0]) return { error: "Source not found" as const };
+
+  try {
+    await db
+      .update(dataSources)
+      .set({ label: trimmed, updatedAt: new Date() })
+      .where(and(eq(dataSources.tenant, tenant), eq(dataSources.id, sourceId)));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("unique") || message.includes("duplicate")) {
+      return { error: "A source with that label already exists" as const };
+    }
+    throw err;
+  }
+
+  return { id: sourceId, label: trimmed };
+}
+
+export async function removeSource(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  sourceId: string,
+) {
+  const existing = await db
+    .select()
+    .from(dataSources)
+    .where(and(eq(dataSources.tenant, tenant), eq(dataSources.id, sourceId)))
+    .limit(1);
+  if (!existing[0]) return { error: "Source not found" as const };
+  await deleteSourceData(db, { tenant, sourceId });
+  return { ok: true as const };
+}
+
+export async function getImportStatus(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+) {
+  const [visitCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(visits)
+    .where(eq(visits.tenant, tenant));
+
+  const jobs = await db
+    .select()
+    .from(importJobs)
+    .where(eq(importJobs.tenant, tenant))
+    .orderBy(desc(importJobs.createdAt))
+    .limit(5);
+
+  const sources = await listSources(db, tenant);
+
+  return {
+    hasData: (visitCount?.count ?? 0) > 0,
+    visitCount: visitCount?.count ?? 0,
+    sourceCount: sources.length,
+    sources,
+    latestJob: jobs[0]
+      ? {
+          id: jobs[0].id,
+          sourceId: jobs[0].sourceId,
+          status: jobs[0].status,
+          error: jobs[0].error,
+          visitCount: jobs[0].visitCount,
+          activityCount: jobs[0].activityCount,
+          createdAt: jobs[0].createdAt,
+          updatedAt: jobs[0].updatedAt,
+        }
+      : null,
+    recentJobs: jobs.map((j) => ({
+      id: j.id,
+      sourceId: j.sourceId,
+      status: j.status,
+      error: j.error,
+      visitCount: j.visitCount,
+      activityCount: j.activityCount,
+      createdAt: j.createdAt,
+      updatedAt: j.updatedAt,
+    })),
+  };
+}
+
+export async function createImportJob(
+  db: ReturnType<typeof createDb>,
+  opts: {
+    id: string;
+    tenant: TenantId;
+    sourceId: string;
+    userId: string;
+    r2Key: string;
+    status?: ImportJobStatus;
+  },
+) {
+  const now = new Date();
+  await db.insert(importJobs).values({
+    id: opts.id,
+    tenant: opts.tenant,
+    sourceId: opts.sourceId,
+    userId: opts.userId,
+    status: opts.status ?? "pending",
+    r2Key: opts.r2Key,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+export async function updateImportJob(
+  db: ReturnType<typeof createDb>,
+  jobId: string,
+  patch: {
+    status: ImportJobStatus;
+    error?: string | null;
+    visitCount?: number;
+    activityCount?: number;
+  },
+) {
+  await db
+    .update(importJobs)
+    .set({
+      status: patch.status,
+      error: patch.error ?? null,
+      visitCount: patch.visitCount,
+      activityCount: patch.activityCount,
+      updatedAt: new Date(),
+    })
+    .where(eq(importJobs.id, jobId));
+}
+
+export { ensureDataSource, importSourceData };
+
 void METERS_TO_MILES;

@@ -129,6 +129,35 @@ export interface RouteProgress {
 
 export type TabId = 'hotspots' | 'day' | 'trips' | 'insights';
 
+export interface DataSourceInfo {
+  id: string;
+  label: string;
+  createdAt: string;
+  updatedAt: string;
+  visitCount: number;
+  activityCount: number;
+}
+
+export interface ImportJobInfo {
+  id: string;
+  sourceId: string;
+  status: 'pending' | 'processing' | 'ready' | 'error';
+  error: string | null;
+  visitCount: number | null;
+  activityCount: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ImportStatus {
+  hasData: boolean;
+  visitCount: number;
+  sourceCount: number;
+  sources: DataSourceInfo[];
+  latestJob: ImportJobInfo | null;
+  recentJobs: ImportJobInfo[];
+}
+
 /** Map pan/zoom target when focusing a timeline segment (bounds or point). */
 export type MapFocusTarget =
   | { bounds: LatLngBoundsExpression }

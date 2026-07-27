@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   DayData,
   Overview,
@@ -8,6 +9,8 @@ import type {
   DayTrip,
   FunFact,
   RouteProgress,
+  DataSourceInfo,
+  ImportStatus,
 } from '../types';
 import { useSession } from '../lib/auth';
 
@@ -126,4 +129,41 @@ export function useRouteProgress() {
     enabled: tenantKey !== 'anon',
     refetchInterval: (query) => (query.state.data?.running ? 5000 : false),
   });
+}
+
+export function useSources() {
+  const tenantKey = useTenantKey();
+  return useQuery<DataSourceInfo[]>({
+    queryKey: ['sources', tenantKey],
+    queryFn: () => fetchJson('/api/sources'),
+    enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useImportStatus(opts?: { poll?: boolean }) {
+  const tenantKey = useTenantKey();
+  return useQuery<ImportStatus>({
+    queryKey: ['import-status', tenantKey],
+    queryFn: () => fetchJson('/api/import/status'),
+    enabled: tenantKey !== 'anon',
+    refetchInterval: (query) => {
+      const status = query.state.data?.latestJob?.status;
+      const busy = status === 'pending' || status === 'processing';
+      if (opts?.poll || busy) return busy ? 1500 : false;
+      return false;
+    },
+  });
+}
+
+export function useInvalidateLocationQueries() {
+  const queryClient = useQueryClient();
+  const tenantKey = useTenantKey();
+  return useCallback(() => {
+    void queryClient.invalidateQueries({
+      predicate: (q) => {
+        const key = q.queryKey[1];
+        return key === tenantKey;
+      },
+    });
+  }, [queryClient, tenantKey]);
 }

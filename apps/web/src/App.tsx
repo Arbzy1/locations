@@ -1,13 +1,18 @@
 import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { TabId } from './types';
-import { useRouteProgress } from './hooks/useApi';
+import {
+  useImportStatus,
+  useOverview,
+  useRouteProgress,
+} from './hooks/useApi';
 import { useSession, signOut } from './lib/auth';
 import HotspotsView from './components/HotspotsView';
 import DayView from './components/DayView';
 import DayTripsView from './components/DayTripsView';
 import InsightsView from './components/InsightsView';
 import LoginPage from './components/LoginPage';
+import SourcesPanel from './components/SourcesPanel';
 import {
   Flame,
   Calendar,
@@ -15,6 +20,8 @@ import {
   TrendingUp,
   Loader2,
   LogOut,
+  Database,
+  Upload,
 } from 'lucide-react';
 
 const queryClient = new QueryClient({
@@ -35,12 +42,50 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'insights', label: 'Insights', icon: <TrendingUp size={18} /> },
 ];
 
+function EmptyDataState({ onOpenSources }: { onOpenSources: () => void }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg px-6 text-center">
+      <div className="rounded-full bg-accent/15 p-4 text-accent">
+        <Upload size={28} />
+      </div>
+      <div className="max-w-sm">
+        <h2 className="font-display text-lg font-semibold text-text">Import your Timeline</h2>
+        <p className="mt-2 text-sm text-text-muted">
+          Upload a Google Timeline JSON export for each Google account you use. Data from multiple
+          accounts merges into one view.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onOpenSources}
+        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg hover:bg-accent/90"
+      >
+        Add Google account data
+      </button>
+    </div>
+  );
+}
+
 function AppContent() {
   const [activeTab, setActiveTab] = useState<TabId>('hotspots');
   const [dayViewDate, setDayViewDate] = useState('');
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const { data: routeProgress } = useRouteProgress();
+  const { data: overview, isLoading: overviewLoading } = useOverview();
+  const { data: importStatus } = useImportStatus({
+    poll: true,
+  });
   const { data: session } = useSession();
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
+
+  const importing =
+    importStatus?.latestJob?.status === 'pending' ||
+    importStatus?.latestJob?.status === 'processing';
+
+  const hasData =
+    isDemo ||
+    (overview?.total_visits ?? 0) > 0 ||
+    (overview?.total_activities ?? 0) > 0;
 
   const handleSelectDate = (date: string) => {
     setDayViewDate(date);
@@ -48,7 +93,7 @@ function AppContent() {
   };
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-bg">
+    <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-bg">
       {isDemo && (
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-accent/30 bg-accent/10 px-4 py-2 text-xs text-accent">
           <span>
@@ -68,55 +113,86 @@ function AppContent() {
         </div>
       )}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-      <div className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-surface py-4">
-        <div
-          className="mb-4 font-display text-lg font-bold tracking-tight text-accent"
-          title="Locations"
-        >
-          L
+        <div className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-surface py-4">
+          <div
+            className="mb-4 font-display text-lg font-bold tracking-tight text-accent"
+            title="Locations"
+          >
+            L
+          </div>
+
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                activeTab === tab.id
+                  ? 'bg-accent/20 text-accent'
+                  : 'text-text-muted hover:bg-bg/50 hover:text-text'
+              }`}
+              title={tab.label}
+            >
+              {tab.icon}
+            </button>
+          ))}
+
+          <div className="mt-auto flex flex-col items-center gap-2">
+            {!isDemo && (
+              <button
+                type="button"
+                onClick={() => setSourcesOpen(true)}
+                className="flex h-10 w-10 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-bg/50 hover:text-text"
+                title="Data sources"
+              >
+                <Database size={16} />
+              </button>
+            )}
+            {routeProgress && routeProgress.percent < 100 && (
+              <div title={`Routes cached: ${routeProgress.percent}%`}>
+                <Loader2 size={16} className="animate-spin text-accent" />
+              </div>
+            )}
+            <button
+              onClick={() => {
+                queryClient.clear();
+                void signOut();
+              }}
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-bg/50 hover:text-text"
+              title={session?.user?.email ? `Sign out (${session.user.email})` : 'Sign out'}
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
 
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
-              activeTab === tab.id
-                ? 'bg-accent/20 text-accent'
-                : 'text-text-muted hover:bg-bg/50 hover:text-text'
-            }`}
-            title={tab.label}
-          >
-            {tab.icon}
-          </button>
-        ))}
-
-        <div className="mt-auto flex flex-col items-center gap-2">
-          {routeProgress && routeProgress.percent < 100 && (
-            <div title={`Routes cached: ${routeProgress.percent}%`}>
-              <Loader2 size={16} className="animate-spin text-accent" />
+        <div className="flex-1 overflow-hidden">
+          {overviewLoading && !isDemo ? (
+            <div className="flex h-full items-center justify-center text-text-muted">
+              <Loader2 className="animate-spin text-accent" size={24} />
             </div>
+          ) : !hasData ? (
+            importing ? (
+              <div className="flex h-full flex-col items-center justify-center gap-3 bg-bg text-text-muted">
+                <Loader2 className="animate-spin text-accent" size={24} />
+                <p className="text-sm">Importing Timeline data…</p>
+              </div>
+            ) : (
+              <EmptyDataState onOpenSources={() => setSourcesOpen(true)} />
+            )
+          ) : (
+            <>
+              {activeTab === 'hotspots' && <HotspotsView />}
+              {activeTab === 'day' && <DayView initialDate={dayViewDate} />}
+              {activeTab === 'trips' && <DayTripsView onSelectDate={handleSelectDate} />}
+              {activeTab === 'insights' && <InsightsView />}
+            </>
           )}
-          <button
-            onClick={() => {
-              queryClient.clear();
-              void signOut();
-            }}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-bg/50 hover:text-text"
-            title={session?.user?.email ? `Sign out (${session.user.email})` : 'Sign out'}
-          >
-            <LogOut size={16} />
-          </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
-        {activeTab === 'hotspots' && <HotspotsView />}
-        {activeTab === 'day' && <DayView initialDate={dayViewDate} />}
-        {activeTab === 'trips' && <DayTripsView onSelectDate={handleSelectDate} />}
-        {activeTab === 'insights' && <InsightsView />}
-      </div>
-      </div>
+      {!isDemo && (
+        <SourcesPanel open={sourcesOpen} onClose={() => setSourcesOpen(false)} />
+      )}
     </div>
   );
 }
