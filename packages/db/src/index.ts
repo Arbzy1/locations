@@ -12,4 +12,3 @@ export type Db = ReturnType<typeof createDb>;
 export * from "./schema.js";
 export * from "./geo.js";
 export * from "./analytics.js";
-export * from "./demo-places.js";

@@ -17,7 +17,6 @@ import {
   METERS_TO_MILES,
   parseGeo,
 } from "./geo.js";
-import { resolveDemoPlace } from "./demo-places.js";
 import { buildStore, computeAllAnalytics } from "./analytics.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -87,10 +86,7 @@ async function main() {
       const endDt = new Date(endTime);
       const duration = (endDt.getTime() - startDt.getTime()) / 60000;
       const placeId = top.placeID ?? null;
-      const cluster =
-        tenant === "demo"
-          ? resolveDemoPlace(coords[0], coords[1], placeId).cluster
-          : classifyLocation(coords[0], coords[1]);
+      const cluster = classifyLocation(coords[0], coords[1]);
       visitRows.push({
         tenant,
         start: startTime,

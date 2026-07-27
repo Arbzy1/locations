@@ -32,10 +32,14 @@ export const CLUSTERS: Array<[number, number, number, string]> = [
   [37.39, -5.99, 20, "Seville"],
   [30.42, -9.6, 30, "Morocco (Agadir)"],
   // Demo-only geography (NYC / Boston) — keep separate from personal UK clusters
-  [40.678, -73.944, 8, "Brooklyn (Demo)"],
-  [40.755, -73.98, 4, "Midtown Manhattan (Demo)"],
-  [40.779, -73.963, 3, "Upper East Side (Demo)"],
-  [42.36, -71.059, 10, "Boston (Demo)"],
+  [40.708, -73.957, 4, "Williamsburg, Brooklyn"],
+  [40.75, -73.98, 3, "Midtown Manhattan"],
+  [40.761, -73.978, 2, "Midtown East"],
+  [40.758, -73.986, 1.5, "Times Square"],
+  [40.779, -73.963, 2, "Central Park"],
+  [40.706, -74.009, 2, "Lower Manhattan"],
+  [42.355, -71.066, 3, "Boston Common"],
+  [42.36, -71.055, 2, "Downtown Boston"],
 ];
 
 export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
