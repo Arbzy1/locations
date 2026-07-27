@@ -14,6 +14,7 @@ export const TRANSPORT_MODE_MAP: Record<string, string> = {
 };
 
 export const CLUSTERS: Array<[number, number, number, string]> = [
+  // Personal / real geography
   [51.363, -0.272, 5, "SW London (Kingston)"],
   [51.476, -0.2, 4, "South London"],
   [51.51, -0.13, 4, "Central London"],
@@ -30,6 +31,11 @@ export const CLUSTERS: Array<[number, number, number, string]> = [
   [28.96, -13.63, 20, "Lanzarote"],
   [37.39, -5.99, 20, "Seville"],
   [30.42, -9.6, 30, "Morocco (Agadir)"],
+  // Demo-only geography (NYC / Boston) — keep separate from personal UK clusters
+  [40.678, -73.944, 8, "Brooklyn (Demo)"],
+  [40.755, -73.98, 4, "Midtown Manhattan (Demo)"],
+  [40.779, -73.963, 3, "Upper East Side (Demo)"],
+  [42.36, -71.059, 10, "Boston (Demo)"],
 ];
 
 export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {

@@ -1,192 +1,182 @@
 [
   {
-    "startTime": "2025-06-10T08:15:00.000Z",
-    "endTime": "2025-06-10T09:00:00.000Z",
+    "startTime": "2025-08-12T12:00:00.000Z",
+    "endTime": "2025-08-12T13:00:00.000Z",
     "visit": {
       "topCandidate": {
-        "placeLocation": "geo:51.36320,-0.27210",
+        "placeLocation": "geo:40.67820,-73.94420",
         "semanticType": "Home",
-        "placeID": "sample_home_kingston"
+        "placeID": "demo_home_brooklyn"
       }
     }
   },
   {
-    "startTime": "2025-06-10T09:05:00.000Z",
-    "endTime": "2025-06-10T09:45:00.000Z",
+    "startTime": "2025-08-12T13:10:00.000Z",
+    "endTime": "2025-08-12T13:55:00.000Z",
     "activity": {
-      "start": "geo:51.36320,-0.27210",
-      "end": "geo:51.50740,-0.12780",
-      "distanceMeters": 18500,
-      "topCandidate": { "type": "in train" }
+      "start": "geo:40.67820,-73.94420",
+      "end": "geo:40.75490,-73.98400",
+      "distanceMeters": 9800,
+      "topCandidate": { "type": "in subway" }
     }
   },
   {
-    "startTime": "2025-06-10T09:50:00.000Z",
-    "endTime": "2025-06-10T12:30:00.000Z",
+    "startTime": "2025-08-12T14:00:00.000Z",
+    "endTime": "2025-08-12T17:30:00.000Z",
     "visit": {
       "topCandidate": {
-        "placeLocation": "geo:51.50740,-0.12780",
+        "placeLocation": "geo:40.75490,-73.98400",
         "semanticType": "Work",
-        "placeID": "sample_work_central"
+        "placeID": "demo_office_midtown"
       }
     }
   },
   {
-    "startTime": "2025-06-10T12:35:00.000Z",
-    "endTime": "2025-06-10T12:50:00.000Z",
+    "startTime": "2025-08-12T17:35:00.000Z",
+    "endTime": "2025-08-12T17:50:00.000Z",
     "activity": {
-      "start": "geo:51.50740,-0.12780",
-      "end": "geo:51.51320,-0.13050",
-      "distanceMeters": 900,
+      "start": "geo:40.75490,-73.98400",
+      "end": "geo:40.76140,-73.97760",
+      "distanceMeters": 1100,
       "topCandidate": { "type": "walking" }
     }
   },
   {
-    "startTime": "2025-06-10T12:50:00.000Z",
-    "endTime": "2025-06-10T13:40:00.000Z",
+    "startTime": "2025-08-12T17:50:00.000Z",
+    "endTime": "2025-08-12T19:00:00.000Z",
     "visit": {
       "topCandidate": {
-        "placeLocation": "geo:51.51320,-0.13050",
+        "placeLocation": "geo:40.76140,-73.97760",
         "semanticType": "Food and Drink",
-        "placeID": "sample_lunch_soho"
+        "placeID": "demo_cafe_midtown"
       }
     }
   },
   {
-    "startTime": "2025-06-10T13:45:00.000Z",
-    "endTime": "2025-06-10T14:00:00.000Z",
+    "startTime": "2025-08-12T19:10:00.000Z",
+    "endTime": "2025-08-12T19:55:00.000Z",
     "activity": {
-      "start": "geo:51.51320,-0.13050",
-      "end": "geo:51.50740,-0.12780",
-      "distanceMeters": 850,
-      "topCandidate": { "type": "walking" }
+      "start": "geo:40.76140,-73.97760",
+      "end": "geo:40.67820,-73.94420",
+      "distanceMeters": 10200,
+      "topCandidate": { "type": "in subway" }
     }
   },
   {
-    "startTime": "2025-06-10T14:00:00.000Z",
-    "endTime": "2025-06-10T17:30:00.000Z",
+    "startTime": "2025-08-12T20:00:00.000Z",
+    "endTime": "2025-08-12T23:30:00.000Z",
     "visit": {
       "topCandidate": {
-        "placeLocation": "geo:51.50740,-0.12780",
-        "semanticType": "Work",
-        "placeID": "sample_work_central"
-      }
-    }
-  },
-  {
-    "startTime": "2025-06-10T17:35:00.000Z",
-    "endTime": "2025-06-10T18:20:00.000Z",
-    "activity": {
-      "start": "geo:51.50740,-0.12780",
-      "end": "geo:51.36320,-0.27210",
-      "distanceMeters": 19000,
-      "topCandidate": { "type": "in train" }
-    }
-  },
-  {
-    "startTime": "2025-06-10T18:25:00.000Z",
-    "endTime": "2025-06-10T22:00:00.000Z",
-    "visit": {
-      "topCandidate": {
-        "placeLocation": "geo:51.36320,-0.27210",
+        "placeLocation": "geo:40.67820,-73.94420",
         "semanticType": "Home",
-        "placeID": "sample_home_kingston"
+        "placeID": "demo_home_brooklyn"
       }
     }
   },
   {
-    "startTime": "2025-06-14T09:00:00.000Z",
-    "endTime": "2025-06-14T09:30:00.000Z",
+    "startTime": "2025-08-16T13:00:00.000Z",
+    "endTime": "2025-08-16T13:30:00.000Z",
     "visit": {
       "topCandidate": {
-        "placeLocation": "geo:51.36320,-0.27210",
+        "placeLocation": "geo:40.67820,-73.94420",
         "semanticType": "Home",
-        "placeID": "sample_home_kingston"
+        "placeID": "demo_home_brooklyn"
       }
     }
   },
   {
-    "startTime": "2025-06-14T09:35:00.000Z",
-    "endTime": "2025-06-14T11:15:00.000Z",
+    "startTime": "2025-08-16T13:40:00.000Z",
+    "endTime": "2025-08-16T18:00:00.000Z",
     "activity": {
-      "start": "geo:51.36320,-0.27210",
-      "end": "geo:51.48160,-3.17910",
-      "distanceMeters": 225000,
+      "start": "geo:40.67820,-73.94420",
+      "end": "geo:42.36010,-71.05890",
+      "distanceMeters": 310000,
       "topCandidate": { "type": "in passenger vehicle" }
     }
   },
   {
-    "startTime": "2025-06-14T11:20:00.000Z",
-    "endTime": "2025-06-14T18:00:00.000Z",
+    "startTime": "2025-08-16T18:10:00.000Z",
+    "endTime": "2025-08-16T22:00:00.000Z",
     "visit": {
       "topCandidate": {
-        "placeLocation": "geo:51.48160,-3.17910",
+        "placeLocation": "geo:42.36010,-71.05890",
         "semanticType": "Travel",
-        "placeID": "sample_cardiff"
+        "placeID": "demo_boston_harbor"
       }
     }
   },
   {
-    "startTime": "2025-06-14T18:10:00.000Z",
-    "endTime": "2025-06-14T20:00:00.000Z",
+    "startTime": "2025-08-16T22:15:00.000Z",
+    "endTime": "2025-08-17T02:30:00.000Z",
     "activity": {
-      "start": "geo:51.48160,-3.17910",
-      "end": "geo:51.36320,-0.27210",
-      "distanceMeters": 230000,
+      "start": "geo:42.36010,-71.05890",
+      "end": "geo:40.67820,-73.94420",
+      "distanceMeters": 315000,
       "topCandidate": { "type": "in passenger vehicle" }
     }
   },
   {
-    "startTime": "2025-06-14T20:05:00.000Z",
-    "endTime": "2025-06-14T23:00:00.000Z",
+    "startTime": "2025-08-17T02:40:00.000Z",
+    "endTime": "2025-08-17T10:00:00.000Z",
     "visit": {
       "topCandidate": {
-        "placeLocation": "geo:51.36320,-0.27210",
+        "placeLocation": "geo:40.67820,-73.94420",
         "semanticType": "Home",
-        "placeID": "sample_home_kingston"
+        "placeID": "demo_home_brooklyn"
       }
     }
   },
   {
-    "startTime": "2025-07-01T10:00:00.000Z",
-    "endTime": "2025-07-01T10:20:00.000Z",
+    "startTime": "2025-08-20T14:00:00.000Z",
+    "endTime": "2025-08-20T14:40:00.000Z",
     "visit": {
       "topCandidate": {
-        "placeLocation": "geo:51.47600,-0.20000",
+        "placeLocation": "geo:40.74840,-73.98570",
         "semanticType": "Shopping",
-        "placeID": "sample_south_london"
+        "placeID": "demo_store_herald"
       }
     }
   },
   {
-    "startTime": "2025-07-01T10:25:00.000Z",
-    "endTime": "2025-07-01T10:55:00.000Z",
+    "startTime": "2025-08-20T14:50:00.000Z",
+    "endTime": "2025-08-20T15:20:00.000Z",
     "activity": {
-      "start": "geo:51.47600,-0.20000",
-      "end": "geo:51.51000,-0.13000",
-      "distanceMeters": 6200,
+      "start": "geo:40.74840,-73.98570",
+      "end": "geo:40.77940,-73.96320",
+      "distanceMeters": 4200,
       "topCandidate": { "type": "in bus" }
     }
   },
   {
-    "startTime": "2025-07-01T11:00:00.000Z",
-    "endTime": "2025-07-01T15:00:00.000Z",
+    "startTime": "2025-08-20T15:25:00.000Z",
+    "endTime": "2025-08-20T18:00:00.000Z",
     "visit": {
       "topCandidate": {
-        "placeLocation": "geo:51.51000,-0.13000",
+        "placeLocation": "geo:40.77940,-73.96320",
         "semanticType": "Entertainment",
-        "placeID": "sample_central_museum"
+        "placeID": "demo_museum_park"
       }
     }
   },
   {
-    "startTime": "2025-07-01T15:10:00.000Z",
-    "endTime": "2025-07-01T15:40:00.000Z",
+    "startTime": "2025-08-20T18:10:00.000Z",
+    "endTime": "2025-08-20T18:55:00.000Z",
     "activity": {
-      "start": "geo:51.51000,-0.13000",
-      "end": "geo:51.47600,-0.20000",
-      "distanceMeters": 6100,
+      "start": "geo:40.77940,-73.96320",
+      "end": "geo:40.67820,-73.94420",
+      "distanceMeters": 11000,
       "topCandidate": { "type": "cycling" }
+    }
+  },
+  {
+    "startTime": "2025-08-20T19:00:00.000Z",
+    "endTime": "2025-08-20T23:00:00.000Z",
+    "visit": {
+      "topCandidate": {
+        "placeLocation": "geo:40.67820,-73.94420",
+        "semanticType": "Home",
+        "placeID": "demo_home_brooklyn"
+      }
     }
   }
 ]

@@ -17,6 +17,7 @@ import {
   METERS_TO_MILES,
   parseGeo,
 } from "./geo.js";
+import { resolveDemoPlace } from "./demo-places.js";
 import { buildStore, computeAllAnalytics } from "./analytics.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -85,6 +86,11 @@ async function main() {
       const startDt = new Date(startTime);
       const endDt = new Date(endTime);
       const duration = (endDt.getTime() - startDt.getTime()) / 60000;
+      const placeId = top.placeID ?? null;
+      const cluster =
+        tenant === "demo"
+          ? resolveDemoPlace(coords[0], coords[1], placeId).cluster
+          : classifyLocation(coords[0], coords[1]);
       visitRows.push({
         tenant,
         start: startTime,
@@ -92,9 +98,9 @@ async function main() {
         date: startTime.slice(0, 10),
         lat: coords[0],
         lon: coords[1],
-        cluster: classifyLocation(coords[0], coords[1]),
+        cluster,
         semanticType: top.semanticType ?? "Unknown",
-        placeId: top.placeID ?? null,
+        placeId,
         durationMinutes: Math.round(duration * 10) / 10,
       });
     } else if (record.activity) {

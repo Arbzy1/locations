@@ -17,6 +17,7 @@ import {
   type ActivityRow,
   type VisitRow,
   type TenantId,
+  resolveDemoPlace,
 } from "@locations/db";
 import type { Env } from "./env";
 
@@ -492,9 +493,27 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
     if (!uniqueCoords.has(key)) uniqueCoords.set(key, [ev.data.lat, ev.data.lon]);
   }
 
-  const placeNames = new Map<string, { name: string; address: string; data: Record<string, unknown> }>();
+  const placeNames = new Map<
+    string,
+    { name: string; address: string; data: Record<string, unknown>; short?: string }
+  >();
   for (const [key, [lat, lon]] of uniqueCoords) {
-    placeNames.set(key, await resolveCoords(db, lat, lon));
+    if (tenant === "demo") {
+      const visit = visitEvents.find(
+        (ev) =>
+          Math.round(ev.data.lat * 1e5) / 1e5 === Math.round(lat * 1e5) / 1e5 &&
+          Math.round(ev.data.lon * 1e5) / 1e5 === Math.round(lon * 1e5) / 1e5,
+      );
+      const demo = resolveDemoPlace(lat, lon, visit?.data.placeId);
+      placeNames.set(key, {
+        name: demo.name,
+        address: demo.address,
+        short: demo.short_address,
+        data: { address: { road: demo.short_address, city: demo.cluster } },
+      });
+    } else {
+      placeNames.set(key, await resolveCoords(db, lat, lon));
+    }
   }
 
   const enrichedVisits = [];
@@ -530,14 +549,18 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
     const placeInfo = placeNames.get(coordKey) ?? { name: "", address: "", data: {} };
     vd.place_name = placeInfo.name;
     vd.place_address = placeInfo.address;
-    const addr = (placeInfo.data.address as Record<string, string>) ?? {};
-    const parts: string[] = [];
-    if (addr.road && addr.road !== placeInfo.name) parts.push(addr.road);
-    const suburb = addr.suburb || addr.neighbourhood || addr.quarter || "";
-    if (suburb) parts.push(suburb);
-    const city = addr.city || addr.town || addr.village || "";
-    if (city) parts.push(city);
-    vd.place_short_address = parts.join(", ");
+    if ("short" in placeInfo && placeInfo.short) {
+      vd.place_short_address = placeInfo.short;
+    } else {
+      const addr = (placeInfo.data.address as Record<string, string>) ?? {};
+      const parts: string[] = [];
+      if (addr.road && addr.road !== placeInfo.name) parts.push(addr.road);
+      const suburb = addr.suburb || addr.neighbourhood || addr.quarter || "";
+      if (suburb) parts.push(suburb);
+      const city = addr.city || addr.town || addr.village || "";
+      if (city) parts.push(city);
+      vd.place_short_address = parts.join(", ");
+    }
     enrichedVisits.push(vd);
   }
 

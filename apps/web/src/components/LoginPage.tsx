@@ -39,6 +39,9 @@ export default function LoginPage() {
       });
       if (result.error) {
         setError(result.error.message || 'Demo unavailable right now');
+      } else {
+        // Force a clean client state so personal cache never bleeds into demo
+        window.location.assign('/');
       }
     } catch {
       setError('Unable to start demo. Try again shortly.');
