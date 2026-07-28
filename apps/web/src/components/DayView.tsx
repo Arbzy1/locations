@@ -96,7 +96,7 @@ export default function DayView({ initialDate }: Props) {
               <button
                 onClick={goToPrev}
                 disabled={!canPrev}
-                className="rounded border border-border p-1.5 hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
+                className="rounded border border-border p-1.5 transition-colors duration-300 ease-out hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
                 aria-label="Previous day with data"
                 title="Go to previous day with data"
               >
@@ -105,7 +105,7 @@ export default function DayView({ initialDate }: Props) {
               <button
                 onClick={goToNext}
                 disabled={!canNext}
-                className="rounded border border-border p-1.5 hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
+                className="rounded border border-border p-1.5 transition-colors duration-300 ease-out hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
                 aria-label="Next day with data"
                 title="Go to next day with data"
               >
@@ -114,7 +114,7 @@ export default function DayView({ initialDate }: Props) {
               <button
                 type="button"
                 onClick={() => setCalendarOpen((o) => !o)}
-                className="rounded border border-border p-1.5 hover:bg-bg"
+                className="rounded border border-border p-1.5 transition-colors duration-300 ease-out hover:bg-bg"
                 aria-expanded={calendarOpen}
                 aria-label={calendarOpen ? 'Hide calendar' : 'Show calendar'}
                 title={calendarOpen ? 'Hide calendar' : 'Show calendar'}
@@ -209,7 +209,7 @@ export default function DayView({ initialDate }: Props) {
 
               <div className="h-1.5 overflow-hidden rounded-full bg-border">
                 <div
-                  className="h-full rounded-full bg-accent transition-[width] duration-200 ease-out"
+                  className="h-full rounded-full bg-accent transition-[width] duration-300 ease-out"
                   style={{ width: `${Math.min(100, Math.max(0, progress?.percent ?? 0))}%` }}
                 />
               </div>

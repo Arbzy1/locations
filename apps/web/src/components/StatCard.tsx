@@ -9,7 +9,7 @@ interface Props {
 
 export default function StatCard({ label, value, description, icon }: Props) {
   return (
-    <div className="bg-surface border border-border rounded-lg p-4">
+    <div className="bg-surface border border-border rounded-lg p-4 transition-colors duration-300 ease-out hover:border-accent/30">
       <div className="flex items-center gap-2 mb-1">
         {icon && <span className="text-accent">{icon}</span>}
         <span className="text-text-muted text-sm">{label}</span>

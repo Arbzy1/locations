@@ -16,6 +16,12 @@
   --color-visit: #bc8cff;
 }
 
+:root {
+  --ui-duration-hover: 300ms;
+  --ui-duration-enter: 400ms;
+  --ui-ease: ease-out;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -42,6 +48,61 @@ body {
   overflow: hidden;
 }
 
+/* Smooth, slow-ish hover/active baseline for interactive controls */
+button,
+a,
+input,
+select,
+textarea,
+[role="switch"] {
+  transition-property: color, background-color, border-color, opacity, box-shadow, transform, filter;
+  transition-duration: var(--ui-duration-hover);
+  transition-timing-function: var(--ui-ease);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+@keyframes ui-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ui-enter {
+  animation: ui-enter var(--ui-duration-enter) var(--ui-ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ui-duration-hover: 1ms;
+    --ui-duration-enter: 1ms;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="switch"] {
+    transition-duration: 1ms;
+  }
+
+  button:active:not(:disabled) {
+    transform: none;
+  }
+
+  .ui-enter {
+    animation: none;
+  }
+}
+
 /* Leaflet overrides for dark theme */
 .leaflet-container {
   background: #0d1117 !important;
@@ -51,6 +112,13 @@ body {
   background: #161b22 !important;
   color: #f0f6fc !important;
   border-color: #30363d !important;
+  transition: background-color var(--ui-duration-hover) var(--ui-ease),
+    color var(--ui-duration-hover) var(--ui-ease),
+    border-color var(--ui-duration-hover) var(--ui-ease) !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: #21262d !important;
 }
 
 .leaflet-control-attribution {
@@ -85,6 +153,7 @@ body {
 ::-webkit-scrollbar-thumb {
   background: #30363d;
   border-radius: 3px;
+  transition: background-color var(--ui-duration-hover) var(--ui-ease);
 }
 
 ::-webkit-scrollbar-thumb:hover {

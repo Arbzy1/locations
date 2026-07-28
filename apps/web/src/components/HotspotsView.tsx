@@ -58,7 +58,7 @@ export default function HotspotsView() {
             {topAreas.map((area, i) => (
               <div
                 key={i}
-                className="flex items-center gap-3 p-2 rounded hover:bg-bg/50"
+                className="flex items-center gap-3 p-2 rounded transition-colors duration-300 ease-out hover:bg-bg/50"
               >
                 <div className="text-text-muted text-sm font-mono w-6 text-right">
                   {i + 1}
@@ -104,12 +104,12 @@ export default function HotspotsView() {
               aria-label={heatmapOn ? 'Turn heatmap off' : 'Turn heatmap on'}
               title={heatmapOn ? 'Turn heatmap off' : 'Turn heatmap on'}
               onClick={() => setHeatmapOn((v) => !v)}
-              className={`relative h-7 w-12 rounded-full transition-colors shrink-0 ${
+              className={`relative h-7 w-12 rounded-full transition-colors duration-300 ease-out shrink-0 ${
                 heatmapOn ? 'bg-accent' : 'bg-border'
               }`}
             >
               <span
-                className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-300 ease-out ${
                   heatmapOn ? 'translate-x-5' : 'translate-x-0'
                 }`}
               />

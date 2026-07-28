@@ -101,7 +101,7 @@ export default function DayTripsView({ onSelectDate }: Props) {
             : `Sort day trips by ${label}`
         }
         onClick={() => toggleSort(field)}
-        className={`text-xs px-2 py-0.5 rounded transition-colors ${
+        className={`text-xs px-2 py-0.5 rounded transition-colors duration-300 ease-out ${
           active ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text hover:bg-bg/50'
         }`}
       >
@@ -131,7 +131,7 @@ export default function DayTripsView({ onSelectDate }: Props) {
                 type="button"
                 title="Clear year, range, mode, and place filters"
                 onClick={() => { setYearFilter('all'); setMinRange(5); setModeFilter(new Set()); setClusterFilter(''); }}
-                className="ml-2 text-accent hover:text-accent/80 text-xs"
+                className="ml-2 text-accent transition-colors duration-300 ease-out hover:text-accent/80 text-xs"
               >
                 Clear filters
               </button>
@@ -154,7 +154,7 @@ export default function DayTripsView({ onSelectDate }: Props) {
                     : `Filter trips that used ${MODE_LABELS[mode] || mode}`
                 }
                 onClick={() => toggleMode(mode)}
-                className="text-xs px-2.5 py-1 rounded-full transition-all font-medium"
+                className="text-xs px-2.5 py-1 rounded-full transition-all duration-300 ease-out font-medium"
                 style={{
                   backgroundColor: active ? `${color}33` : `${color}11`,
                   color: active ? color : `${color}88`,
@@ -268,7 +268,7 @@ function TripCard({ trip, focused, modeFilter, onSelect }: {
       ref={ref}
       onClick={onSelect}
       title={`Open day view for ${formatDate(trip.date)}`}
-      className={`w-full text-left bg-bg border rounded-lg p-3 transition-colors ${
+      className={`w-full text-left bg-bg border rounded-lg p-3 transition-colors duration-300 ease-out ${
         focused ? 'border-accent ring-1 ring-accent/30' : 'border-border hover:border-accent/40'
       }`}
     >

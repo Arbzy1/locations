@@ -220,7 +220,7 @@ export default function InsightsView() {
                   {yearly.map((y) => (
                     <tr
                       key={y.year}
-                      className="border-b border-border/50 hover:bg-surface/50"
+                      className="border-b border-border/50 transition-colors duration-300 ease-out hover:bg-surface/50"
                     >
                       <td className="p-2 font-semibold">{y.year}</td>
                       <td className="p-2 text-right text-accent">

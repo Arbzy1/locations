@@ -73,7 +73,7 @@ function EmptyDataState({ onOpenSettings }: { onOpenSettings: () => void }) {
         type="button"
         title="Open Settings to upload your Timeline JSON"
         onClick={onOpenSettings}
-        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg hover:bg-accent/90"
+        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg transition-colors duration-300 ease-out hover:bg-accent/90"
       >
         Open Settings
       </button>
@@ -123,7 +123,7 @@ function AppContent() {
               queryClient.clear();
               void signOut();
             }}
-            className="shrink-0 rounded-md border border-accent/40 px-2 py-1 hover:bg-accent/20"
+            className="shrink-0 rounded-md border border-accent/40 px-2 py-1 transition-colors duration-300 ease-out hover:bg-accent/20"
           >
             Exit demo
           </button>
@@ -142,7 +142,7 @@ function AppContent() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+              className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors duration-300 ease-out ${
                 activeTab === tab.id
                   ? 'bg-accent/20 text-accent'
                   : 'text-text-muted hover:bg-bg/50 hover:text-text'
@@ -159,7 +159,7 @@ function AppContent() {
               <button
                 type="button"
                 onClick={() => setActiveTab('settings')}
-                className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors duration-300 ease-out ${
                   activeTab === 'settings'
                     ? 'bg-accent/20 text-accent'
                     : 'text-text-muted hover:bg-bg/50 hover:text-text'
@@ -180,7 +180,7 @@ function AppContent() {
                 queryClient.clear();
                 void signOut();
               }}
-              className="flex h-10 w-10 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-bg/50 hover:text-text"
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-text-muted transition-colors duration-300 ease-out hover:bg-bg/50 hover:text-text"
               title={session?.user?.email ? `Sign out (${session.user.email})` : 'Sign out'}
               aria-label="Sign out"
             >
@@ -191,27 +191,31 @@ function AppContent() {
 
         <div className="flex-1 overflow-hidden">
           {activeTab === 'settings' && !isDemo ? (
-            <SettingsView />
+            <div key="settings" className="ui-enter h-full">
+              <SettingsView />
+            </div>
           ) : overviewLoading && !isDemo ? (
             <div className="flex h-full items-center justify-center text-text-muted">
               <Loader2 className="animate-spin text-accent" size={24} />
             </div>
           ) : !hasData ? (
             importing ? (
-              <div className="flex h-full flex-col items-center justify-center gap-3 bg-bg text-text-muted">
+              <div className="ui-enter flex h-full flex-col items-center justify-center gap-3 bg-bg text-text-muted">
                 <Loader2 className="animate-spin text-accent" size={24} />
                 <p className="text-sm">Importing Timeline data…</p>
               </div>
             ) : (
-              <EmptyDataState onOpenSettings={() => setActiveTab('settings')} />
+              <div key="empty" className="ui-enter h-full">
+                <EmptyDataState onOpenSettings={() => setActiveTab('settings')} />
+              </div>
             )
           ) : (
-            <>
+            <div key={activeTab} className="ui-enter h-full overflow-hidden">
               {activeTab === 'hotspots' && <HotspotsView />}
               {activeTab === 'day' && <DayView initialDate={dayViewDate} />}
               {activeTab === 'trips' && <DayTripsView onSelectDate={handleSelectDate} />}
               {activeTab === 'insights' && <InsightsView />}
-            </>
+            </div>
           )}
         </div>
       </div>

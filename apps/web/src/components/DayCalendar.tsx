@@ -104,7 +104,7 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
           type="button"
           onClick={() => canPrevMonth && setViewMonth((m) => subMonths(m, 1))}
           disabled={!canPrevMonth}
-          className="rounded border border-border p-1 hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
+          className="rounded border border-border p-1 transition-colors duration-300 ease-out hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
           aria-label="Previous month"
           title="Show previous month"
         >
@@ -117,7 +117,7 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
           type="button"
           onClick={() => canNextMonth && setViewMonth((m) => addMonths(m, 1))}
           disabled={!canNextMonth}
-          className="rounded border border-border p-1 hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
+          className="rounded border border-border p-1 transition-colors duration-300 ease-out hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
           aria-label="Next month"
           title="Show next month"
         >
@@ -158,7 +158,7 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
                   : key
               }
               className={[
-                'relative flex aspect-square flex-col items-center justify-center rounded-md text-xs transition',
+                'relative flex aspect-square flex-col items-center justify-center rounded-md text-xs transition duration-300 ease-out',
                 inMonth ? '' : 'opacity-35',
                 hasData
                   ? 'cursor-pointer hover:brightness-125'
