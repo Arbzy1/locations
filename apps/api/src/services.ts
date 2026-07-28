@@ -143,6 +143,35 @@ export async function fetchRoute(
   }
 }
 
+const NOMINATIM_UA = "LocationExplorer/1.0 (portfolio; contact via aden.website)";
+
+/** Settlement / locality fields from Nominatim addressdetails, preferred first. */
+const SETTLEMENT_KEYS = [
+  "city",
+  "town",
+  "village",
+  "hamlet",
+  "municipality",
+  "city_district",
+  "suburb",
+  "neighbourhood",
+  "quarter",
+  "county",
+] as const;
+
+function settlementFromAddress(address: Record<string, string> | undefined): string | null {
+  if (!address) return null;
+  for (const key of SETTLEMENT_KEYS) {
+    const value = (address[key] || "").trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+function makeSettlementPlaceKey(lat: number, lon: number): string {
+  return `settlement:${lat.toFixed(5)},${lon.toFixed(5)}`;
+}
+
 export async function resolveCoords(
   db: ReturnType<typeof createDb>,
   lat: number,
@@ -157,7 +186,7 @@ export async function resolveCoords(
   try {
     const url = `${NOMINATIM}?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=18`;
     const resp = await fetch(url, {
-      headers: { "User-Agent": "LocationExplorer/1.0 (portfolio; contact via aden.website)" },
+      headers: { "User-Agent": NOMINATIM_UA },
     });
     if (!resp.ok) return { name: "Unknown", address: "", data: {} };
     const data = (await resp.json()) as {
@@ -185,6 +214,88 @@ export async function resolveCoords(
     return { name, address, data: payload };
   } catch {
     return { name: "Unknown", address: "", data: {} };
+  }
+}
+
+/**
+ * Guess town / city / village for coordinates via Nominatim (cached).
+ * Reuses street-level place_cache address details when present to avoid extra fetches.
+ */
+export async function resolveSettlement(
+  db: ReturnType<typeof createDb>,
+  lat: number,
+  lon: number,
+  opts?: { allowLive?: boolean },
+): Promise<{ settlement: string | null; fetched: boolean }> {
+  const allowLive = opts?.allowLive ?? true;
+  const settlementKey = makeSettlementPlaceKey(lat, lon);
+
+  const cachedSettlement = await db
+    .select()
+    .from(placeCache)
+    .where(eq(placeCache.placeId, settlementKey))
+    .limit(1);
+  if (cachedSettlement[0]?.name && cachedSettlement[0].name !== "Unknown") {
+    return { settlement: cachedSettlement[0].name, fetched: false };
+  }
+
+  const streetKey = makeCoordPlaceKey(lat, lon);
+  const streetCached = await db
+    .select()
+    .from(placeCache)
+    .where(eq(placeCache.placeId, streetKey))
+    .limit(1);
+  if (streetCached[0]) {
+    const addr = (streetCached[0].data as { address?: Record<string, string> } | null)?.address;
+    const fromStreet = settlementFromAddress(addr);
+    if (fromStreet) {
+      await db
+        .insert(placeCache)
+        .values({
+          placeId: settlementKey,
+          name: fromStreet,
+          address: streetCached[0].address,
+          data: { address: addr ?? {}, source: "street_cache" },
+        })
+        .onConflictDoUpdate({
+          target: placeCache.placeId,
+          set: { name: fromStreet, address: streetCached[0].address },
+        });
+      return { settlement: fromStreet, fetched: false };
+    }
+  }
+
+  if (!allowLive) return { settlement: null, fetched: false };
+
+  try {
+    // zoom ~14 prefers locality over a single building / POI
+    const url = `${NOMINATIM}?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=14`;
+    const resp = await fetch(url, {
+      headers: { "User-Agent": NOMINATIM_UA },
+    });
+    if (!resp.ok) return { settlement: null, fetched: true };
+    const data = (await resp.json()) as {
+      display_name?: string;
+      address?: Record<string, string>;
+    };
+    const settlement = settlementFromAddress(data.address);
+    if (!settlement) return { settlement: null, fetched: true };
+    const address = data.display_name ?? "";
+    await db
+      .insert(placeCache)
+      .values({
+        placeId: settlementKey,
+        name: settlement,
+        address,
+        data: { address: data.address ?? {}, source: "nominatim_settlement" },
+      })
+      .onConflictDoUpdate({
+        target: placeCache.placeId,
+        set: { name: settlement, address, data: { address: data.address ?? {} } },
+      });
+    return { settlement, fetched: true };
+  } catch {
+    return { settlement: null, fetched: true };
   }
 }
 
@@ -254,28 +365,119 @@ export async function getOverview(db: ReturnType<typeof createDb>, tenant: Tenan
 
 export async function getDays(db: ReturnType<typeof createDb>, tenant: TenantId) {
   const rows = await db
-    .select({ date: dayStats.date })
+    .select({
+      date: dayStats.date,
+      totalDistanceMiles: dayStats.totalDistanceMiles,
+      modes: dayStats.modes,
+      visitCount: dayStats.visitCount,
+      activityCount: dayStats.activityCount,
+    })
     .from(dayStats)
     .where(eq(dayStats.tenant, tenant))
     .orderBy(dayStats.date);
-  return rows.map((r) => r.date);
+  return rows.map((r) => ({
+    date: r.date,
+    total_distance_miles: r.totalDistanceMiles,
+    modes: r.modes,
+    visit_count: r.visitCount,
+    activity_count: r.activityCount,
+  }));
 }
 
 export async function getHeatmap(db: ReturnType<typeof createDb>, tenant: TenantId) {
   const rows = await db
-    .select({ lat: visits.lat, lon: visits.lon })
+    .select({
+      lat: visits.lat,
+      lon: visits.lon,
+      cluster: visits.cluster,
+      semanticType: visits.semanticType,
+      durationMinutes: visits.durationMinutes,
+      date: visits.date,
+    })
     .from(visits)
     .where(eq(visits.tenant, tenant));
-  const counts = new Map<string, { lat: number; lon: number; count: number }>();
+
+  type Cell = {
+    lat: number;
+    lon: number;
+    count: number;
+    totalDurationMinutes: number;
+    days: Set<string>;
+    clusters: Map<string, number>;
+    types: Map<string, number>;
+  };
+
+  const cells = new Map<string, Cell>();
+
   for (const r of rows) {
     const lat = Math.round(r.lat * 1e5) / 1e5;
     const lon = Math.round(r.lon * 1e5) / 1e5;
     const key = `${lat},${lon}`;
-    const existing = counts.get(key);
-    if (existing) existing.count += 1;
-    else counts.set(key, { lat, lon, count: 1 });
+    let cell = cells.get(key);
+    if (!cell) {
+      cell = {
+        lat,
+        lon,
+        count: 0,
+        totalDurationMinutes: 0,
+        days: new Set(),
+        clusters: new Map(),
+        types: new Map(),
+      };
+      cells.set(key, cell);
+    }
+    cell.count += 1;
+    cell.totalDurationMinutes += r.durationMinutes ?? 0;
+    if (r.date) cell.days.add(r.date);
+    const cluster = (r.cluster || "").trim();
+    if (cluster) cell.clusters.set(cluster, (cell.clusters.get(cluster) ?? 0) + 1);
+    const sem = (r.semanticType || "").trim();
+    if (sem) cell.types.set(sem, (cell.types.get(sem) ?? 0) + 1);
   }
-  return [...counts.values()].sort((a, b) => b.count - a.count);
+
+  const topKey = (m: Map<string, number>) =>
+    [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+
+  const points = [...cells.values()]
+    .map((cell) => {
+      const clusterRank = topKey(cell.clusters);
+      const typeRank = topKey(cell.types).filter((t) => t !== "Unknown");
+      const types =
+        typeRank.length > 0 ? typeRank.slice(0, 3) : topKey(cell.types).slice(0, 3);
+      const cluster = clusterRank[0] || "";
+      const coordFallback = `Near ${cell.lat.toFixed(4)}, ${cell.lon.toFixed(4)}`;
+      return {
+        lat: cell.lat,
+        lon: cell.lon,
+        count: cell.count,
+        label: cluster || coordFallback,
+        cluster,
+        totalDurationMinutes: Math.round(cell.totalDurationMinutes),
+        uniqueDays: cell.days.size,
+        topTypes: types,
+        settlement: null as string | null,
+      };
+    })
+    .sort((a, b) => b.count - a.count);
+
+  // Enrich top hotspots with settlement names (cache first; limited live Nominatim).
+  const TOP_SETTLEMENT = 20;
+  const MAX_LIVE_SETTLEMENT = 8;
+  let liveLookups = 0;
+  for (const point of points.slice(0, TOP_SETTLEMENT)) {
+    const { settlement, fetched } = await resolveSettlement(db, point.lat, point.lon, {
+      allowLive: liveLookups < MAX_LIVE_SETTLEMENT,
+    });
+    if (fetched) liveLookups += 1;
+    if (settlement) {
+      point.settlement = settlement;
+      if (!point.cluster) {
+        point.label = settlement;
+      }
+    }
+  }
+
+  return points.map(({ cluster: _cluster, ...rest }) => rest);
 }
 
 export async function getAnalytics(
@@ -308,7 +510,26 @@ export async function getRouteProgress(db: ReturnType<typeof createDb>, tenant: 
   };
 }
 
-export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, date: string) {
+export type DayProgressEvent = {
+  stage: string;
+  detail?: string;
+  percent: number;
+  done?: number;
+  total?: number;
+};
+
+export async function getDay(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  date: string,
+  onProgress?: (event: DayProgressEvent) => void | Promise<void>,
+) {
+  const report = async (event: DayProgressEvent) => {
+    await onProgress?.(event);
+  };
+
+  await report({ stage: "Loading day records", detail: date, percent: 2 });
+
   const dayRows = await db
     .select()
     .from(dayStats)
@@ -327,6 +548,12 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
     .from(activities)
     .where(and(eq(activities.tenant, tenant), eq(activities.date, date)))
     .orderBy(activities.start);
+
+  await report({
+    stage: "Building timeline",
+    detail: `${dayVisits.length} visits · ${dayActivities.length} journeys`,
+    percent: 8,
+  });
 
   type Event =
     | {
@@ -373,11 +600,27 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
   }
   events.sort((a, b) => a.time.localeCompare(b.time));
 
+  const activityTotal = dayActivities.length;
+  let activityDone = 0;
+
   const enrichedActivities = [];
   for (let idx = 0; idx < events.length; idx++) {
     const ev = events[idx];
     if (ev.type !== "activity") continue;
     const a = ev.data;
+    activityDone += 1;
+    const pct =
+      activityTotal === 0
+        ? 50
+        : 8 + Math.round((activityDone / activityTotal) * 42);
+    await report({
+      stage: "Routing journeys",
+      detail: `${a.mode} (${activityDone}/${activityTotal})`,
+      percent: pct,
+      done: activityDone,
+      total: activityTotal,
+    });
+
     const routeData = await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode);
     const d = activityToApi(a) as Record<string, unknown>;
 
@@ -437,7 +680,17 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
     enrichedActivities.push(d);
   }
 
-  const connectors = [];
+  const connectorCandidates: Array<{
+    fromLat: number;
+    fromLon: number;
+    toLat: number;
+    toLon: number;
+    gapM: number;
+    from_time: string;
+    to_time: string;
+    from_label: string;
+    to_label: string;
+  }> = [];
   for (let i = 0; i < events.length - 1; i++) {
     const prevEv = events[i];
     const nextEv = events[i + 1];
@@ -447,47 +700,80 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
     const toLon = nextEv.type === "visit" ? nextEv.lon : nextEv.start_lon;
     const gapM = haversineM(fromLat, fromLon, toLat, toLon);
     if (gapM < 15) continue;
+    connectorCandidates.push({
+      fromLat,
+      fromLon,
+      toLat,
+      toLon,
+      gapM,
+      from_time: prevEv.end_time,
+      to_time: nextEv.time,
+      from_label:
+        prevEv.type === "visit" ? prevEv.data.cluster : `${prevEv.data.mode} journey`,
+      to_label:
+        nextEv.type === "visit" ? nextEv.data.cluster : `${nextEv.data.mode} journey`,
+    });
+  }
 
-    const fromLabel =
-      prevEv.type === "visit" ? prevEv.data.cluster : `${prevEv.data.mode} journey`;
-    const toLabel =
-      nextEv.type === "visit" ? nextEv.data.cluster : `${nextEv.data.mode} journey`;
+  const connectors = [];
+  const connectorTotal = connectorCandidates.length;
+  let connectorDone = 0;
+  for (const c of connectorCandidates) {
+    connectorDone += 1;
+    const pct =
+      connectorTotal === 0
+        ? 75
+        : 50 + Math.round((connectorDone / connectorTotal) * 25);
+    await report({
+      stage: "Connecting places",
+      detail: `${Math.round(c.gapM)}m gap (${connectorDone}/${connectorTotal})`,
+      percent: pct,
+      done: connectorDone,
+      total: connectorTotal,
+    });
 
-    if (gapM < 300) {
+    if (c.gapM < 300) {
       connectors.push({
-        from_time: prevEv.end_time,
-        to_time: nextEv.time,
-        from_lat: fromLat,
-        from_lon: fromLon,
-        to_lat: toLat,
-        to_lon: toLon,
+        from_time: c.from_time,
+        to_time: c.to_time,
+        from_lat: c.fromLat,
+        from_lon: c.fromLon,
+        to_lat: c.toLat,
+        to_lon: c.toLon,
         route_geometry: [
-          [fromLat, fromLon],
-          [toLat, toLon],
+          [c.fromLat, c.fromLon],
+          [c.toLat, c.toLon],
         ],
         steps: [],
-        distance_meters: Math.round(gapM * 10) / 10,
+        distance_meters: Math.round(c.gapM * 10) / 10,
         is_routed: false,
-        from_label: fromLabel,
-        to_label: toLabel,
+        from_label: c.from_label,
+        to_label: c.to_label,
       });
     } else {
-      const connectorData = await fetchRoute(db, fromLat, fromLon, toLat, toLon, "car");
+      const connectorData = await fetchRoute(
+        db,
+        c.fromLat,
+        c.fromLon,
+        c.toLat,
+        c.toLon,
+        "car",
+      );
       connectors.push({
-        from_time: prevEv.end_time,
-        to_time: nextEv.time,
-        from_lat: fromLat,
-        from_lon: fromLon,
-        to_lat: toLat,
-        to_lon: toLon,
+        from_time: c.from_time,
+        to_time: c.to_time,
+        from_lat: c.fromLat,
+        from_lon: c.fromLon,
+        to_lat: c.toLat,
+        to_lon: c.toLon,
         route_geometry: connectorData.geometry,
         steps: connectorData.steps,
         distance_meters: connectorData.steps.length
           ? connectorData.steps.reduce((s, st) => s + st.distance_meters, 0)
-          : Math.round(gapM * 10) / 10,
+          : Math.round(c.gapM * 10) / 10,
         is_routed: true,
-        from_label: fromLabel,
-        to_label: toLabel,
+        from_label: c.from_label,
+        to_label: c.to_label,
       });
     }
   }
@@ -499,11 +785,30 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
     if (!uniqueCoords.has(key)) uniqueCoords.set(key, [ev.data.lat, ev.data.lon]);
   }
 
+  await report({
+    stage: "Resolving place names",
+    detail: `${uniqueCoords.size} locations`,
+    percent: 76,
+    done: 0,
+    total: uniqueCoords.size,
+  });
+
   const placeNames = new Map<
     string,
     { name: string; address: string; data: Record<string, unknown>; short?: string }
   >();
+  let placeDone = 0;
+  const placeTotal = uniqueCoords.size;
   for (const [key, [lat, lon]] of uniqueCoords) {
+    placeDone += 1;
+    await report({
+      stage: "Resolving place names",
+      detail: `Lookup ${placeDone}/${placeTotal}`,
+      percent: placeTotal === 0 ? 95 : 76 + Math.round((placeDone / placeTotal) * 19),
+      done: placeDone,
+      total: placeTotal,
+    });
+
     const visit = visitEvents.find(
       (ev) =>
         Math.round(ev.data.lat * 1e5) / 1e5 === Math.round(lat * 1e5) / 1e5 &&
@@ -526,6 +831,8 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
       placeNames.set(key, await resolveCoords(db, lat, lon));
     }
   }
+
+  await report({ stage: "Assembling day view", percent: 97 });
 
   const enrichedVisits = [];
   for (let idx = 0; idx < events.length; idx++) {
@@ -583,10 +890,6 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
   };
 
   for (const a of enrichedActivities) {
-    if (a.from_place) {
-      // try to improve from previous visit coords already in placeNames
-    }
-    // Use place names when coords match
     for (const ev of visitEvents) {
       if (ev.data.cluster === a.from_place) {
         a.from_place = resolveName(ev.data.cluster, ev.data.lat, ev.data.lon) || a.from_place;
@@ -605,6 +908,8 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
     c.from_label = resolveName(c.from_label, c.from_lat, c.from_lon) || c.from_label;
     c.to_label = resolveName(c.to_label, c.to_lat, c.to_lon) || c.to_label;
   }
+
+  await report({ stage: "Ready", percent: 100 });
 
   return {
     date,

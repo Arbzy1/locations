@@ -208,6 +208,7 @@ export default function SettingsView() {
                   value={label}
                   onChange={(e) => setLabel(e.target.value)}
                   placeholder="e.g. personal@gmail.com"
+                  title="Label for this Google account / Timeline source"
                   className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none"
                 />
               </div>
@@ -218,6 +219,7 @@ export default function SettingsView() {
                 ref={fileRef}
                 type="file"
                 accept=".json,application/json"
+                title="Choose a Google Timeline JSON export to upload"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 className="w-full text-sm text-text-muted file:mr-3 file:rounded-md file:border-0 file:bg-accent/20 file:px-3 file:py-1.5 file:text-sm file:text-accent"
               />
@@ -226,7 +228,12 @@ export default function SettingsView() {
               <button
                 type="submit"
                 disabled={busy || !file}
-                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-bg disabled:opacity-50"
+                title={
+                  reuploadSourceId
+                    ? 'Replace this source with the selected Timeline JSON'
+                    : 'Upload Timeline JSON as a new or updated source'
+                }
+                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-on-accent transition-colors duration-ui-hover ease-ui hover:brightness-110 disabled:opacity-50"
               >
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                 {reuploadSourceId ? 'Replace Timeline data' : 'Upload Timeline data'}
@@ -234,13 +241,14 @@ export default function SettingsView() {
               {reuploadSourceId && (
                 <button
                   type="button"
+                  title="Cancel re-upload and keep existing source data"
                   onClick={() => {
                     setReuploadSourceId(null);
                     setLabel('');
                     setFile(null);
                     if (fileRef.current) fileRef.current.value = '';
                   }}
-                  className="rounded-md border border-border px-4 py-2.5 text-sm text-text-muted hover:text-text"
+                  className="rounded-md border border-border px-4 py-2.5 text-sm text-text-muted transition-colors duration-ui-hover ease-ui hover:text-text"
                 >
                   Cancel
                 </button>
@@ -282,9 +290,14 @@ export default function SettingsView() {
                       autoFocus
                       value={renameValue}
                       onChange={(e) => setRenameValue(e.target.value)}
+                      title="New label for this Timeline source"
                       className="flex-1 rounded-md border border-border bg-bg px-2 py-1.5 text-sm"
                     />
-                    <button type="submit" className="text-sm text-accent">
+                    <button
+                      type="submit"
+                      title="Save the new source label"
+                      className="text-sm text-accent"
+                    >
                       Save
                     </button>
                   </form>
@@ -299,28 +312,31 @@ export default function SettingsView() {
                     <div className="flex shrink-0 items-center gap-1">
                       <button
                         type="button"
+                        title="Re-upload Timeline JSON to replace this source"
                         onClick={() => beginReupload(source)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent hover:bg-accent/20"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent transition-colors duration-ui-hover ease-ui hover:bg-accent/20"
                       >
                         <RefreshCw size={12} />
                         Re-upload
                       </button>
                       <button
                         type="button"
-                        title="Rename"
+                        title="Rename this Timeline source"
+                        aria-label="Rename"
                         onClick={() => {
                           setRenameId(source.id);
                           setRenameValue(source.label);
                         }}
-                        className="rounded p-1.5 text-text-muted hover:bg-bg hover:text-text"
+                        className="rounded p-1.5 text-text-muted transition-colors duration-ui-fast ease-ui hover:bg-bg hover:text-text"
                       >
                         <Pencil size={14} />
                       </button>
                       <button
                         type="button"
-                        title="Delete"
+                        title="Delete this Timeline source and its data"
+                        aria-label="Delete"
                         onClick={() => void onDelete(source)}
-                        className="rounded p-1.5 text-text-muted hover:bg-bg hover:text-red-400"
+                        className="rounded p-1.5 text-text-muted transition-colors duration-ui-fast ease-ui hover:bg-bg hover:text-red-400"
                       >
                         <Trash2 size={14} />
                       </button>

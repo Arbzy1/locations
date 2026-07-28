@@ -2,9 +2,12 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createDb } from "@locations/db";
 import type { Env } from "./env";
+import { allowedOrigins } from "./cors";
 
 export function createAuth(env: Env) {
   const db = createDb(env.DATABASE_URL);
+  const secure = env.BETTER_AUTH_URL.startsWith("https://");
+
   return betterAuth({
     database: drizzleAdapter(db, { provider: "pg" }),
     baseURL: env.BETTER_AUTH_URL,
@@ -23,13 +26,16 @@ export function createAuth(env: Env) {
         },
       },
     },
-    trustedOrigins: [
-      env.BETTER_AUTH_URL,
-      "http://localhost:5173",
-      "http://localhost:8787",
-      "http://127.0.0.1:5173",
-      "http://127.0.0.1:8787",
-    ],
+    trustedOrigins: allowedOrigins(env),
+    advanced: {
+      useSecureCookies: secure,
+      defaultCookieAttributes: {
+        httpOnly: true,
+        secure,
+        sameSite: "lax",
+        path: "/",
+      },
+    },
   });
 }
 

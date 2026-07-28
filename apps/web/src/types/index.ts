@@ -69,6 +69,15 @@ export interface DayData {
   clusters: string[];
 }
 
+/** Lightweight per-day stats for calendar highlights (from day_stats). */
+export interface DaySummary {
+  date: string;
+  total_distance_miles: number;
+  modes: Record<string, number>;
+  visit_count: number;
+  activity_count: number;
+}
+
 export interface DayTrip {
   date: string;
   clusters: string[];
@@ -111,6 +120,22 @@ export interface HeatmapPoint {
   lat: number;
   lon: number;
   count: number;
+  /** Most common visit cluster / place label for this cell */
+  label?: string;
+  /** Town / city / village guessed from coordinates (Nominatim) */
+  settlement?: string | null;
+  totalDurationMinutes?: number;
+  uniqueDays?: number;
+  topTypes?: string[];
+}
+
+/** Named hotspot markers shown on the Hotspots map */
+export interface HotspotLabel {
+  lat: number;
+  lon: number;
+  label: string;
+  count: number;
+  rank: number;
 }
 
 export interface FunFact {

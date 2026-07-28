@@ -1,44 +1,129 @@
-# Dependencies
+# =============================================================================
+# .gitignore - Locations monorepo
+# =============================================================================
+
+# ----- Dependencies -----
 node_modules/
 .npm/
 .pnpm-store/
+.yarn/
+.yarn/cache/
+.pnp.*
+.pnp.js
 
-# Build
+# ----- Build / bundler / Workers -----
 dist/
+dist-ssr/
+build/
+out/
+.output/
 .wrangler/
-.dev.vars
+.wrangler-bundle/
+.vite/
+.turbo/
+.parcel-cache/
+.cache/
+.sass-cache/
 *.tsbuildinfo
 
-# Env / secrets
+# ----- Env / secrets (never commit) -----
 .env
 .env.*
 !.env.example
+!.env*.example
 .dev.vars
+!.dev.vars.example
 .generated-secret.txt
-.wrangler-bundle/
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.pub
+credentials.json
+secrets.json
+**/service-account*.json
+**/google-credentials*.json
 
-# Personal location data — never commit
+# ----- Personal / private location data -----
+# Real Takeout exports - never commit. Sample data under data/ is OK.
 location-history.json
 **/location-history.json
 ../location-history.json
-cache/
+*-location-history.json
+!data/sample-location-history.json
+*.mbox
+Takeout/
+**/Takeout/
+
+# ----- Databases / local caches -----
 *.db
 *.sqlite
+*.sqlite3
+cache/
+legacy/cache/
 
-# Legacy local artifacts
+# ----- Tests / coverage / Playwright -----
+coverage/
+.nyc_output/
+htmlcov/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+*.lcov
+
+# ----- Logs -----
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+wrangler-debug.log*
+
+# ----- OS -----
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ----- Editors / IDEs -----
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# ----- Agent / AI local state (keep committed rule sources) -----
+.claude/
+.aider*
+!.aider.conf.yml
+.codex/
+.continual-learning/
+.cursor/mcp.json
+!.cursor/rules/
+
+# ----- Legacy local artifacts -----
 legacy/cache/
 backend/
 frontend/
-.wrangler/
 
-# OS / IDE
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
-*.swp
-.claude/
-
-# Logs
-*.log
-npm-debug.log*
+# ----- Misc junk -----
+*.bak
+*.tmp
+*.temp
+*.orig
+*.rej
+.eslintcache
+.stylelintcache
+*.local

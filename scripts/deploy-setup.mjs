@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Interactive-ish deploy helper. Run: node scripts/deploy-setup.mjs
- * Or follow README and use: npm run deploy
+ * Or follow README and use: npm run deploy:prod
  */
 import { execSync } from "node:child_process";
 
@@ -20,7 +20,7 @@ Locations deploy checklist
 6. npx wrangler login
 7. npx wrangler secret put DATABASE_URL
 8. npx wrangler secret put BETTER_AUTH_SECRET
-9. npm run deploy
+9. npm run deploy:prod
 10. Cloudflare dashboard → Workers → locations → Custom Domains
     → add locations.aden.website (CNAME for aden.website zone)
 `);

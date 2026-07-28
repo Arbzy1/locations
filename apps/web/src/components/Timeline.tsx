@@ -81,11 +81,12 @@ function ActivitySteps({ activity }: { activity: Activity }) {
     <div className="mt-1">
       <button
         type="button"
+        title={expanded ? 'Hide road-by-road steps' : 'Show road-by-road steps'}
         onClick={(e) => {
           e.stopPropagation();
           setExpanded(!expanded);
         }}
-        className="flex items-center gap-1 text-xs text-text-muted hover:text-text transition-colors"
+        className="flex items-center gap-1 text-xs text-text-muted hover:text-text transition-colors duration-ui-fast ease-ui"
       >
         {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
         <Navigation size={9} />
@@ -220,10 +221,10 @@ export default function Timeline({
                   type="button"
                   onClick={() => onVisitClick?.(v)}
                   disabled={!onVisitClick}
-                  title={onVisitClick ? 'Show on map' : undefined}
+                  title={onVisitClick ? 'Show this visit on the map' : 'Visit details'}
                   className={
                     onVisitClick
-                      ? 'flex w-full text-left rounded-lg -mx-1 px-1 pb-0 transition-colors cursor-pointer hover:bg-bg/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40'
+                      ? 'flex w-full text-left rounded-lg -mx-1 px-1 pb-0 transition-colors duration-ui-emphasis ease-ui cursor-pointer hover:bg-bg/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40'
                       : 'flex w-full text-left'
                   }
                 >
@@ -299,10 +300,10 @@ export default function Timeline({
                   type="button"
                   onClick={() => onActivityClick?.(a)}
                   disabled={!onActivityClick}
-                  title={onActivityClick ? 'Show on map' : undefined}
+                  title={onActivityClick ? 'Show this journey on the map' : 'Journey details'}
                   className={
                     onActivityClick
-                      ? 'flex w-full text-left rounded-lg -mx-1 px-1 transition-colors cursor-pointer hover:bg-bg/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40'
+                      ? 'flex w-full text-left rounded-lg -mx-1 px-1 transition-colors duration-ui-emphasis ease-ui cursor-pointer hover:bg-bg/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40'
                       : 'flex w-full text-left'
                   }
                 >

@@ -1,19 +1,85 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #0d1117;
-  --color-surface: #161b22;
-  --color-border: #30363d;
-  --color-text: #f0f6fc;
-  --color-text-muted: #8b949e;
-  --color-accent: #58a6ff;
-  --color-walk: #3fb950;
-  --color-car: #f778ba;
-  --color-bus: #d29922;
-  --color-train: #f47067;
-  --color-cycle: #56d364;
-  --color-fly: #79c0ff;
-  --color-visit: #bc8cff;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-walk: var(--walk);
+  --color-car: var(--car);
+  --color-bus: var(--bus);
+  --color-train: var(--train);
+  --color-cycle: var(--cycle);
+  --color-fly: var(--fly);
+  --color-visit: var(--visit);
+
+  /* Semantic UI durations — use as duration-ui-fast, etc. */
+  --duration-ui-fast: 150ms;
+  --duration-ui-hover: 200ms;
+  --duration-ui-emphasis: 280ms;
+  --duration-ui-progress: 450ms;
+  --duration-ui-enter: 400ms;
+  --duration-ui-drawer: 750ms;
+
+  --ease-ui: ease-out;
+  --ease-ui-drawer: ease-in-out;
+}
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #30363d;
+  --text: #f0f6fc;
+  --text-muted: #8b949e;
+  --accent: #58a6ff;
+  --on-accent: #0d1117;
+  --walk: #3fb950;
+  --car: #f778ba;
+  --bus: #d29922;
+  --train: #f47067;
+  --cycle: #56d364;
+  --fly: #79c0ff;
+  --visit: #bc8cff;
+  --surface-hover: #21262d;
+  --scrollbar-thumb: #30363d;
+  --scrollbar-thumb-hover: #484f58;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f8fa;
+  --surface: #ffffff;
+  --border: #d0d7de;
+  --text: #1f2328;
+  --text-muted: #656d76;
+  --accent: #0969da;
+  --on-accent: #ffffff;
+  --walk: #1a7f37;
+  --car: #bf3989;
+  --bus: #9a6700;
+  --train: #cf222e;
+  --cycle: #1a7f37;
+  --fly: #0969da;
+  --visit: #8250df;
+  --surface-hover: #eaeef2;
+  --scrollbar-thumb: #d0d7de;
+  --scrollbar-thumb-hover: #afb8c1;
+}
+
+:root {
+  --ui-duration-fast: 150ms;
+  --ui-duration-hover: 200ms;
+  --ui-duration-emphasis: 280ms;
+  --ui-duration-progress: 450ms;
+  --ui-duration-enter: 400ms;
+  --ui-duration-drawer: 750ms;
+  --ui-ease: ease-out;
+  --ui-ease-drawer: ease-in-out;
 }
 
 * {
@@ -22,8 +88,8 @@
 
 body {
   margin: 0;
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: var(--bg);
+  color: var(--text);
   font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -42,35 +108,113 @@ body {
   overflow: hidden;
 }
 
-/* Leaflet overrides for dark theme */
+/* Default interactive control baseline */
+button,
+a,
+input,
+select,
+textarea,
+[role="switch"] {
+  transition-property: color, background-color, border-color, opacity, box-shadow, transform, filter;
+  transition-duration: var(--ui-duration-hover);
+  transition-timing-function: var(--ui-ease);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+@keyframes ui-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ui-enter {
+  animation: ui-enter var(--ui-duration-enter) var(--ui-ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ui-duration-fast: 1ms;
+    --ui-duration-hover: 1ms;
+    --ui-duration-emphasis: 1ms;
+    --ui-duration-progress: 1ms;
+    --ui-duration-enter: 1ms;
+    --ui-duration-drawer: 1ms;
+    --duration-ui-fast: 1ms;
+    --duration-ui-hover: 1ms;
+    --duration-ui-emphasis: 1ms;
+    --duration-ui-progress: 1ms;
+    --duration-ui-enter: 1ms;
+    --duration-ui-drawer: 1ms;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="switch"] {
+    transition-duration: 1ms;
+  }
+
+  button:active:not(:disabled) {
+    transform: none;
+  }
+
+  .ui-enter {
+    animation: none;
+  }
+}
+
+/* Leaflet overrides — theme-aware */
 .leaflet-container {
-  background: #0d1117 !important;
+  background: var(--bg) !important;
 }
 
 .leaflet-control-zoom a {
-  background: #161b22 !important;
-  color: #f0f6fc !important;
-  border-color: #30363d !important;
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+  transition: background-color var(--ui-duration-fast) var(--ui-ease),
+    color var(--ui-duration-fast) var(--ui-ease),
+    border-color var(--ui-duration-fast) var(--ui-ease) !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: var(--surface-hover) !important;
 }
 
 .leaflet-control-attribution {
-  background: rgba(22, 27, 34, 0.8) !important;
-  color: #8b949e !important;
+  background: color-mix(in srgb, var(--surface) 80%, transparent) !important;
+  color: var(--text-muted) !important;
 }
 
 .leaflet-control-attribution a {
-  color: #58a6ff !important;
+  color: var(--accent) !important;
 }
 
 .leaflet-popup-content-wrapper {
-  background: #161b22 !important;
-  color: #f0f6fc !important;
-  border: 1px solid #30363d !important;
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
   border-radius: 8px !important;
 }
 
 .leaflet-popup-tip {
-  background: #161b22 !important;
+  background: var(--surface) !important;
+}
+
+.leaflet-control-layers {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
 }
 
 /* Custom scrollbar */
@@ -79,14 +223,15 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0d1117;
+  background: var(--bg);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #30363d;
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
+  transition: background-color var(--ui-duration-fast) var(--ui-ease);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #484f58;
+  background: var(--scrollbar-thumb-hover);
 }

@@ -1,0 +1,57 @@
+# =============================================================================
+# .cursorindexingignore — INDEX ONLY
+# Excluded from codebase index/search, but still readable via @-mention / drag.
+# Prefer this over .cursorignore when you may still want to open a file in chat.
+# Cursor already skips many of these by default; listed explicitly for clarity.
+# =============================================================================
+
+# ----- Lockfiles (huge, low signal) -----
+package-lock.json
+**/package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+bun.lockb
+
+# ----- Generated / compiled -----
+**/dist/
+**/.wrangler/
+**/*.tsbuildinfo
+apps/web/dist/
+
+# ----- Large / noisy project areas -----
+legacy/
+**/legacy/**
+
+# ----- Drizzle migration snapshots (SQL migrations stay indexable) -----
+packages/db/drizzle/meta/
+
+# ----- Test tooling noise -----
+test-results/
+playwright-report/
+blob-report/
+coverage/
+e2e/.auth/
+
+# ----- Docs media / screenshots (optional @-mention) -----
+docs/**/*.png
+docs/**/*.jpg
+docs/**/*.jpeg
+docs/**/*.webp
+docs/**/*.gif
+**/screenshot*.png
+
+# ----- Sample data (tiny today; keep out of default search noise) -----
+data/sample-location-history.json
+
+# ----- Synced agent mirrors (edit AGENTS.md only) -----
+CLAUDE.md
+.windsurfrules
+CONVENTIONS.md
+.github/copilot-instructions.md
+
+# ----- Editor / local -----
+.idea/
+.vscode/
+*.log
+logs/

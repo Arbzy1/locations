@@ -1,0 +1,78 @@
+﻿# =============================================================================
+# .cursorignore — HARD BLOCK for Cursor AI
+# Files here are not indexed, not @-mentionable, not readable by Agent/Tab.
+# Use for secrets and anything the model must never see.
+# Syntax: .gitignore-style. See also .cursorindexingignore for index-only.
+# =============================================================================
+
+# ----- Secrets / credentials -----
+.env
+.env.*
+!.env.example
+!.env*.example
+.dev.vars
+!.dev.vars.example
+.generated-secret.txt
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/id_rsa
+**/id_rsa.pub
+**/credentials.json
+**/secrets.json
+**/service-account*.json
+**/google-credentials*.json
+**/.aws/
+**/.config/gcloud/
+
+# ----- Private location / Takeout data -----
+location-history.json
+**/location-history.json
+*-location-history.json
+!data/sample-location-history.json
+*.mbox
+Takeout/
+**/Takeout/
+
+# ----- Dependencies (never useful as AI context) -----
+**/node_modules/
+.pnp.*
+.yarn/cache/
+
+# ----- Build outputs / Worker local state -----
+**/dist/
+**/dist-ssr/
+**/.wrangler/
+.wrangler-bundle/
+**/.vite/
+**/.turbo/
+**/.parcel-cache/
+**/.cache/
+
+# ----- Test / coverage artifacts -----
+**/coverage/
+**/.nyc_output/
+**/test-results/
+**/playwright-report/
+**/blob-report/
+**/playwright/.cache/
+
+# ----- VCS / package manager internals -----
+.git/
+.svn/
+.hg/
+
+# ----- OS junk -----
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ----- Large / binary dumps (if dropped in-repo) -----
+**/*.zip
+**/*.tar
+**/*.tar.gz
+**/*.7z
+**/*.rar
+**/*.dump
+**/*.sql.gz

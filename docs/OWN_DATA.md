@@ -14,7 +14,7 @@ npm run auth:create-user -- you@example.com 'your-password' YourName
 
 ```bash
 npm install
-npm run setup          # Neon URL + sample demo data + admin user
+npm run setup:project  # Neon URL + sample demo data + admin user
 npm run db:migrate     # includes data_sources / import_jobs
 npm run build:web
 npm run dev:api        # http://localhost:8787
@@ -65,5 +65,5 @@ Use your own Worker name and domain in `wrangler.toml`, create the R2 bucket `lo
 npx wrangler secret put DATABASE_URL
 npx wrangler secret put BETTER_AUTH_SECRET
 npm run db:migrate
-npm run deploy
+npm run deploy:prod
 ```

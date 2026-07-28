@@ -1,0 +1,22 @@
+# Mirrors .gitignore / .cursorindexingignore for Prettier (if added later).
+# Keep in sync when adding large/generated paths.
+
+node_modules/
+dist/
+.wrangler/
+.vite/
+coverage/
+test-results/
+playwright-report/
+blob-report/
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+*.min.js
+*.min.css
+data/
+legacy/
+docs/**/*.png
+CLAUDE.md
+.windsurfrules
+CONVENTIONS.md
