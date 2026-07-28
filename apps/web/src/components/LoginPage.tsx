@@ -84,6 +84,7 @@ export default function LoginPage() {
 
         <button
           type="button"
+          title="Try the public demo with sample journeys (no invite needed)"
           onClick={() => void tryDemo()}
           disabled={demoLoading || loading}
           className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-60"
@@ -106,6 +107,7 @@ export default function LoginPage() {
             type="email"
             required
             autoComplete="email"
+            title="Your invite account email address"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="mb-4 w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text outline-none ring-accent focus:ring-1"
@@ -115,6 +117,7 @@ export default function LoginPage() {
           <PasswordInput
             required
             autoComplete="current-password"
+            title="Your account password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -127,6 +130,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
+            title="Sign in with your invite account"
             disabled={loading || demoLoading}
             className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-[#0d1117] transition hover:brightness-110 disabled:opacity-60"
           >

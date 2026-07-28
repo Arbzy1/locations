@@ -77,6 +77,23 @@ import PasswordInput from './PasswordInput';
 - Toggle button needs an `aria-label` for show/hide.
 <!-- /sync:cursor-rule -->
 
+### UI tooltips
+
+<!-- sync:cursor-rule name="ui-tooltips" globs="apps/web/**/*.{tsx,jsx}" -->
+Every interactive control in the web app must have a non-empty `title` tooltip:
+
+- `<button>`, `<input>`, `<select>`, `<textarea>`, `PasswordInput`
+- Custom toggles (`role="switch"` and similar)
+
+Prefer a short action/purpose phrase (e.g. "Toggle heatmap layer", "Minimum trip range in miles").
+
+Icon-only buttons also need `aria-label` (may match `title`).
+
+Do not leave controls with only visible text and no `title`.
+
+Forward `title` through wrappers like `PasswordInput` onto the underlying input. Show/hide toggles inside wrappers need their own `title` too.
+<!-- /sync:cursor-rule -->
+
 ## npm scripts (`<domain>:<action>`)
 
 Public scripts live on the **root** `package.json`. Name every new script `domain:action` (e.g. `db:migrate`, `test:unit`, `rules:sync`).

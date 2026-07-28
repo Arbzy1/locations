@@ -106,6 +106,7 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
           disabled={!canPrevMonth}
           className="rounded border border-border p-1 hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
           aria-label="Previous month"
+          title="Show previous month"
         >
           <ChevronLeft size={14} />
         </button>
@@ -118,6 +119,7 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
           disabled={!canNextMonth}
           className="rounded border border-border p-1 hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
           aria-label="Next month"
+          title="Show next month"
         >
           <ChevronRight size={14} />
         </button>

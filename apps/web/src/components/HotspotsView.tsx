@@ -101,6 +101,8 @@ export default function HotspotsView() {
               type="button"
               role="switch"
               aria-checked={heatmapOn}
+              aria-label={heatmapOn ? 'Turn heatmap off' : 'Turn heatmap on'}
+              title={heatmapOn ? 'Turn heatmap off' : 'Turn heatmap on'}
               onClick={() => setHeatmapOn((v) => !v)}
               className={`relative h-7 w-12 rounded-full transition-colors shrink-0 ${
                 heatmapOn ? 'bg-accent' : 'bg-border'
@@ -126,6 +128,7 @@ export default function HotspotsView() {
               value={opacityPct}
               onChange={(e) => setOpacityPct(Number(e.target.value))}
               disabled={!heatmapOn}
+              title="Heatmap opacity so map labels stay readable"
               className="w-full h-2 accent-accent cursor-pointer disabled:cursor-not-allowed"
             />
             <p className="text-[10px] text-text-muted/80 mt-1 leading-snug">
@@ -146,6 +149,7 @@ export default function HotspotsView() {
               value={intensityPct}
               onChange={(e) => setIntensityPct(Number(e.target.value))}
               disabled={!heatmapOn}
+              title="Heatmap colour strength"
               className="w-full h-2 accent-accent cursor-pointer disabled:cursor-not-allowed"
             />
             <p className="text-[10px] text-text-muted/80 mt-1 leading-snug">

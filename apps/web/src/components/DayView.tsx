@@ -95,6 +95,7 @@ export default function DayView({ initialDate }: Props) {
                 disabled={!canPrev}
                 className="rounded border border-border p-1.5 hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
                 aria-label="Previous day with data"
+                title="Go to previous day with data"
               >
                 <ChevronLeft size={16} />
               </button>
@@ -103,6 +104,7 @@ export default function DayView({ initialDate }: Props) {
                 disabled={!canNext}
                 className="rounded border border-border p-1.5 hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
                 aria-label="Next day with data"
+                title="Go to next day with data"
               >
                 <ChevronRight size={16} />
               </button>

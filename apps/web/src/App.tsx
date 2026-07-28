@@ -71,6 +71,7 @@ function EmptyDataState({ onOpenSettings }: { onOpenSettings: () => void }) {
       </div>
       <button
         type="button"
+        title="Open Settings to upload your Timeline JSON"
         onClick={onOpenSettings}
         className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg hover:bg-accent/90"
       >
@@ -117,6 +118,7 @@ function AppContent() {
           </span>
           <button
             type="button"
+            title="Exit demo and return to the sign-in screen"
             onClick={() => {
               queryClient.clear();
               void signOut();
@@ -146,6 +148,7 @@ function AppContent() {
                   : 'text-text-muted hover:bg-bg/50 hover:text-text'
               }`}
               title={tab.label}
+              aria-label={tab.label}
             >
               {tab.icon}
             </button>
@@ -162,6 +165,7 @@ function AppContent() {
                     : 'text-text-muted hover:bg-bg/50 hover:text-text'
                 }`}
                 title="Settings"
+                aria-label="Settings"
               >
                 <Settings size={16} />
               </button>
@@ -178,6 +182,7 @@ function AppContent() {
               }}
               className="flex h-10 w-10 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-bg/50 hover:text-text"
               title={session?.user?.email ? `Sign out (${session.user.email})` : 'Sign out'}
+              aria-label="Sign out"
             >
               <LogOut size={16} />
             </button>
