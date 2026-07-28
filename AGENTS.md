@@ -94,6 +94,31 @@ Do not leave controls with only visible text and no `title`.
 Forward `title` through wrappers like `PasswordInput` onto the underlying input. Show/hide toggles inside wrappers need their own `title` too.
 <!-- /sync:cursor-rule -->
 
+### Motion and transitions
+
+<!-- sync:cursor-rule name="ui-motion" globs="apps/web/**/*.{tsx,jsx,css}" -->
+All interactive and mount/unmount UI must feel smooth and deliberately paced - never instant snaps (except where motion would harm usability).
+
+**Hover and active**
+
+- Buttons, links, tabs, chips, toggles, cards, and other interactive elements need CSS transitions on colour, background, border, opacity, shadow, and transform.
+- Prefer Tailwind `transition` / `transition-colors` / `transition-all` with a **slow-ish** duration: about **200-400ms** for hover/active (`duration-300` as the default; `duration-200` minimum; avoid bare instant style changes).
+- Active/pressed states should ease as well (scale or brightness), not hard-cut.
+
+**Entrance and exit**
+
+- Panels, overlays, menus, toasts, and view swaps that appear or disappear need enter/exit motion (fade, soft slide, or opacity + transform).
+- Entrance and exit should be **slow-ish**: about **300-500ms**, ease-out on enter and ease-in on exit.
+- Prefer CSS (`@keyframes`, `transition`, or a small shared utility class in `index.css`) over heavy animation libraries unless already in the project.
+- Respect `prefers-reduced-motion: reduce`: shorten or disable non-essential motion.
+
+**Do not**
+
+- Ship new interactive controls with no hover transition.
+- Use flashy or bouncy motion that fights the calm map-journal aesthetic.
+- Animate layout thrashing (large width/height reflows) when opacity/transform will do.
+<!-- /sync:cursor-rule -->
+
 ## npm scripts (`<domain>:<action>`)
 
 Public scripts live on the **root** `package.json`. Name every new script `domain:action` (e.g. `db:migrate`, `test:unit`, `rules:sync`).
