@@ -119,6 +119,37 @@ All interactive and mount/unmount UI must feel smooth and deliberately paced - n
 - Animate layout thrashing (large width/height reflows) when opacity/transform will do.
 <!-- /sync:cursor-rule -->
 
+### Dark / light theme
+
+<!-- sync:cursor-rule name="ui-theme" globs="apps/web/**/*.{tsx,jsx,css,html}" -->
+The web app supports dark and light mode via `html[data-theme="dark"|"light"]` and CSS variables in [`apps/web/src/index.css`](apps/web/src/index.css). All UI edits must work in **both** themes.
+
+**Use semantic tokens only**
+
+- Tailwind: `bg-bg`, `bg-surface`, `text-text`, `text-text-muted`, `border-border`, `text-accent`, `bg-accent`, `text-on-accent`, mode colours (`text-walk`, `text-visit`, …).
+- Raw CSS / inline styles: `var(--bg)`, `var(--surface)`, `var(--border)`, `var(--text)`, `var(--text-muted)`, `var(--accent)`, `var(--on-accent)`, `var(--visit)`, etc.
+- Primary button label colour is `text-on-accent` / `var(--on-accent)`, not a hardcoded dark hex.
+
+**Do not**
+
+- Hardcode theme colours (`#0d1117`, `#161b22`, `#30363d`, `#f0f6fc`, `#8b949e`, `#58a6ff`, or light equivalents) in components, Leaflet HTML, or chart styles.
+- Assume dark-only UI (e.g. white text on a fixed dark panel).
+- Add a second theming system; extend the existing CSS variables and `useTheme()` from [`apps/web/src/lib/theme.tsx`](apps/web/src/lib/theme.tsx).
+
+**When colours must be set in JS** (Recharts ticks, Leaflet `divIcon` HTML, canvas):
+
+- Read live values with `getComputedStyle(document.documentElement).getPropertyValue('--…')`, or use `var(--…)` in style strings.
+- Recompute when `useTheme().theme` changes.
+
+**Map tiles**
+
+- Default basemap should follow theme (Carto `dark_all` / `light_all`) as in [`Map.tsx`](apps/web/src/components/Map.tsx).
+
+**Toggle**
+
+- Theme switching goes through `ThemeToggle` / `useTheme().toggleTheme()`; persist via `locations-theme` localStorage (already handled by the provider + boot script in `index.html`).
+<!-- /sync:cursor-rule -->
+
 ## npm scripts (`<domain>:<action>`)
 
 Public scripts live on the **root** `package.json`. Name every new script `domain:action` (e.g. `db:migrate`, `test:unit`, `rules:sync`).

@@ -15,6 +15,7 @@ import 'leaflet/dist/leaflet.css';
 import type { Visit, Activity, HeatmapPoint, Connector, MapFocusTarget } from '../types';
 import { MODE_LABELS } from '../types';
 import { formatTime, formatDistance, formatDuration } from '../utils/format';
+import { useTheme } from '../lib/theme';
 
 // Fix default marker icon
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -298,6 +299,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
   focusTarget = null,
 }, ref) {
   const mapRef = useRef<L.Map | null>(null);
+  const { theme } = useTheme();
 
   useImperativeHandle(ref, () => ({
     flyToVisit: (v: Visit) => {
@@ -338,9 +340,12 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
 
   return (
     <MapContainer center={center} zoom={zoom} className="w-full h-full" ref={mapRef} zoomControl={true}>
-      <LayersControl position="topright">
-        <LayersControl.BaseLayer checked name="Dark">
+      <LayersControl key={theme} position="topright">
+        <LayersControl.BaseLayer checked={theme === 'dark'} name="Dark">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; OSM &copy; CARTO' />
+        </LayersControl.BaseLayer>
+        <LayersControl.BaseLayer checked={theme === 'light'} name="Light">
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution='&copy; OSM &copy; CARTO' />
         </LayersControl.BaseLayer>
         <LayersControl.BaseLayer name="Street">
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OSM' />
@@ -374,13 +379,13 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
             pathOptions={{ color: '#484f58', weight: 2, opacity: 0.5, dashArray: '3 6' }}>
             <Popup>
               <div className="text-sm" style={{ maxWidth: 280 }}>
-                <div style={{ fontWeight: 600, marginBottom: 4, color: '#8b949e' }}>Gap between events</div>
+                <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--text-muted)' }}>Gap between events</div>
                 <div style={{ marginBottom: 4 }}>
                   {c.from_label || 'Previous event'} &rarr; {c.to_label || 'Next event'}
                 </div>
                 <div>{formatTime(c.from_time)} &rarr; {formatTime(c.to_time)}</div>
                 <div>{formatDistance(c.distance_meters)}</div>
-                <div style={{ borderTop: '1px solid #30363d', marginTop: 6, paddingTop: 6, color: '#8b949e', fontSize: '0.8em' }}>
+                <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 6, color: 'var(--text-muted)', fontSize: '0.8em' }}>
                   {isStraight
                     ? <><strong>Straight line</strong> â€” Gap under 300m, direct connection between GPS coordinates.</>
                     : <><strong>Predicted route</strong> â€” Gap over 300m. Route predicted via OSRM road mapping.</>}
@@ -414,7 +419,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
                   }}>{i + 1}</span>
                   <div>
                     <div style={{ fontWeight: 600 }}>{MODE_LABELS[a.mode] || a.mode}</div>
-                    <div style={{ color: '#8b949e', fontSize: '0.85em' }}>Journey {i + 1} of {totalJourneys}</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85em' }}>Journey {i + 1} of {totalJourneys}</div>
                   </div>
                 </div>
                 {(a.from_place || a.to_place) && (
@@ -422,8 +427,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
                 )}
                 <div>{formatTime(a.start)} &rarr; {formatTime(a.end)}</div>
                 <div style={{ fontWeight: 600 }}>{formatDistance(a.distance_meters)} &middot; {formatDuration(a.duration_minutes)}</div>
-                {roadSummary && <div style={{ marginTop: 4, color: '#8b949e', fontSize: '0.8em' }}>via {roadSummary}</div>}
-                <div style={{ borderTop: '1px solid #30363d', marginTop: 6, paddingTop: 6, color: '#8b949e', fontSize: '0.8em' }}>
+                {roadSummary && <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: '0.8em' }}>via {roadSummary}</div>}
+                <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 6, color: 'var(--text-muted)', fontSize: '0.8em' }}>
                   {a.is_rail
                     ? <><strong>Rail journey</strong> — Google detected you were on a {(MODE_LABELS[a.mode] || a.mode).toLowerCase()}.
                       The arc shows the approximate path between stations. Exact rail route not available.</>
@@ -462,25 +467,25 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
                   }}>{stopNum}</span>
                   <div>
                     <div style={{ fontWeight: 600 }}>{v.place_name || v.cluster}</div>
-                    {v.place_short_address && <div style={{ color: '#8b949e', fontSize: '0.8em' }}>{v.place_short_address}</div>}
-                    <div style={{ color: '#8b949e', fontSize: '0.85em' }}>Stop {stopNum} of {totalStops}</div>
+                    {v.place_short_address && <div style={{ color: 'var(--text-muted)', fontSize: '0.8em' }}>{v.place_short_address}</div>}
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85em' }}>Stop {stopNum} of {totalStops}</div>
                   </div>
                 </div>
-                <div style={{ borderTop: '1px solid #30363d', paddingTop: 6, marginTop: 2 }}>
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 2 }}>
                   <div>Arrived: <strong>{formatTime(v.start)}</strong></div>
                   <div>Left: <strong>{formatTime(v.end)}</strong></div>
                   <div style={{ color: '#bc8cff', fontWeight: 600, marginTop: 2 }}>Stayed {formatDuration(v.duration_minutes)}</div>
                 </div>
                 {(arrivedBy || departedBy) && (
-                  <div style={{ borderTop: '1px solid #30363d', paddingTop: 6, marginTop: 6, color: '#8b949e', fontSize: '0.85em' }}>
+                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 6, color: 'var(--text-muted)', fontSize: '0.85em' }}>
                     {arrivedBy && <div>Arrived by {arrivedBy}</div>}
                     {departedBy && <div>Left by {departedBy}</div>}
                   </div>
                 )}
                 {v.semantic_type !== 'Unknown' && (
-                  <div style={{ borderTop: '1px solid #30363d', paddingTop: 6, marginTop: 6, color: '#58a6ff' }}>{v.semantic_type}</div>
+                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 6, color: 'var(--accent)' }}>{v.semantic_type}</div>
                 )}
-                <div style={{ borderTop: '1px solid #30363d', marginTop: 6, paddingTop: 6, color: '#8b949e', fontSize: '0.8em' }}>
+                <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 6, color: 'var(--text-muted)', fontSize: '0.8em' }}>
                   <strong>Recorded location</strong> â€” Google Location History recorded a visit at these coordinates at {formatTime(v.start)}.
                   {v.place_name && v.place_name !== v.cluster && <> Place name resolved via Nominatim/OpenStreetMap.</>}
                 </div>
@@ -533,12 +538,12 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
           const icon = L.divIcon({
             className: '',
             html: `<div style="
-              background:rgba(22,27,34,0.88);border:1px solid #bc8cff44;border-radius:4px;
-              padding:1px 6px;font-size:10px;color:#f0f6fc;font-weight:600;
+              background:color-mix(in srgb, var(--surface) 88%, transparent);border:1px solid color-mix(in srgb, var(--visit) 27%, transparent);border-radius:4px;
+              padding:1px 6px;font-size:10px;color:var(--text);font-weight:600;
               white-space:nowrap;pointer-events:none;
-              text-shadow:0 0 3px rgba(0,0,0,0.8);
+              text-shadow:0 0 3px color-mix(in srgb, var(--bg) 80%, transparent);
               max-width:160px;overflow:hidden;text-overflow:ellipsis;
-            "><span style="color:#bc8cff">${stopNum}</span> ${placeName} <span style="color:#8b949e;font-weight:400">${stayText}</span></div>`,
+            "><span style="color:var(--visit)">${stopNum}</span> ${placeName} <span style="color:var(--text-muted);font-weight:400">${stayText}</span></div>`,
             iconSize: [0, 0],
             iconAnchor: [-14, 5],
           });
@@ -589,14 +594,15 @@ export default MapView;
 function JourneyLegend({ activities, totalJourneys, visits }: { activities: Activity[]; totalJourneys: number; visits: Visit[] }) {
   const map = useMap();
   const legendRef = useRef<L.Control | null>(null);
+  const { theme } = useTheme();
 
   useEffect(() => {
     const legend = new L.Control({ position: 'bottomright' });
     legend.onAdd = () => {
       const div = L.DomUtil.create('div', 'journey-legend');
-      div.style.cssText = 'background:#161b22;border:1px solid #30363d;border-radius:8px;padding:8px 10px;font-size:11px;color:#f0f6fc;max-height:260px;overflow-y:auto;min-width:160px;';
+      div.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--text);max-height:260px;overflow-y:auto;min-width:160px;';
 
-      let html = '<div style="font-weight:600;margin-bottom:6px;color:#8b949e;font-size:10px;">YOUR DAY</div>';
+      let html = '<div style="font-weight:600;margin-bottom:6px;color:var(--text-muted);font-size:10px;">YOUR DAY</div>';
 
       type LegendItem = { time: string; type: 'visit' | 'journey'; label: string; color: string; sub?: string };
       const items: LegendItem[] = [];
@@ -606,7 +612,7 @@ function JourneyLegend({ activities, totalJourneys, visits }: { activities: Acti
           time: v.start,
           type: 'visit',
           label: escapeHtml(v.place_name || v.cluster),
-          color: '#bc8cff',
+          color: 'var(--visit)',
           sub: escapeHtml(formatDuration(v.duration_minutes)),
         });
       });
@@ -630,7 +636,7 @@ function JourneyLegend({ activities, totalJourneys, visits }: { activities: Acti
           html += `<div style="display:flex;align-items:center;gap:6px;padding:2px 0;">
             <span style="width:8px;height:8px;border-radius:50%;background:${item.color};border:1.5px solid #fff;flex-shrink:0;"></span>
             <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.label}</span>
-            <span style="color:#8b949e;flex-shrink:0;">${item.sub}</span>
+            <span style="color:var(--text-muted);flex-shrink:0;">${item.sub}</span>
           </div>`;
         } else {
           const style = MODE_LINE_STYLE[activities.find((a) => formatTime(a.start) === item.sub)?.mode || 'car'] || {};
@@ -638,17 +644,17 @@ function JourneyLegend({ activities, totalJourneys, visits }: { activities: Acti
           html += `<div style="display:flex;align-items:center;gap:6px;padding:2px 0;">
             <svg width="16" height="6" style="flex-shrink:0;"><line x1="0" y1="3" x2="16" y2="3" stroke="${item.color}" stroke-width="2" ${dashAttr}/></svg>
             <span style="color:${item.color};flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.label}</span>
-            <span style="color:#8b949e;flex-shrink:0;">${item.sub}</span>
+            <span style="color:var(--text-muted);flex-shrink:0;">${item.sub}</span>
           </div>`;
         }
       });
 
-      html += '<div style="border-top:1px solid #30363d;margin-top:6px;padding-top:4px;">';
+      html += '<div style="border-top:1px solid var(--border);margin-top:6px;padding-top:4px;">';
       [['\u2014', 'Car'], ['\u00b7 \u00b7 \u00b7', 'Walk'], ['\u2013 \u2013', 'Bus'], ['\u2013\u00b7\u2013', 'Train']].forEach(([sym, label]) => {
-        html += `<span style="color:#8b949e;font-size:10px;margin-right:8px;">${sym} ${label}</span>`;
+        html += `<span style="color:var(--text-muted);font-size:10px;margin-right:8px;">${sym} ${label}</span>`;
       });
       html += '</div>';
-      html += '<div style="color:#484f58;font-size:9px;margin-top:4px;">Zoom in further for on-map labels. Click the timeline to focus the map.</div>';
+      html += '<div style="color:var(--text-muted);opacity:0.7;font-size:9px;margin-top:4px;">Zoom in further for on-map labels. Click the timeline to focus the map.</div>';
 
       div.innerHTML = html;
       L.DomEvent.disableClickPropagation(div);
@@ -658,8 +664,11 @@ function JourneyLegend({ activities, totalJourneys, visits }: { activities: Acti
 
     legend.addTo(map);
     legendRef.current = legend;
-    return () => { if (legendRef.current) map.removeControl(legendRef.current); };
-  }, [map, activities, totalJourneys, visits]);
+    return () => {
+      legend.remove();
+      legendRef.current = null;
+    };
+  }, [map, activities, totalJourneys, visits, theme]);
 
   return null;
 }

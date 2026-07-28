@@ -13,6 +13,7 @@ import DayTripsView from './components/DayTripsView';
 import InsightsView from './components/InsightsView';
 import SettingsView from './components/SettingsView';
 import LoginPage from './components/LoginPage';
+import ThemeToggle from './components/ThemeToggle';
 import {
   Flame,
   Calendar,
@@ -73,7 +74,7 @@ function EmptyDataState({ onOpenSettings }: { onOpenSettings: () => void }) {
         type="button"
         title="Open Settings to upload your Timeline JSON"
         onClick={onOpenSettings}
-        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg transition-colors duration-ui-hover ease-ui hover:bg-accent/90"
+        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-colors duration-ui-hover ease-ui hover:bg-accent/90"
       >
         Open Settings
       </button>
@@ -155,6 +156,7 @@ function AppContent() {
           ))}
 
           <div className="mt-auto flex flex-col items-center gap-2">
+            <ThemeToggle />
             {!isDemo && (
               <button
                 type="button"

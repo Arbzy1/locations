@@ -8,6 +8,8 @@ import {
 import StatCard from './StatCard';
 import { MODE_COLORS, MODE_LABELS } from '../types';
 import { formatMiles } from '../utils/format';
+import { useTheme } from '../lib/theme';
+import { useMemo } from 'react';
 import {
   BarChart,
   Bar,
@@ -30,12 +32,29 @@ import {
   ArrowLeftRight,
 } from 'lucide-react';
 
+function useChartColors() {
+  const { theme } = useTheme();
+  return useMemo(() => {
+    const s = getComputedStyle(document.documentElement);
+    const read = (name: string, fallback: string) =>
+      s.getPropertyValue(name).trim() || fallback;
+    return {
+      muted: read('--text-muted', '#8b949e'),
+      surface: read('--surface', '#161b22'),
+      border: read('--border', '#30363d'),
+      text: read('--text', '#f0f6fc'),
+      accent: read('--accent', '#58a6ff'),
+    };
+  }, [theme]);
+}
+
 export default function InsightsView() {
   const { data: overview } = useOverview();
   const { data: monthly } = useMonthlyStats();
   const { data: yearly } = useYearlyStats();
   const { data: facts } = useFunFacts();
   const { data: corridors } = useCorridors();
+  const chart = useChartColors();
 
   // Mode breakdown for pie chart
   const modeData = yearly
@@ -53,10 +72,17 @@ export default function InsightsView() {
         .map(([mode, count]) => ({
           name: MODE_LABELS[mode] || mode,
           value: count,
-          color: MODE_COLORS[mode] || '#8b949e',
+          color: MODE_COLORS[mode] || chart.muted,
         }))
         .sort((a, b) => b.value - a.value)
     : [];
+
+  const tooltipStyle = {
+    backgroundColor: chart.surface,
+    border: `1px solid ${chart.border}`,
+    borderRadius: '8px',
+    color: chart.text,
+  };
 
   return (
     <div className="h-full bg-surface overflow-y-auto">
@@ -102,26 +128,21 @@ export default function InsightsView() {
               <BarChart data={monthly}>
                 <XAxis
                   dataKey="month"
-                  tick={{ fill: '#8b949e', fontSize: 10 }}
+                  tick={{ fill: chart.muted, fontSize: 10 }}
                   tickFormatter={(v: string) => {
                     const [y, m] = v.split('-');
                     return m === '01' ? y : '';
                   }}
                 />
-                <YAxis tick={{ fill: '#8b949e', fontSize: 11 }} />
+                <YAxis tick={{ fill: chart.muted, fontSize: 11 }} />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#161b22',
-                    border: '1px solid #30363d',
-                    borderRadius: '8px',
-                    color: '#f0f6fc',
-                  }}
+                  contentStyle={tooltipStyle}
                   formatter={(value) => [
                     `${Math.round(Number(value ?? 0))} mi`,
                     'Distance',
                   ]}
                 />
-                <Bar dataKey="distance_miles" fill="#58a6ff" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="distance_miles" fill={chart.accent} radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -150,16 +171,9 @@ export default function InsightsView() {
                       <Cell key={i} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#161b22',
-                      border: '1px solid #30363d',
-                      borderRadius: '8px',
-                      color: '#f0f6fc',
-                    }}
-                  />
+                  <Tooltip contentStyle={tooltipStyle} />
                   <Legend
-                    wrapperStyle={{ color: '#8b949e', fontSize: '12px' }}
+                    wrapperStyle={{ color: chart.muted, fontSize: '12px' }}
                   />
                 </PieChart>
               </ResponsiveContainer>

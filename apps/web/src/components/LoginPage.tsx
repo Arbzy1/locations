@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { signIn } from '../lib/auth';
 import { MapPinned, Lock, ExternalLink, Play } from 'lucide-react';
 import PasswordInput from './PasswordInput';
+import ThemeToggle from './ThemeToggle';
 
 const GITHUB_URL = 'https://github.com/Arbzy1/locations';
 const DEMO_EMAIL = 'demo@locations.app';
@@ -41,7 +42,6 @@ export default function LoginPage() {
       if (result.error) {
         setError(result.error.message || 'Demo unavailable right now');
       } else {
-        // Force a clean client state so personal cache never bleeds into demo
         window.location.assign('/');
       }
     } catch {
@@ -57,17 +57,21 @@ export default function LoginPage() {
         className="pointer-events-none absolute inset-0 opacity-40"
         style={{
           backgroundImage:
-            'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(88,166,255,0.25), transparent), radial-gradient(circle at 20% 80%, rgba(188,140,255,0.12), transparent 40%), radial-gradient(circle at 80% 60%, rgba(63,185,80,0.08), transparent 35%)',
+            'radial-gradient(ellipse 80% 50% at 50% -20%, color-mix(in srgb, var(--accent) 25%, transparent), transparent), radial-gradient(circle at 20% 80%, color-mix(in srgb, var(--visit) 12%, transparent), transparent 40%), radial-gradient(circle at 80% 60%, color-mix(in srgb, var(--walk) 8%, transparent), transparent 35%)',
         }}
       />
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.07]"
         style={{
           backgroundImage:
-            'linear-gradient(#30363d 1px, transparent 1px), linear-gradient(90deg, #30363d 1px, transparent 1px)',
+            'linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)',
           backgroundSize: '48px 48px',
         }}
       />
+
+      <div className="absolute right-4 top-4 z-20">
+        <ThemeToggle />
+      </div>
 
       <div className="ui-enter relative z-10 w-full max-w-md px-6">
         <div className="mb-8 text-center">
@@ -132,7 +136,7 @@ export default function LoginPage() {
             type="submit"
             title="Sign in with your invite account"
             disabled={loading || demoLoading}
-            className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-[#0d1117] transition duration-ui-hover ease-ui hover:brightness-110 disabled:opacity-60"
+            className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-on-accent transition duration-ui-hover ease-ui hover:brightness-110 disabled:opacity-60"
           >
             {loading ? 'Signing in…' : 'Enter'}
           </button>

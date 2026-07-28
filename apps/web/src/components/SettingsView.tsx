@@ -233,7 +233,7 @@ export default function SettingsView() {
                     ? 'Replace this source with the selected Timeline JSON'
                     : 'Upload Timeline JSON as a new or updated source'
                 }
-                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-bg transition-colors duration-ui-hover ease-ui hover:brightness-110 disabled:opacity-50"
+                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-on-accent transition-colors duration-ui-hover ease-ui hover:brightness-110 disabled:opacity-50"
               >
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                 {reuploadSourceId ? 'Replace Timeline data' : 'Upload Timeline data'}
