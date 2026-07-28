@@ -29,7 +29,10 @@
     "test:unit": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "deps:audit": "npm audit --audit-level=high"
+    "deps:audit": "npm audit --audit-level=high",
+    "git:merge-master": "node scripts/merge-master-into-branches.mjs",
+    "git:merge-master:preview": "node scripts/merge-master-into-branches.mjs --preview",
+    "git:merge-master:fetch": "node scripts/merge-master-into-branches.mjs --fetch"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",
