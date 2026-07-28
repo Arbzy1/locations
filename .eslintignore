@@ -1,0 +1,11 @@
+# ESLint flat config can ignore via eslint.config.js; this catches CLI defaults.
+node_modules/
+dist/
+.wrangler/
+.vite/
+coverage/
+test-results/
+playwright-report/
+blob-report/
+legacy/
+*.min.js
