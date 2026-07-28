@@ -11,8 +11,8 @@ import HotspotsView from './components/HotspotsView';
 import DayView from './components/DayView';
 import DayTripsView from './components/DayTripsView';
 import InsightsView from './components/InsightsView';
+import SettingsView from './components/SettingsView';
 import LoginPage from './components/LoginPage';
-import SourcesPanel from './components/SourcesPanel';
 import {
   Flame,
   Calendar,
@@ -20,7 +20,7 @@ import {
   TrendingUp,
   Loader2,
   LogOut,
-  Database,
+  Settings,
   Upload,
 } from 'lucide-react';
 
@@ -42,7 +42,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'insights', label: 'Insights', icon: <TrendingUp size={18} /> },
 ];
 
-function EmptyDataState({ onOpenSources }: { onOpenSources: () => void }) {
+function EmptyDataState({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg px-6 text-center">
       <div className="rounded-full bg-accent/15 p-4 text-accent">
@@ -51,16 +51,16 @@ function EmptyDataState({ onOpenSources }: { onOpenSources: () => void }) {
       <div className="max-w-sm">
         <h2 className="font-display text-lg font-semibold text-text">Import your Timeline</h2>
         <p className="mt-2 text-sm text-text-muted">
-          Upload a Google Timeline JSON export for each Google account you use. Data from multiple
-          accounts merges into one view.
+          Upload a Google Timeline JSON export in Settings. You can replace it anytime with a newer
+          export.
         </p>
       </div>
       <button
         type="button"
-        onClick={onOpenSources}
+        onClick={onOpenSettings}
         className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg hover:bg-accent/90"
       >
-        Add Google account data
+        Open Settings
       </button>
     </div>
   );
@@ -69,7 +69,6 @@ function EmptyDataState({ onOpenSources }: { onOpenSources: () => void }) {
 function AppContent() {
   const [activeTab, setActiveTab] = useState<TabId>('hotspots');
   const [dayViewDate, setDayViewDate] = useState('');
-  const [sourcesOpen, setSourcesOpen] = useState(false);
   const { data: routeProgress } = useRouteProgress();
   const { data: overview, isLoading: overviewLoading } = useOverview();
   const { data: importStatus } = useImportStatus({
@@ -140,11 +139,15 @@ function AppContent() {
             {!isDemo && (
               <button
                 type="button"
-                onClick={() => setSourcesOpen(true)}
-                className="flex h-10 w-10 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-bg/50 hover:text-text"
-                title="Data sources"
+                onClick={() => setActiveTab('settings')}
+                className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                  activeTab === 'settings'
+                    ? 'bg-accent/20 text-accent'
+                    : 'text-text-muted hover:bg-bg/50 hover:text-text'
+                }`}
+                title="Settings"
               >
-                <Database size={16} />
+                <Settings size={16} />
               </button>
             )}
             {routeProgress && routeProgress.percent < 100 && (
@@ -166,7 +169,9 @@ function AppContent() {
         </div>
 
         <div className="flex-1 overflow-hidden">
-          {overviewLoading && !isDemo ? (
+          {activeTab === 'settings' && !isDemo ? (
+            <SettingsView />
+          ) : overviewLoading && !isDemo ? (
             <div className="flex h-full items-center justify-center text-text-muted">
               <Loader2 className="animate-spin text-accent" size={24} />
             </div>
@@ -177,7 +182,7 @@ function AppContent() {
                 <p className="text-sm">Importing Timeline data…</p>
               </div>
             ) : (
-              <EmptyDataState onOpenSources={() => setSourcesOpen(true)} />
+              <EmptyDataState onOpenSettings={() => setActiveTab('settings')} />
             )
           ) : (
             <>
@@ -189,10 +194,6 @@ function AppContent() {
           )}
         </div>
       </div>
-
-      {!isDemo && (
-        <SourcesPanel open={sourcesOpen} onClose={() => setSourcesOpen(false)} />
-      )}
     </div>
   );
 }

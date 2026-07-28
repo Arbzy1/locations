@@ -34,9 +34,9 @@ You can repeat this for each Google account and import each file as a separate s
 ## Import via the website
 
 1. Sign in (non-demo account)
-2. Open **Data sources**
-3. Enter a label (e.g. `personal@gmail.com`) and choose the JSON file
-4. Import — re-upload replaces that source only; other Google accounts stay
+2. Open **Settings** (gear icon in the sidebar)
+3. Under **Timeline data**, choose a JSON file and upload — or click **Re-upload** on an existing source to replace it
+4. Wait for the import status; map views refresh when ready
 
 Demo accounts cannot import.
 
