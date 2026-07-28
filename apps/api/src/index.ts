@@ -4,6 +4,7 @@ import { stream } from "hono/streaming";
 import { tenantForUser, type TenantId } from "@locations/db";
 import type { Env } from "./env";
 import { createAuth } from "./auth";
+import { blockDemo } from "./guards";
 import {
   createImportJob,
   ensureDataSource,
@@ -31,7 +32,7 @@ type Variables = {
   tenant: TenantId;
 };
 
-const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+export const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 app.use(
   "*",
@@ -66,14 +67,6 @@ app.use("/api/*", async (c, next) => {
   c.set("tenant", tenantForUser(user));
   return next();
 });
-
-function blockDemo(c: { get: (k: "user") => Variables["user"] }) {
-  const user = c.get("user");
-  if (user?.role === "demo") {
-    return { error: "Demo accounts cannot import or manage data sources" };
-  }
-  return null;
-}
 
 function isUploadFile(value: unknown): value is File {
   return (
@@ -185,7 +178,7 @@ app.get("/api/sources", async (c) => {
 });
 
 app.patch("/api/sources/:id", async (c) => {
-  const blocked = blockDemo(c);
+  const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
 
   const body = (await c.req.json().catch(() => null)) as { label?: string } | null;
@@ -201,7 +194,7 @@ app.patch("/api/sources/:id", async (c) => {
 });
 
 app.delete("/api/sources/:id", async (c) => {
-  const blocked = blockDemo(c);
+  const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
 
   const db = getDb(c.env);
@@ -216,7 +209,7 @@ app.get("/api/import/status", async (c) => {
 });
 
 app.post("/api/import", async (c) => {
-  const blocked = blockDemo(c);
+  const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
 
   const user = c.get("user")!;

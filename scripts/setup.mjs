@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Guided first-run setup for people cloning the GitHub repo.
- * Usage: npm run setup
+ * Usage: npm run setup:project
  */
 import { execSync } from "node:child_process";
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -124,7 +124,7 @@ Deploy your own site (not aden.website):
   2. npx wrangler login
   3. npx wrangler secret put DATABASE_URL
   4. npx wrangler secret put BETTER_AUTH_SECRET
-  5. npm run deploy
+  5. npm run deploy:prod
 
 Importing your real Takeout later:
   set DATA_PATH in .env to your JSON path

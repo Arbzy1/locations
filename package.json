@@ -8,13 +8,13 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run build:web && concurrently -n web,api -c cyan,magenta \"npm run dev -w @locations/web\" \"npm run dev -w @locations/api\"",
+    "dev:all": "npm run build:web && concurrently -n web,api -c cyan,magenta \"npm run dev -w @locations/web\" \"npm run dev -w @locations/api\"",
     "dev:web": "npm run dev -w @locations/web",
     "dev:api": "npm run dev -w @locations/api",
-    "build": "npm run build -w @locations/web && npm run build -w @locations/api",
+    "build:all": "npm run build -w @locations/web && npm run build -w @locations/api",
     "build:web": "npm run build -w @locations/web",
-    "deploy": "npm run build && wrangler deploy",
-    "deploy:preview": "npm run build && wrangler versions upload",
+    "deploy:prod": "npm run build:all && wrangler deploy",
+    "deploy:preview": "npm run build:all && wrangler versions upload",
     "db:generate": "npm run generate -w @locations/db",
     "db:migrate": "npm run migrate -w @locations/db",
     "db:import": "npm run import -w @locations/db",
@@ -22,13 +22,19 @@
     "db:warm-routes": "npm run warm-routes -w @locations/db",
     "auth:create-user": "npm run create-user -w @locations/db",
     "auth:create-demo": "npm run create-user -w @locations/db -- demo@locations.app demo1234 Demo demo",
-    "setup": "node scripts/setup.mjs",
-    "typecheck": "npm run typecheck -w @locations/web && npm run typecheck -w @locations/api && npm run typecheck -w @locations/db",
-    "lint": "npm run lint -w @locations/web"
+    "setup:project": "node scripts/setup.mjs",
+    "typecheck:all": "npm run typecheck -w @locations/web && npm run typecheck -w @locations/api && npm run typecheck -w @locations/db",
+    "lint:web": "npm run lint -w @locations/web",
+    "rules:sync": "node scripts/sync-rules.mjs",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "concurrently": "^9.2.1",
     "typescript": "~5.9.3",
+    "vitest": "^4.1.10",
     "wrangler": "^4.115.0"
   },
   "engines": {

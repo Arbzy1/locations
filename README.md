@@ -37,7 +37,7 @@ Datasets are isolated by tenant in Neon (`demo` vs `personal`).
 git clone https://github.com/Arbzy1/locations.git
 cd locations
 npm install
-npm run setup
+npm run setup:project
 ```
 
 The wizard will:
@@ -61,7 +61,7 @@ npm run dev:api    # open http://localhost:8787 and sign in
 npx wrangler login
 npx wrangler secret put DATABASE_URL
 npx wrangler secret put BETTER_AUTH_SECRET
-npm run deploy
+npm run deploy:prod
 ```
 
 You get your own `*.workers.dev` URL (or attach your domain). That is separate from `locations.aden.website`.
@@ -111,12 +111,31 @@ Browser ──► Your Worker (assets + /api/*)
 
 | Script | Purpose |
 |--------|---------|
-| `npm run setup` | Interactive first-time Neon + import + admin user |
-| `npm run deploy` | Build web + `wrangler deploy` |
+| `npm run setup:project` | Interactive first-time Neon + import + admin user |
+| `npm run deploy:prod` | Build web + `wrangler deploy` |
 | `npm run db:migrate` | Apply schema |
 | `npm run db:import` | Load JSON → Neon (full replace of location tables) |
 | `npm run db:warm-routes` | Optional OSRM backfill |
 | `npm run auth:create-user` | Invite a user |
+| `npm run rules:sync` | Regenerate AI tool rule files from `AGENTS.md` |
+| `npm run test:unit` | Vitest unit/integration tests |
+| `npm run test:e2e` | Playwright smoke (requires API at `:8787`) |
+
+## Testing
+
+- **Unit:** `npm run test:unit` (Vitest; no external services). Covers `tenantForUser`, demo write-blocks, and cross-tenant source denial. There is no Postgres RLS — isolation is app-level.
+- **E2E:** start the stack, then run Playwright:
+
+```bash
+npm run build:web
+npm run dev:api
+# other terminal:
+npm run test:e2e
+```
+
+Optional: `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8787` (default).
+
+Agent conventions live in `AGENTS.md`; run `npm run rules:sync` after editing it.
 
 ## Privacy
 
