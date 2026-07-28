@@ -70,26 +70,169 @@ export type ParsedTimeline = {
 
 const BATCH = 500;
 
-/** Parse Google Timeline JSON (array of visit/activity records). */
-export function parseTimelineJson(raw: unknown): ParsedTimeline {
+function latLngFromE7(point: { latE7?: number; lngE7?: number } | null | undefined): [number, number] | null {
+  if (!point || point.latE7 == null || point.lngE7 == null) return null;
+  return [point.latE7 / 1e7, point.lngE7 / 1e7];
+}
+
+function toGeo(lat: number, lon: number): string {
+  return `geo:${lat},${lon}`;
+}
+
+function titleCaseSemantic(raw: string | undefined | null): string {
+  if (!raw) return "Unknown";
+  const lower = raw.replace(/_/g, " ").toLowerCase();
+  if (lower === "unknown") return "Unknown";
+  return lower.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+type TimelineEdit = {
+  inferredSemanticSegment?: SemanticSegment;
+  userEditedSemanticSegment?: SemanticSegment;
+  rawSignal?: {
+    signal?: {
+      position?: {
+        point?: { latE7?: number; lngE7?: number };
+        timestamp?: string;
+      };
+    };
+  };
+};
+
+type SemanticSegment = {
+  startTime?: string;
+  endTime?: string;
+  segment?: {
+    visit?: {
+      topCandidate?: {
+        placeId?: string;
+        placeID?: string;
+        semanticType?: string;
+        placeLocation?: string | { latE7?: number; lngE7?: number };
+      };
+    };
+    activity?: {
+      start?: string | { latE7?: number; lngE7?: number };
+      end?: string | { latE7?: number; lngE7?: number };
+      distanceMeters?: number | string;
+      topCandidate?: { type?: string };
+    };
+  };
+};
+
+/** Normalize classic array + Timeline Edits exports into RawTimelineRecord[]. */
+export function normalizeTimelineInput(raw: unknown): RawTimelineRecord[] {
   if (raw === null || typeof raw !== "object") {
-    throw new Error("Timeline JSON must be an array of visit/activity records");
+    throw new Error("Timeline JSON must be an array or a Timeline Edits object");
   }
 
-  if (!Array.isArray(raw)) {
-    const obj = raw as Record<string, unknown>;
-    if ("timelineEnabled" in obj || "deviceSettings" in obj) {
-      throw new Error(
-        "This looks like Timeline Settings.json, not location history. Export Timeline data with visit/activity records.",
-      );
+  if (Array.isArray(raw)) return raw as RawTimelineRecord[];
+
+  const obj = raw as Record<string, unknown>;
+  if ("timelineEnabled" in obj || "deviceSettings" in obj) {
+    throw new Error(
+      "This looks like Timeline Settings.json, not location history. Use Timeline Edits.json or a visit/activity array.",
+    );
+  }
+
+  if (!Array.isArray(obj.timelineEdits)) {
+    throw new Error("Timeline JSON must be an array of visit/activity records or a Timeline Edits export");
+  }
+
+  const edits = obj.timelineEdits as TimelineEdit[];
+  const records: RawTimelineRecord[] = [];
+  const seenSegmentKeys = new Set<string>();
+
+  // Prefer user-edited segments over inferred for the same time window.
+  const segments: Array<{ seg: SemanticSegment; edited: boolean }> = [];
+  for (const edit of edits) {
+    if (edit.userEditedSemanticSegment) {
+      segments.push({ seg: edit.userEditedSemanticSegment, edited: true });
     }
-    throw new Error("Timeline JSON must be an array of visit/activity records");
+    if (edit.inferredSemanticSegment) {
+      segments.push({ seg: edit.inferredSemanticSegment, edited: false });
+    }
+  }
+  segments.sort((a, b) => Number(b.edited) - Number(a.edited));
+
+  for (const { seg } of segments) {
+    const startTime = seg.startTime ?? "";
+    const endTime = seg.endTime ?? "";
+    if (!startTime || !endTime) continue;
+    const key = `${startTime.slice(0, 16)}|${endTime.slice(0, 16)}|${seg.segment?.visit ? "v" : "a"}`;
+    if (seenSegmentKeys.has(key)) continue;
+    seenSegmentKeys.add(key);
+
+    if (seg.segment?.visit) {
+      const top = seg.segment.visit.topCandidate ?? {};
+      let placeLocation: string | undefined;
+      if (typeof top.placeLocation === "string") {
+        placeLocation = top.placeLocation;
+      } else {
+        const coords = latLngFromE7(top.placeLocation);
+        if (coords) placeLocation = toGeo(coords[0], coords[1]);
+      }
+      records.push({
+        startTime,
+        endTime,
+        visit: {
+          topCandidate: {
+            placeLocation,
+            semanticType: titleCaseSemantic(top.semanticType),
+            placeID: top.placeId ?? top.placeID,
+          },
+        },
+      });
+    } else if (seg.segment?.activity) {
+      const act = seg.segment.activity;
+      const startCoords =
+        typeof act.start === "string" ? parseGeo(act.start) : latLngFromE7(act.start);
+      const endCoords =
+        typeof act.end === "string" ? parseGeo(act.end) : latLngFromE7(act.end);
+      if (!startCoords || !endCoords) continue;
+      records.push({
+        startTime,
+        endTime,
+        activity: {
+          start: toGeo(startCoords[0], startCoords[1]),
+          end: toGeo(endCoords[0], endCoords[1]),
+          distanceMeters: act.distanceMeters,
+          topCandidate: { type: act.topCandidate?.type },
+        },
+      });
+    }
   }
 
+  // Position pings → short visits so heatmaps work when semantic history is sparse.
+  for (const edit of edits) {
+    const position = edit.rawSignal?.signal?.position;
+    if (!position?.timestamp) continue;
+    const coords = latLngFromE7(position.point);
+    if (!coords) continue;
+    const startTime = position.timestamp;
+    const endDt = new Date(startTime);
+    endDt.setMinutes(endDt.getMinutes() + 2);
+    const endTime = endDt.toISOString();
+    records.push({
+      startTime,
+      endTime,
+      visit: {
+        topCandidate: {
+          placeLocation: toGeo(coords[0], coords[1]),
+          semanticType: "Unknown",
+        },
+      },
+    });
+  }
+
+  return records;
+}
+
+function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
   const visitRows: VisitDraft[] = [];
   const activityRows: ActivityDraft[] = [];
 
-  for (const record of raw as RawTimelineRecord[]) {
+  for (const record of raw) {
     const startTime = record.startTime ?? "";
     const endTime = record.endTime ?? "";
     if (!startTime || !endTime) continue;
@@ -136,13 +279,21 @@ export function parseTimelineJson(raw: unknown): ParsedTimeline {
     }
   }
 
-  if (visitRows.length === 0 && activityRows.length === 0) {
+  return { visits: visitRows, activities: activityRows };
+}
+
+/** Parse Google Timeline JSON (classic array or Timeline Edits export). */
+export function parseTimelineJson(raw: unknown): ParsedTimeline {
+  const records = normalizeTimelineInput(raw);
+  const parsed = parseClassicRecords(records);
+
+  if (parsed.visits.length === 0 && parsed.activities.length === 0) {
     throw new Error(
-      "No visit or activity records found. Ensure the file is a Timeline JSON array with geo: coordinates.",
+      "No visit or activity records found. Ensure the file is Timeline Edits.json or a visit/activity JSON array.",
     );
   }
 
-  return { visits: visitRows, activities: activityRows };
+  return parsed;
 }
 
 function buildDayStatRows(
