@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { signIn } from '../lib/auth';
 import { MapPinned, Lock, ExternalLink, Play } from 'lucide-react';
+import PasswordInput from './PasswordInput';
 
 const GITHUB_URL = 'https://github.com/Arbzy1/locations';
 const DEMO_EMAIL = 'demo@locations.app';
@@ -111,13 +112,11 @@ export default function LoginPage() {
           />
 
           <label className="mb-1 block text-xs text-text-muted">Password</label>
-          <input
-            type="password"
+          <PasswordInput
             required
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mb-4 w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text outline-none ring-accent focus:ring-1"
           />
 
           {error && (
