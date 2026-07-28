@@ -143,6 +143,35 @@ export async function fetchRoute(
   }
 }
 
+const NOMINATIM_UA = "LocationExplorer/1.0 (portfolio; contact via aden.website)";
+
+/** Settlement / locality fields from Nominatim addressdetails, preferred first. */
+const SETTLEMENT_KEYS = [
+  "city",
+  "town",
+  "village",
+  "hamlet",
+  "municipality",
+  "city_district",
+  "suburb",
+  "neighbourhood",
+  "quarter",
+  "county",
+] as const;
+
+function settlementFromAddress(address: Record<string, string> | undefined): string | null {
+  if (!address) return null;
+  for (const key of SETTLEMENT_KEYS) {
+    const value = (address[key] || "").trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+function makeSettlementPlaceKey(lat: number, lon: number): string {
+  return `settlement:${lat.toFixed(5)},${lon.toFixed(5)}`;
+}
+
 export async function resolveCoords(
   db: ReturnType<typeof createDb>,
   lat: number,
@@ -157,7 +186,7 @@ export async function resolveCoords(
   try {
     const url = `${NOMINATIM}?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=18`;
     const resp = await fetch(url, {
-      headers: { "User-Agent": "LocationExplorer/1.0 (portfolio; contact via aden.website)" },
+      headers: { "User-Agent": NOMINATIM_UA },
     });
     if (!resp.ok) return { name: "Unknown", address: "", data: {} };
     const data = (await resp.json()) as {
@@ -185,6 +214,88 @@ export async function resolveCoords(
     return { name, address, data: payload };
   } catch {
     return { name: "Unknown", address: "", data: {} };
+  }
+}
+
+/**
+ * Guess town / city / village for coordinates via Nominatim (cached).
+ * Reuses street-level place_cache address details when present to avoid extra fetches.
+ */
+export async function resolveSettlement(
+  db: ReturnType<typeof createDb>,
+  lat: number,
+  lon: number,
+  opts?: { allowLive?: boolean },
+): Promise<{ settlement: string | null; fetched: boolean }> {
+  const allowLive = opts?.allowLive ?? true;
+  const settlementKey = makeSettlementPlaceKey(lat, lon);
+
+  const cachedSettlement = await db
+    .select()
+    .from(placeCache)
+    .where(eq(placeCache.placeId, settlementKey))
+    .limit(1);
+  if (cachedSettlement[0]?.name && cachedSettlement[0].name !== "Unknown") {
+    return { settlement: cachedSettlement[0].name, fetched: false };
+  }
+
+  const streetKey = makeCoordPlaceKey(lat, lon);
+  const streetCached = await db
+    .select()
+    .from(placeCache)
+    .where(eq(placeCache.placeId, streetKey))
+    .limit(1);
+  if (streetCached[0]) {
+    const addr = (streetCached[0].data as { address?: Record<string, string> } | null)?.address;
+    const fromStreet = settlementFromAddress(addr);
+    if (fromStreet) {
+      await db
+        .insert(placeCache)
+        .values({
+          placeId: settlementKey,
+          name: fromStreet,
+          address: streetCached[0].address,
+          data: { address: addr ?? {}, source: "street_cache" },
+        })
+        .onConflictDoUpdate({
+          target: placeCache.placeId,
+          set: { name: fromStreet, address: streetCached[0].address },
+        });
+      return { settlement: fromStreet, fetched: false };
+    }
+  }
+
+  if (!allowLive) return { settlement: null, fetched: false };
+
+  try {
+    // zoom ~14 prefers locality over a single building / POI
+    const url = `${NOMINATIM}?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=14`;
+    const resp = await fetch(url, {
+      headers: { "User-Agent": NOMINATIM_UA },
+    });
+    if (!resp.ok) return { settlement: null, fetched: true };
+    const data = (await resp.json()) as {
+      display_name?: string;
+      address?: Record<string, string>;
+    };
+    const settlement = settlementFromAddress(data.address);
+    if (!settlement) return { settlement: null, fetched: true };
+    const address = data.display_name ?? "";
+    await db
+      .insert(placeCache)
+      .values({
+        placeId: settlementKey,
+        name: settlement,
+        address,
+        data: { address: data.address ?? {}, source: "nominatim_settlement" },
+      })
+      .onConflictDoUpdate({
+        target: placeCache.placeId,
+        set: { name: settlement, address, data: { address: data.address ?? {} } },
+      });
+    return { settlement, fetched: true };
+  } catch {
+    return { settlement: null, fetched: true };
   }
 }
 
@@ -327,26 +438,46 @@ export async function getHeatmap(db: ReturnType<typeof createDb>, tenant: Tenant
   const topKey = (m: Map<string, number>) =>
     [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
 
-  return [...cells.values()]
+  const points = [...cells.values()]
     .map((cell) => {
       const clusterRank = topKey(cell.clusters);
       const typeRank = topKey(cell.types).filter((t) => t !== "Unknown");
       const types =
         typeRank.length > 0 ? typeRank.slice(0, 3) : topKey(cell.types).slice(0, 3);
-      const label =
-        clusterRank[0] ||
-        `Near ${cell.lat.toFixed(4)}, ${cell.lon.toFixed(4)}`;
+      const cluster = clusterRank[0] || "";
+      const coordFallback = `Near ${cell.lat.toFixed(4)}, ${cell.lon.toFixed(4)}`;
       return {
         lat: cell.lat,
         lon: cell.lon,
         count: cell.count,
-        label,
+        label: cluster || coordFallback,
+        cluster,
         totalDurationMinutes: Math.round(cell.totalDurationMinutes),
         uniqueDays: cell.days.size,
         topTypes: types,
+        settlement: null as string | null,
       };
     })
     .sort((a, b) => b.count - a.count);
+
+  // Enrich top hotspots with settlement names (cache first; limited live Nominatim).
+  const TOP_SETTLEMENT = 20;
+  const MAX_LIVE_SETTLEMENT = 8;
+  let liveLookups = 0;
+  for (const point of points.slice(0, TOP_SETTLEMENT)) {
+    const { settlement, fetched } = await resolveSettlement(db, point.lat, point.lon, {
+      allowLive: liveLookups < MAX_LIVE_SETTLEMENT,
+    });
+    if (fetched) liveLookups += 1;
+    if (settlement) {
+      point.settlement = settlement;
+      if (!point.cluster) {
+        point.label = settlement;
+      }
+    }
+  }
+
+  return points.map(({ cluster: _cluster, ...rest }) => rest);
 }
 
 export async function getAnalytics(

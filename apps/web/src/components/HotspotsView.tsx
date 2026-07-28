@@ -10,6 +10,7 @@ type HotspotArea = HeatmapPoint & {
   totalDurationMinutes: number;
   uniqueDays: number;
   topTypes: string[];
+  settlement: string | null;
 };
 
 function toArea(p: HeatmapPoint): HotspotArea {
@@ -19,6 +20,7 @@ function toArea(p: HeatmapPoint): HotspotArea {
     totalDurationMinutes: p.totalDurationMinutes ?? 0,
     uniqueDays: p.uniqueDays ?? 0,
     topTypes: p.topTypes ?? [],
+    settlement: p.settlement ?? null,
   };
 }
 
@@ -47,13 +49,18 @@ export default function HotspotsView() {
 
   const hotspotLabels: HotspotLabel[] = useMemo(
     () =>
-      topAreas.slice(0, 12).map((a, i) => ({
-        lat: a.lat,
-        lon: a.lon,
-        label: a.label,
-        count: a.count,
-        rank: i + 1,
-      })),
+      topAreas.slice(0, 12).map((a, i) => {
+        const showSettlement =
+          a.settlement &&
+          !a.label.toLowerCase().includes(a.settlement.toLowerCase());
+        return {
+          lat: a.lat,
+          lon: a.lon,
+          label: showSettlement ? `${a.label} (${a.settlement})` : a.label,
+          count: a.count,
+          rank: i + 1,
+        };
+      }),
     [topAreas],
   );
 
@@ -102,7 +109,13 @@ export default function HotspotsView() {
                       {i + 1}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm truncate mb-1">{area.label}</div>
+                      <div className="text-sm truncate mb-0.5">{area.label}</div>
+                      {area.settlement &&
+                        !area.label.toLowerCase().includes(area.settlement.toLowerCase()) && (
+                          <div className="text-[11px] text-text-muted truncate mb-1">
+                            {area.settlement}
+                          </div>
+                        )}
                       <div className="h-2 rounded-full bg-bg overflow-hidden">
                         <div
                           className="h-full rounded-full transition-[width] duration-ui-emphasis ease-ui"
@@ -138,6 +151,12 @@ export default function HotspotsView() {
                       <dd className="font-mono text-right">
                         {formatDuration(area.totalDurationMinutes)}
                       </dd>
+                      {area.settlement && (
+                        <>
+                          <dt className="text-text-muted">Area</dt>
+                          <dd className="text-right">{area.settlement}</dd>
+                        </>
+                      )}
                       <dt className="text-text-muted">Coords</dt>
                       <dd className="font-mono text-right text-text-muted">
                         {area.lat.toFixed(4)}, {area.lon.toFixed(4)}
