@@ -120,10 +120,11 @@ Browser ──► Your Worker (assets + /api/*)
 | `npm run rules:sync` | Regenerate AI tool rule files from `AGENTS.md` |
 | `npm run test:unit` | Vitest unit/integration tests |
 | `npm run test:e2e` | Playwright smoke (requires API at `:8787`) |
+| `npm run deps:audit` | `npm audit` (fails on high/critical) |
 
 ## Testing
 
-- **Unit:** `npm run test:unit` (Vitest; no external services). Covers `tenantForUser`, demo write-blocks, and cross-tenant source denial. There is no Postgres RLS — isolation is app-level.
+- **Unit:** `npm run test:unit` (Vitest; no external services). Covers `tenantForUser`, demo write-blocks, and cross-tenant source denial. There is no Postgres RLS - isolation is app-level.
 - **E2E:** start the stack, then run Playwright:
 
 ```bash
@@ -135,11 +136,11 @@ npm run test:e2e
 
 Optional: `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8787` (default).
 
-Agent conventions live in `AGENTS.md`; run `npm run rules:sync` after editing it.
+Security checklist: [docs/SECURITY.md](docs/SECURITY.md). Agent conventions: `AGENTS.md` (`npm run rules:sync` after edits).
 
 ## Privacy
 
-- Real Takeout JSON is **gitignored** — only `data/sample-location-history.json` ships in the repo
+- Real Takeout JSON is **gitignored** - only `data/sample-location-history.json` ships in the repo
 - The public live site is invite-only and is **not** a multi-tenant host for other people's timelines
 - Do not commit `.env`, `.dev.vars`, or Neon credentials
 

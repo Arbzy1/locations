@@ -28,6 +28,16 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 });
 
+/** Escape text before inserting into Leaflet HTML (innerHTML / divIcon). */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Line style per transport mode
 const MODE_LINE_STYLE: Record<string, { weight: number; dashArray?: string }> = {
   walking: { weight: 3, dashArray: '4 6' },
@@ -556,7 +566,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
               padding:1px 5px;font-size:9px;font-weight:600;color:${color};
               white-space:nowrap;pointer-events:none;
               text-shadow:0 0 4px rgba(0,0,0,0.9);
-            ">${formatTime(a.start)} ${mode}</div>`,
+            ">${escapeHtml(formatTime(a.start))} ${escapeHtml(mode)}</div>`,
             iconSize: [0, 0],
             iconAnchor: [0, -6],
           });
@@ -592,13 +602,25 @@ function JourneyLegend({ activities, totalJourneys, visits }: { activities: Acti
       const items: LegendItem[] = [];
 
       visits.forEach((v) => {
-        items.push({ time: v.start, type: 'visit', label: v.place_name || v.cluster, color: '#bc8cff', sub: formatDuration(v.duration_minutes) });
+        items.push({
+          time: v.start,
+          type: 'visit',
+          label: escapeHtml(v.place_name || v.cluster),
+          color: '#bc8cff',
+          sub: escapeHtml(formatDuration(v.duration_minutes)),
+        });
       });
 
       activities.forEach((a, i) => {
         const color = getJourneyColor(i, totalJourneys);
         const mode = MODE_LABELS[a.mode] || a.mode;
-        items.push({ time: a.start, type: 'journey', label: `${mode} \u2014 ${formatDistance(a.distance_meters)}`, color, sub: formatTime(a.start) });
+        items.push({
+          time: a.start,
+          type: 'journey',
+          label: `${escapeHtml(mode)} - ${escapeHtml(formatDistance(a.distance_meters))}`,
+          color,
+          sub: escapeHtml(formatTime(a.start)),
+        });
       });
 
       items.sort((a, b) => a.time.localeCompare(b.time));

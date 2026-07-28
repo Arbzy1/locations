@@ -91,8 +91,32 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 | `typecheck:all` / `lint:web` | Quality gates |
 | `rules:sync` | Regenerate tool-specific rule files from `AGENTS.md` (`node scripts/sync-rules.mjs`) |
 | `test:unit` / `test:watch` / `test:e2e` | Vitest / Playwright |
+| `deps:audit` | `npm audit` (high/critical) |
 
 Edit **this file**, then run `npm run rules:sync`. Do not hand-edit generated tool rule files.
+
+## Security
+
+Full checklist: [docs/SECURITY.md](docs/SECURITY.md).
+
+Non-negotiables:
+
+- Scope every data query by session `tenant` (`tenantForUser`). Never authorize from a client-supplied user/tenant id.
+- No `sql.raw()` / string-built SQL with user input.
+- Never reflect arbitrary CORS origins; use the allowlist helper.
+- No secrets in the frontend or `VITE_*` vars.
+- Cross-tenant access → **404**; demo role cannot import/mutate sources.
+- Signup stays invite-only.
+
+When changing API or DB code, review:
+
+- Missing `tenant` (or equivalent) on reads/writes
+- `sql.raw` or interpolated SQL
+- Mass assignment / spreading request bodies into updates
+- Upload routes: size limits, type sniff, server-generated keys, demo block
+- New routes: session middleware, CORS, rate limits for expensive paths
+
+See [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Testing
 
@@ -100,7 +124,7 @@ Edit **this file**, then run `npm run rules:sync`. Do not hand-edit generated to
 - **E2E:** Playwright (`npm run test:e2e`). Requires the API (or full stack) at `PLAYWRIGHT_BASE_URL` (default `http://127.0.0.1:8787`) - typically `npm run build:web && npm run dev:api` first.
 - There is **no Postgres RLS**. Cover app-level isolation instead: unauthenticated API → 401, `/api/health` public, demo role blocked from import/source mutations, cross-tenant source access denied.
 - Prioritize auth/tenant boundaries and data-mutating routes over UI-only components. Do not chase 100% coverage.
-- No CI pipeline yet; keep scripts runnable locally.
+- No CI pipeline yet; keep scripts runnable locally. Run `npm run deps:audit` before releases.
 
 ## Things not to do
 
@@ -112,3 +136,4 @@ Edit **this file**, then run `npm run rules:sync`. Do not hand-edit generated to
 - Do not commit Takeout JSON, `.env`, `.dev.vars`, or database credentials.
 - Do not enable public signup (`disableSignUp` stays true); invite via `auth:create-user`.
 - Do not restructure the monorepo or rename business domains unless explicitly asked.
+- Do not reflect request `Origin` into CORS allow headers; do not skip session checks on new `/api/*` routes.

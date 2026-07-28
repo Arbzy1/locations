@@ -2,7 +2,7 @@
   "name": "locations",
   "version": "1.0.0",
   "private": true,
-  "description": "Private location history explorer — Cloudflare Workers + Neon + Better Auth",
+  "description": "Private location history explorer - Cloudflare Workers + Neon + Better Auth",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -28,7 +28,8 @@
     "rules:sync": "node scripts/sync-rules.mjs",
     "test:unit": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "deps:audit": "npm audit --audit-level=high"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",

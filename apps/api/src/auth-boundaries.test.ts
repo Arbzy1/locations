@@ -33,7 +33,7 @@ vi.mock("./services", () => ({
 }));
 
 import { app } from "./index";
-import { getSourceById, renameSource, removeSource } from "./services";
+import { getOverview, getSourceById, renameSource, removeSource } from "./services";
 
 const env = {
   DATABASE_URL: "postgres://test",
@@ -75,9 +75,11 @@ async function request(path: string, init?: RequestInit) {
 describe("API auth boundaries", () => {
   beforeEach(() => {
     getSession.mockReset();
+    vi.mocked(getOverview).mockClear();
     vi.mocked(getSourceById).mockReset();
     vi.mocked(renameSource).mockReset();
     vi.mocked(removeSource).mockReset();
+    vi.mocked(getOverview).mockResolvedValue({ ok: true } as never);
     vi.mocked(renameSource).mockResolvedValue({ error: "Source not found" });
     vi.mocked(removeSource).mockResolvedValue({ error: "Source not found" });
     vi.mocked(getSourceById).mockResolvedValue(null);
@@ -89,6 +91,10 @@ describe("API auth boundaries", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(getSession).not.toHaveBeenCalled();
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(res.headers.get("Content-Security-Policy-Report-Only")).toContain(
+      "frame-ancestors",
+    );
   });
 
   it("rejects unauthenticated access to /api/overview", async () => {
@@ -96,6 +102,35 @@ describe("API auth boundaries", () => {
     const res = await request("/api/overview");
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "Unauthorized" });
+    expect(res.headers.get("Cache-Control")).toBe("no-store, private");
+  });
+
+  it("does not reflect arbitrary CORS origins", async () => {
+    getSession.mockResolvedValue(null);
+    const res = await request("/api/health", {
+      headers: { Origin: "https://evil.example" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Access-Control-Allow-Origin")).not.toBe(
+      "https://evil.example",
+    );
+  });
+
+  it("allows listed CORS origins", async () => {
+    getSession.mockResolvedValue(null);
+    const res = await request("/api/health", {
+      headers: { Origin: "http://127.0.0.1:5173" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe(
+      "http://127.0.0.1:5173",
+    );
+  });
+
+  it("passes session tenant into overview (no client tenant)", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
+    await request("/api/overview");
+    expect(getOverview).toHaveBeenCalledWith(expect.anything(), "user-a");
   });
 
   it("rejects unauthenticated access to /api/sources", async () => {
