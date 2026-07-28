@@ -308,7 +308,26 @@ export async function getRouteProgress(db: ReturnType<typeof createDb>, tenant: 
   };
 }
 
-export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, date: string) {
+export type DayProgressEvent = {
+  stage: string;
+  detail?: string;
+  percent: number;
+  done?: number;
+  total?: number;
+};
+
+export async function getDay(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  date: string,
+  onProgress?: (event: DayProgressEvent) => void | Promise<void>,
+) {
+  const report = async (event: DayProgressEvent) => {
+    await onProgress?.(event);
+  };
+
+  await report({ stage: "Loading day records", detail: date, percent: 2 });
+
   const dayRows = await db
     .select()
     .from(dayStats)
@@ -327,6 +346,12 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
     .from(activities)
     .where(and(eq(activities.tenant, tenant), eq(activities.date, date)))
     .orderBy(activities.start);
+
+  await report({
+    stage: "Building timeline",
+    detail: `${dayVisits.length} visits · ${dayActivities.length} journeys`,
+    percent: 8,
+  });
 
   type Event =
     | {
@@ -373,11 +398,27 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
   }
   events.sort((a, b) => a.time.localeCompare(b.time));
 
+  const activityTotal = dayActivities.length;
+  let activityDone = 0;
+
   const enrichedActivities = [];
   for (let idx = 0; idx < events.length; idx++) {
     const ev = events[idx];
     if (ev.type !== "activity") continue;
     const a = ev.data;
+    activityDone += 1;
+    const pct =
+      activityTotal === 0
+        ? 50
+        : 8 + Math.round((activityDone / activityTotal) * 42);
+    await report({
+      stage: "Routing journeys",
+      detail: `${a.mode} (${activityDone}/${activityTotal})`,
+      percent: pct,
+      done: activityDone,
+      total: activityTotal,
+    });
+
     const routeData = await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode);
     const d = activityToApi(a) as Record<string, unknown>;
 
@@ -437,7 +478,17 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
     enrichedActivities.push(d);
   }
 
-  const connectors = [];
+  const connectorCandidates: Array<{
+    fromLat: number;
+    fromLon: number;
+    toLat: number;
+    toLon: number;
+    gapM: number;
+    from_time: string;
+    to_time: string;
+    from_label: string;
+    to_label: string;
+  }> = [];
   for (let i = 0; i < events.length - 1; i++) {
     const prevEv = events[i];
     const nextEv = events[i + 1];
@@ -447,47 +498,80 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
     const toLon = nextEv.type === "visit" ? nextEv.lon : nextEv.start_lon;
     const gapM = haversineM(fromLat, fromLon, toLat, toLon);
     if (gapM < 15) continue;
+    connectorCandidates.push({
+      fromLat,
+      fromLon,
+      toLat,
+      toLon,
+      gapM,
+      from_time: prevEv.end_time,
+      to_time: nextEv.time,
+      from_label:
+        prevEv.type === "visit" ? prevEv.data.cluster : `${prevEv.data.mode} journey`,
+      to_label:
+        nextEv.type === "visit" ? nextEv.data.cluster : `${nextEv.data.mode} journey`,
+    });
+  }
 
-    const fromLabel =
-      prevEv.type === "visit" ? prevEv.data.cluster : `${prevEv.data.mode} journey`;
-    const toLabel =
-      nextEv.type === "visit" ? nextEv.data.cluster : `${nextEv.data.mode} journey`;
+  const connectors = [];
+  const connectorTotal = connectorCandidates.length;
+  let connectorDone = 0;
+  for (const c of connectorCandidates) {
+    connectorDone += 1;
+    const pct =
+      connectorTotal === 0
+        ? 75
+        : 50 + Math.round((connectorDone / connectorTotal) * 25);
+    await report({
+      stage: "Connecting places",
+      detail: `${Math.round(c.gapM)}m gap (${connectorDone}/${connectorTotal})`,
+      percent: pct,
+      done: connectorDone,
+      total: connectorTotal,
+    });
 
-    if (gapM < 300) {
+    if (c.gapM < 300) {
       connectors.push({
-        from_time: prevEv.end_time,
-        to_time: nextEv.time,
-        from_lat: fromLat,
-        from_lon: fromLon,
-        to_lat: toLat,
-        to_lon: toLon,
+        from_time: c.from_time,
+        to_time: c.to_time,
+        from_lat: c.fromLat,
+        from_lon: c.fromLon,
+        to_lat: c.toLat,
+        to_lon: c.toLon,
         route_geometry: [
-          [fromLat, fromLon],
-          [toLat, toLon],
+          [c.fromLat, c.fromLon],
+          [c.toLat, c.toLon],
         ],
         steps: [],
-        distance_meters: Math.round(gapM * 10) / 10,
+        distance_meters: Math.round(c.gapM * 10) / 10,
         is_routed: false,
-        from_label: fromLabel,
-        to_label: toLabel,
+        from_label: c.from_label,
+        to_label: c.to_label,
       });
     } else {
-      const connectorData = await fetchRoute(db, fromLat, fromLon, toLat, toLon, "car");
+      const connectorData = await fetchRoute(
+        db,
+        c.fromLat,
+        c.fromLon,
+        c.toLat,
+        c.toLon,
+        "car",
+      );
       connectors.push({
-        from_time: prevEv.end_time,
-        to_time: nextEv.time,
-        from_lat: fromLat,
-        from_lon: fromLon,
-        to_lat: toLat,
-        to_lon: toLon,
+        from_time: c.from_time,
+        to_time: c.to_time,
+        from_lat: c.fromLat,
+        from_lon: c.fromLon,
+        to_lat: c.toLat,
+        to_lon: c.toLon,
         route_geometry: connectorData.geometry,
         steps: connectorData.steps,
         distance_meters: connectorData.steps.length
           ? connectorData.steps.reduce((s, st) => s + st.distance_meters, 0)
-          : Math.round(gapM * 10) / 10,
+          : Math.round(c.gapM * 10) / 10,
         is_routed: true,
-        from_label: fromLabel,
-        to_label: toLabel,
+        from_label: c.from_label,
+        to_label: c.to_label,
       });
     }
   }
@@ -499,11 +583,30 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
     if (!uniqueCoords.has(key)) uniqueCoords.set(key, [ev.data.lat, ev.data.lon]);
   }
 
+  await report({
+    stage: "Resolving place names",
+    detail: `${uniqueCoords.size} locations`,
+    percent: 76,
+    done: 0,
+    total: uniqueCoords.size,
+  });
+
   const placeNames = new Map<
     string,
     { name: string; address: string; data: Record<string, unknown>; short?: string }
   >();
+  let placeDone = 0;
+  const placeTotal = uniqueCoords.size;
   for (const [key, [lat, lon]] of uniqueCoords) {
+    placeDone += 1;
+    await report({
+      stage: "Resolving place names",
+      detail: `Lookup ${placeDone}/${placeTotal}`,
+      percent: placeTotal === 0 ? 95 : 76 + Math.round((placeDone / placeTotal) * 19),
+      done: placeDone,
+      total: placeTotal,
+    });
+
     const visit = visitEvents.find(
       (ev) =>
         Math.round(ev.data.lat * 1e5) / 1e5 === Math.round(lat * 1e5) / 1e5 &&
@@ -526,6 +629,8 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
       placeNames.set(key, await resolveCoords(db, lat, lon));
     }
   }
+
+  await report({ stage: "Assembling day view", percent: 97 });
 
   const enrichedVisits = [];
   for (let idx = 0; idx < events.length; idx++) {
@@ -583,10 +688,6 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
   };
 
   for (const a of enrichedActivities) {
-    if (a.from_place) {
-      // try to improve from previous visit coords already in placeNames
-    }
-    // Use place names when coords match
     for (const ev of visitEvents) {
       if (ev.data.cluster === a.from_place) {
         a.from_place = resolveName(ev.data.cluster, ev.data.lat, ev.data.lon) || a.from_place;
@@ -605,6 +706,8 @@ export async function getDay(db: ReturnType<typeof createDb>, tenant: TenantId, 
     c.from_label = resolveName(c.from_label, c.from_lat, c.from_lon) || c.from_label;
     c.to_label = resolveName(c.to_label, c.to_lat, c.to_lon) || c.to_label;
   }
+
+  await report({ stage: "Ready", percent: 100 });
 
   return {
     date,

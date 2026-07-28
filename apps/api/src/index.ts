@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { stream } from "hono/streaming";
 import { tenantForUser, type TenantId } from "@locations/db";
 import type { Env } from "./env";
 import { createAuth } from "./auth";
@@ -104,7 +105,33 @@ app.get("/api/days", async (c) => {
 
 app.get("/api/day/:date", async (c) => {
   const db = getDb(c.env);
-  const result = await getDay(db, c.get("tenant"), c.req.param("date"));
+  const date = c.req.param("date");
+  const tenant = c.get("tenant");
+
+  if (c.req.query("stream") === "1") {
+    c.header("Content-Type", "application/x-ndjson; charset=utf-8");
+    c.header("Cache-Control", "no-cache");
+    return stream(c, async (out) => {
+      const write = async (payload: unknown) => {
+        await out.write(`${JSON.stringify(payload)}\n`);
+      };
+      try {
+        const result = await getDay(db, tenant, date, async (progress) => {
+          await write({ type: "progress", ...progress });
+        });
+        if ("error" in result) {
+          await write({ type: "error", error: result.error });
+        } else {
+          await write({ type: "result", data: result });
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await write({ type: "error", error: message });
+      }
+    });
+  }
+
+  const result = await getDay(db, tenant, date);
   if ("error" in result) return c.json(result, 404);
   return c.json(result);
 });

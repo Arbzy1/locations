@@ -40,7 +40,7 @@ export default function DayView({ initialDate }: Props) {
   const { data: allDays } = useDays();
   const [selectedDate, setSelectedDate] = useState(initialDate || '');
   const [mapFocus, setMapFocus] = useState<MapFocusTarget | null>(null);
-  const { data: dayData, isLoading } = useDayData(selectedDate);
+  const { data: dayData, isLoading, isFetching, progress } = useDayData(selectedDate);
 
   const handleVisitOnMap = useCallback((v: Visit) => {
     setMapFocus(focusTargetForVisit(v));
@@ -166,9 +166,41 @@ export default function DayView({ initialDate }: Props) {
 
         {/* Timeline */}
         <div className="flex-1 overflow-y-auto">
-          {isLoading ? (
-            <div className="flex items-center justify-center p-8">
-              <Loader2 size={24} className="animate-spin text-accent" />
+          {isLoading || (isFetching && progress) ? (
+            <div className="flex flex-col gap-4 p-6">
+              <div className="flex items-center gap-3">
+                <Loader2 size={22} className="shrink-0 animate-spin text-accent" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="truncate text-sm font-medium text-text">
+                      {progress?.stage ?? 'Loading day…'}
+                    </div>
+                    <div className="shrink-0 font-mono text-sm text-accent">
+                      {Math.round(progress?.percent ?? 0)}%
+                    </div>
+                  </div>
+                  {progress?.detail && (
+                    <div className="mt-0.5 truncate text-xs text-text-muted">{progress.detail}</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="h-1.5 overflow-hidden rounded-full bg-border">
+                <div
+                  className="h-full rounded-full bg-accent transition-[width] duration-200 ease-out"
+                  style={{ width: `${Math.min(100, Math.max(0, progress?.percent ?? 0))}%` }}
+                />
+              </div>
+
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-border bg-bg/50 px-3 py-2 font-mono text-[11px] leading-relaxed text-text-muted">
+                {(progress?.logs?.length ? progress.logs : ['Waiting for server…']).map(
+                  (line, i) => (
+                    <div key={`${i}-${line}`} className="truncate">
+                      <span className="text-accent/70">›</span> {line}
+                    </div>
+                  ),
+                )}
+              </div>
             </div>
           ) : dayData && !('error' in dayData) ? (
             <Timeline
