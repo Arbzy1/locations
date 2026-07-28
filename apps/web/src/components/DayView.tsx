@@ -11,7 +11,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   Calendar,
   Loader2,
 } from 'lucide-react';
@@ -119,7 +118,12 @@ export default function DayView({ initialDate }: Props) {
                 aria-label={calendarOpen ? 'Hide calendar' : 'Show calendar'}
                 title={calendarOpen ? 'Hide calendar' : 'Show calendar'}
               >
-                {calendarOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                <ChevronDown
+                  size={16}
+                  className={`transition-transform duration-[750ms] ease-in-out ${
+                    calendarOpen ? 'rotate-180' : 'rotate-0'
+                  }`}
+                />
               </button>
             </div>
           </div>
@@ -128,12 +132,22 @@ export default function DayView({ initialDate }: Props) {
             <div className="text-sm text-text-muted">{formatDate(selectedDate)}</div>
           )}
 
-          {calendarOpen && allDays && allDays.length > 0 && (
-            <DayCalendar
-              days={allDays}
-              selectedDate={selectedDate}
-              onSelectDate={setSelectedDate}
-            />
+          {allDays && allDays.length > 0 && (
+            <div
+              className={`grid transition-[grid-template-rows,opacity] duration-[750ms] ease-in-out ${
+                calendarOpen
+                  ? 'grid-rows-[1fr] opacity-100'
+                  : 'grid-rows-[0fr] opacity-0'
+              }`}
+            >
+              <div className="min-h-0 overflow-hidden">
+                <DayCalendar
+                  days={allDays}
+                  selectedDate={selectedDate}
+                  onSelectDate={setSelectedDate}
+                />
+              </div>
+            </div>
           )}
         </div>
 
