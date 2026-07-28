@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { TabId } from './types';
 import {
@@ -35,12 +35,26 @@ const queryClient = new QueryClient({
   },
 });
 
+const TAB_LABELS: Record<TabId, string> = {
+  hotspots: 'Hotspots',
+  day: 'Day View',
+  trips: 'Day Trips',
+  insights: 'Insights',
+  settings: 'Settings',
+};
+
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: 'hotspots', label: 'Hotspots', icon: <Flame size={18} /> },
-  { id: 'day', label: 'Day View', icon: <Calendar size={18} /> },
-  { id: 'trips', label: 'Day Trips', icon: <Compass size={18} /> },
-  { id: 'insights', label: 'Insights', icon: <TrendingUp size={18} /> },
+  { id: 'hotspots', label: TAB_LABELS.hotspots, icon: <Flame size={18} /> },
+  { id: 'day', label: TAB_LABELS.day, icon: <Calendar size={18} /> },
+  { id: 'trips', label: TAB_LABELS.trips, icon: <Compass size={18} /> },
+  { id: 'insights', label: TAB_LABELS.insights, icon: <TrendingUp size={18} /> },
 ];
+
+function useDocumentTitle(title: string) {
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
+}
 
 function EmptyDataState({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
@@ -76,6 +90,8 @@ function AppContent() {
   });
   const { data: session } = useSession();
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
+
+  useDocumentTitle(`${TAB_LABELS[activeTab]} · Locations`);
 
   const importing =
     importStatus?.latestJob?.status === 'pending' ||
@@ -200,6 +216,14 @@ function AppContent() {
 
 function AuthGate() {
   const { data: session, isPending } = useSession();
+
+  useEffect(() => {
+    if (isPending) {
+      document.title = 'Locations';
+    } else if (!session?.user) {
+      document.title = 'Sign in · Locations';
+    }
+  }, [isPending, session?.user]);
 
   if (isPending) {
     return (
