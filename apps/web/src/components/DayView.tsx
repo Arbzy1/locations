@@ -8,8 +8,10 @@ import { formatDate, formatMiles } from '../utils/format';
 import { MODE_COLORS, MODE_LABELS } from '../types';
 import type { Visit, Activity, MapFocusTarget } from '../types';
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Calendar,
   Loader2,
 } from 'lucide-react';
@@ -41,6 +43,7 @@ export default function DayView({ initialDate }: Props) {
   const { data: allDays } = useDays();
   const [selectedDate, setSelectedDate] = useState(initialDate || '');
   const [mapFocus, setMapFocus] = useState<MapFocusTarget | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(true);
   const { data: dayData, isLoading, isFetching, progress } = useDayData(selectedDate);
 
   const handleVisitOnMap = useCallback((v: Visit) => {
@@ -80,11 +83,11 @@ export default function DayView({ initialDate }: Props) {
   };
 
   return (
-    <div className="flex h-full">
-      <div className="w-96 shrink-0 bg-surface border-r border-border flex flex-col overflow-hidden">
+    <div className="flex h-full min-h-0">
+      <div className="flex w-96 shrink-0 flex-col overflow-hidden border-r border-border bg-surface">
         {/* Date Navigation */}
-        <div className="p-4 border-b border-border">
-          <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="shrink-0 border-b border-border p-4">
+          <div className="mb-1 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Calendar size={20} className="text-accent" />
               <h2 className="text-lg font-semibold">Day View</h2>
@@ -108,6 +111,16 @@ export default function DayView({ initialDate }: Props) {
               >
                 <ChevronRight size={16} />
               </button>
+              <button
+                type="button"
+                onClick={() => setCalendarOpen((o) => !o)}
+                className="rounded border border-border p-1.5 hover:bg-bg"
+                aria-expanded={calendarOpen}
+                aria-label={calendarOpen ? 'Hide calendar' : 'Show calendar'}
+                title={calendarOpen ? 'Hide calendar' : 'Show calendar'}
+              >
+                {calendarOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
             </div>
           </div>
 
@@ -115,7 +128,7 @@ export default function DayView({ initialDate }: Props) {
             <div className="text-sm text-text-muted">{formatDate(selectedDate)}</div>
           )}
 
-          {allDays && allDays.length > 0 && (
+          {calendarOpen && allDays && allDays.length > 0 && (
             <DayCalendar
               days={allDays}
               selectedDate={selectedDate}
@@ -126,7 +139,7 @@ export default function DayView({ initialDate }: Props) {
 
         {/* Day Stats */}
         {dayData && !('error' in dayData) && (
-          <div className="p-4 border-b border-border">
+          <div className="shrink-0 border-b border-border p-4">
             <div className="grid grid-cols-3 gap-3 text-center">
               <div>
                 <div className="text-lg font-semibold text-accent">
@@ -149,11 +162,11 @@ export default function DayView({ initialDate }: Props) {
             </div>
 
             {Object.keys(dayData.modes).length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-3">
+              <div className="mt-3 flex flex-wrap gap-2">
                 {Object.entries(dayData.modes).map(([mode, count]) => (
                   <span
                     key={mode}
-                    className="text-xs px-2 py-0.5 rounded-full"
+                    className="rounded-full px-2 py-0.5 text-xs"
                     style={{
                       backgroundColor: `${MODE_COLORS[mode] || '#8b949e'}22`,
                       color: MODE_COLORS[mode] || '#8b949e',
@@ -166,15 +179,15 @@ export default function DayView({ initialDate }: Props) {
             )}
 
             {dayData.clusters.length > 0 && (
-              <div className="text-xs text-text-muted mt-2">
+              <div className="mt-2 text-xs text-text-muted">
                 {dayData.clusters.join(' / ')}
               </div>
             )}
           </div>
         )}
 
-        {/* Timeline */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Timeline — min-h-0 so flex child can shrink and scroll */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {isLoading || (isFetching && progress) ? (
             <div className="flex flex-col gap-4 p-6">
               <div className="flex items-center gap-3">
@@ -219,7 +232,7 @@ export default function DayView({ initialDate }: Props) {
               onActivityClick={handleActivityOnMap}
             />
           ) : (
-            <div className="p-4 text-text-muted text-sm">
+            <div className="p-4 text-sm text-text-muted">
               {selectedDate
                 ? 'No data for this date'
                 : 'Select a date to view'}
@@ -229,7 +242,7 @@ export default function DayView({ initialDate }: Props) {
       </div>
 
       {/* Map */}
-      <div className="flex-1">
+      <div className="min-h-0 flex-1">
         {dayData && !('error' in dayData) ? (
           <MapView
             visits={dayData.visits}
