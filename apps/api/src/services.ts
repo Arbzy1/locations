@@ -275,19 +275,78 @@ export async function getDays(db: ReturnType<typeof createDb>, tenant: TenantId)
 
 export async function getHeatmap(db: ReturnType<typeof createDb>, tenant: TenantId) {
   const rows = await db
-    .select({ lat: visits.lat, lon: visits.lon })
+    .select({
+      lat: visits.lat,
+      lon: visits.lon,
+      cluster: visits.cluster,
+      semanticType: visits.semanticType,
+      durationMinutes: visits.durationMinutes,
+      date: visits.date,
+    })
     .from(visits)
     .where(eq(visits.tenant, tenant));
-  const counts = new Map<string, { lat: number; lon: number; count: number }>();
+
+  type Cell = {
+    lat: number;
+    lon: number;
+    count: number;
+    totalDurationMinutes: number;
+    days: Set<string>;
+    clusters: Map<string, number>;
+    types: Map<string, number>;
+  };
+
+  const cells = new Map<string, Cell>();
+
   for (const r of rows) {
     const lat = Math.round(r.lat * 1e5) / 1e5;
     const lon = Math.round(r.lon * 1e5) / 1e5;
     const key = `${lat},${lon}`;
-    const existing = counts.get(key);
-    if (existing) existing.count += 1;
-    else counts.set(key, { lat, lon, count: 1 });
+    let cell = cells.get(key);
+    if (!cell) {
+      cell = {
+        lat,
+        lon,
+        count: 0,
+        totalDurationMinutes: 0,
+        days: new Set(),
+        clusters: new Map(),
+        types: new Map(),
+      };
+      cells.set(key, cell);
+    }
+    cell.count += 1;
+    cell.totalDurationMinutes += r.durationMinutes ?? 0;
+    if (r.date) cell.days.add(r.date);
+    const cluster = (r.cluster || "").trim();
+    if (cluster) cell.clusters.set(cluster, (cell.clusters.get(cluster) ?? 0) + 1);
+    const sem = (r.semanticType || "").trim();
+    if (sem) cell.types.set(sem, (cell.types.get(sem) ?? 0) + 1);
   }
-  return [...counts.values()].sort((a, b) => b.count - a.count);
+
+  const topKey = (m: Map<string, number>) =>
+    [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+
+  return [...cells.values()]
+    .map((cell) => {
+      const clusterRank = topKey(cell.clusters);
+      const typeRank = topKey(cell.types).filter((t) => t !== "Unknown");
+      const types =
+        typeRank.length > 0 ? typeRank.slice(0, 3) : topKey(cell.types).slice(0, 3);
+      const label =
+        clusterRank[0] ||
+        `Near ${cell.lat.toFixed(4)}, ${cell.lon.toFixed(4)}`;
+      return {
+        lat: cell.lat,
+        lon: cell.lon,
+        count: cell.count,
+        label,
+        totalDurationMinutes: Math.round(cell.totalDurationMinutes),
+        uniqueDays: cell.days.size,
+        topTypes: types,
+      };
+    })
+    .sort((a, b) => b.count - a.count);
 }
 
 export async function getAnalytics(

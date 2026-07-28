@@ -120,6 +120,20 @@ export interface HeatmapPoint {
   lat: number;
   lon: number;
   count: number;
+  /** Most common visit cluster / place label for this cell */
+  label?: string;
+  totalDurationMinutes?: number;
+  uniqueDays?: number;
+  topTypes?: string[];
+}
+
+/** Named hotspot markers shown on the Hotspots map */
+export interface HotspotLabel {
+  lat: number;
+  lon: number;
+  label: string;
+  count: number;
+  rank: number;
 }
 
 export interface FunFact {

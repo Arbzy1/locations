@@ -12,7 +12,7 @@ import {
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { Visit, Activity, HeatmapPoint, Connector, MapFocusTarget } from '../types';
+import type { Visit, Activity, HeatmapPoint, Connector, MapFocusTarget, HotspotLabel } from '../types';
 import { MODE_LABELS } from '../types';
 import { formatTime, formatDistance, formatDuration } from '../utils/format';
 import { useTheme } from '../lib/theme';
@@ -281,6 +281,8 @@ interface MapProps {
   heatmapOpacity?: number;
   /** ~0.35-2; relative strength (higher = hotter colours for the same visit counts) */
   heatmapIntensity?: number;
+  /** Named tags for top hotspots (Hotspots tab) */
+  hotspotLabels?: HotspotLabel[];
   center?: [number, number];
   zoom?: number;
   focusTarget?: MapFocusTarget | null;
@@ -294,6 +296,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
   heatmapEnabled = true,
   heatmapOpacity = 0.72,
   heatmapIntensity = 1,
+  hotspotLabels = [],
   center = [51.45, -0.2],
   zoom = 10,
   focusTarget = null,
@@ -364,6 +367,43 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
           opacity={heatmapOpacity}
           intensity={heatmapIntensity}
         />
+      )}
+
+      {hotspotLabels.length > 0 && (
+        <ZoomLayer minZoom={10}>
+          {hotspotLabels.map((h) => {
+            const short =
+              h.label.length > 28 ? `${h.label.slice(0, 26)}…` : h.label;
+            const icon = L.divIcon({
+              className: '',
+              html: `<div style="
+                display:inline-flex;align-items:center;gap:6px;
+                padding:4px 8px;border-radius:8px;
+                background:color-mix(in srgb, var(--surface) 92%, transparent);
+                border:1px solid var(--border);
+                box-shadow:0 2px 8px rgba(0,0,0,.18);
+                color:var(--text);font:600 11px/1.2 system-ui,sans-serif;
+                white-space:nowrap;pointer-events:none;transform:translateY(-100%);
+              "><span style="
+                display:inline-flex;align-items:center;justify-content:center;
+                min-width:18px;height:18px;padding:0 4px;border-radius:6px;
+                background:var(--accent);color:#fff;font-size:10px;
+              ">${h.rank}</span><span>${escapeHtml(short)}</span><span style="
+                color:var(--text-muted);font-weight:500;
+              ">${h.count}</span></div>`,
+              iconSize: [0, 0],
+              iconAnchor: [0, 8],
+            });
+            return (
+              <Marker
+                key={`hotspot-tag-${h.rank}-${h.lat}-${h.lon}`}
+                position={[h.lat, h.lon]}
+                icon={icon}
+                interactive={false}
+              />
+            );
+          })}
+        </ZoomLayer>
       )}
 
       {/* === ALWAYS VISIBLE: route lines and visit dots === */}
