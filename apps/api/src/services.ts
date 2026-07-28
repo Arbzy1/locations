@@ -254,11 +254,23 @@ export async function getOverview(db: ReturnType<typeof createDb>, tenant: Tenan
 
 export async function getDays(db: ReturnType<typeof createDb>, tenant: TenantId) {
   const rows = await db
-    .select({ date: dayStats.date })
+    .select({
+      date: dayStats.date,
+      totalDistanceMiles: dayStats.totalDistanceMiles,
+      modes: dayStats.modes,
+      visitCount: dayStats.visitCount,
+      activityCount: dayStats.activityCount,
+    })
     .from(dayStats)
     .where(eq(dayStats.tenant, tenant))
     .orderBy(dayStats.date);
-  return rows.map((r) => r.date);
+  return rows.map((r) => ({
+    date: r.date,
+    total_distance_miles: r.totalDistanceMiles,
+    modes: r.modes,
+    visit_count: r.visitCount,
+    activity_count: r.activityCount,
+  }));
 }
 
 export async function getHeatmap(db: ReturnType<typeof createDb>, tenant: TenantId) {

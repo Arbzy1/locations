@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import L from 'leaflet';
 import { useDayData, useDays } from '../hooks/useApi';
 import MapView from './Map';
 import Timeline from './Timeline';
+import DayCalendar from './DayCalendar';
 import { formatDate, formatMiles } from '../utils/format';
 import { MODE_COLORS, MODE_LABELS } from '../types';
 import type { Visit, Activity, MapFocusTarget } from '../types';
@@ -50,27 +51,32 @@ export default function DayView({ initialDate }: Props) {
     setMapFocus(focusTargetForActivity(a));
   }, []);
 
+  const dateList = useMemo(
+    () => allDays?.map((d) => d.date) ?? [],
+    [allDays],
+  );
+
   useEffect(() => {
     if (initialDate) {
       setSelectedDate(initialDate);
-    } else if (!selectedDate && allDays?.length) {
-      setSelectedDate(allDays[allDays.length - 1]);
+    } else if (!selectedDate && dateList.length) {
+      setSelectedDate(dateList[dateList.length - 1]);
     }
-  }, [initialDate, allDays]);
+  }, [initialDate, dateList]);
 
   useEffect(() => {
     setMapFocus(null);
   }, [selectedDate]);
 
-  const currentIdx = allDays?.indexOf(selectedDate) ?? -1;
+  const currentIdx = dateList.indexOf(selectedDate);
   const canPrev = currentIdx > 0;
-  const canNext = allDays ? currentIdx < allDays.length - 1 : false;
+  const canNext = currentIdx >= 0 && currentIdx < dateList.length - 1;
 
   const goToPrev = () => {
-    if (canPrev && allDays) setSelectedDate(allDays[currentIdx - 1]);
+    if (canPrev) setSelectedDate(dateList[currentIdx - 1]);
   };
   const goToNext = () => {
-    if (canNext && allDays) setSelectedDate(allDays[currentIdx + 1]);
+    if (canNext) setSelectedDate(dateList[currentIdx + 1]);
   };
 
   return (
@@ -78,40 +84,41 @@ export default function DayView({ initialDate }: Props) {
       <div className="w-96 shrink-0 bg-surface border-r border-border flex flex-col overflow-hidden">
         {/* Date Navigation */}
         <div className="p-4 border-b border-border">
-          <div className="flex items-center gap-2 mb-3">
-            <Calendar size={20} className="text-accent" />
-            <h2 className="text-lg font-semibold">Day View</h2>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={goToPrev}
-              disabled={!canPrev}
-              className="p-1.5 rounded border border-border hover:bg-bg disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <ChevronLeft size={16} />
-            </button>
-
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="flex-1 bg-bg border border-border rounded px-3 py-1.5 text-sm text-text"
-            />
-
-            <button
-              onClick={goToNext}
-              disabled={!canNext}
-              className="p-1.5 rounded border border-border hover:bg-bg disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <ChevronRight size={16} />
-            </button>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Calendar size={20} className="text-accent" />
+              <h2 className="text-lg font-semibold">Day View</h2>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={goToPrev}
+                disabled={!canPrev}
+                className="rounded border border-border p-1.5 hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
+                aria-label="Previous day with data"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                onClick={goToNext}
+                disabled={!canNext}
+                className="rounded border border-border p-1.5 hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
+                aria-label="Next day with data"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
           </div>
 
           {selectedDate && (
-            <div className="text-text-muted text-sm mt-2">
-              {formatDate(selectedDate)}
-            </div>
+            <div className="text-sm text-text-muted">{formatDate(selectedDate)}</div>
+          )}
+
+          {allDays && allDays.length > 0 && (
+            <DayCalendar
+              days={allDays}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+            />
           )}
         </div>
 

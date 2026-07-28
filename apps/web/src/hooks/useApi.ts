@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   DayData,
+  DaySummary,
   Overview,
   HeatmapPoint,
   MonthlyStats,
@@ -43,7 +44,7 @@ export function useOverview() {
 
 export function useDays() {
   const tenantKey = useTenantKey();
-  return useQuery<string[]>({
+  return useQuery<DaySummary[]>({
     queryKey: ['days', tenantKey],
     queryFn: () => fetchJson('/api/days'),
     staleTime: Infinity,

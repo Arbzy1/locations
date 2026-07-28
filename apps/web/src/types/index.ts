@@ -69,6 +69,15 @@ export interface DayData {
   clusters: string[];
 }
 
+/** Lightweight per-day stats for calendar highlights (from day_stats). */
+export interface DaySummary {
+  date: string;
+  total_distance_miles: number;
+  modes: Record<string, number>;
+  visit_count: number;
+  activity_count: number;
+}
+
 export interface DayTrip {
   date: string;
   clusters: string[];
