@@ -73,7 +73,7 @@ function EmptyDataState({ onOpenSettings }: { onOpenSettings: () => void }) {
         type="button"
         title="Open Settings to upload your Timeline JSON"
         onClick={onOpenSettings}
-        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg transition-colors duration-300 ease-out hover:bg-accent/90"
+        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-bg transition-colors duration-ui-hover ease-ui hover:bg-accent/90"
       >
         Open Settings
       </button>
@@ -123,7 +123,7 @@ function AppContent() {
               queryClient.clear();
               void signOut();
             }}
-            className="shrink-0 rounded-md border border-accent/40 px-2 py-1 transition-colors duration-300 ease-out hover:bg-accent/20"
+            className="shrink-0 rounded-md border border-accent/40 px-2 py-1 transition-colors duration-ui-hover ease-ui hover:bg-accent/20"
           >
             Exit demo
           </button>
@@ -142,7 +142,7 @@ function AppContent() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors duration-300 ease-out ${
+              className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors duration-ui-emphasis ease-ui ${
                 activeTab === tab.id
                   ? 'bg-accent/20 text-accent'
                   : 'text-text-muted hover:bg-bg/50 hover:text-text'
@@ -159,7 +159,7 @@ function AppContent() {
               <button
                 type="button"
                 onClick={() => setActiveTab('settings')}
-                className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors duration-300 ease-out ${
+                className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors duration-ui-emphasis ease-ui ${
                   activeTab === 'settings'
                     ? 'bg-accent/20 text-accent'
                     : 'text-text-muted hover:bg-bg/50 hover:text-text'
@@ -180,7 +180,7 @@ function AppContent() {
                 queryClient.clear();
                 void signOut();
               }}
-              className="flex h-10 w-10 items-center justify-center rounded-lg text-text-muted transition-colors duration-300 ease-out hover:bg-bg/50 hover:text-text"
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-text-muted transition-colors duration-ui-emphasis ease-ui hover:bg-bg/50 hover:text-text"
               title={session?.user?.email ? `Sign out (${session.user.email})` : 'Sign out'}
               aria-label="Sign out"
             >

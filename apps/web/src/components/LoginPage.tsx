@@ -87,7 +87,7 @@ export default function LoginPage() {
           title="Try the public demo with sample journeys (no invite needed)"
           onClick={() => void tryDemo()}
           disabled={demoLoading || loading}
-          className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm font-medium text-accent transition duration-300 ease-out hover:bg-accent/20 disabled:opacity-60"
+          className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm font-medium text-accent transition duration-ui-hover ease-ui hover:bg-accent/20 disabled:opacity-60"
         >
           <Play size={16} />
           {demoLoading ? 'Starting demo…' : 'Try the demo (sample journeys)'}
@@ -132,7 +132,7 @@ export default function LoginPage() {
             type="submit"
             title="Sign in with your invite account"
             disabled={loading || demoLoading}
-            className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-[#0d1117] transition duration-300 ease-out hover:brightness-110 disabled:opacity-60"
+            className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-[#0d1117] transition duration-ui-hover ease-ui hover:brightness-110 disabled:opacity-60"
           >
             {loading ? 'Signing in…' : 'Enter'}
           </button>
@@ -147,7 +147,7 @@ export default function LoginPage() {
             href={GITHUB_URL}
             target="_blank"
             rel="noreferrer"
-            className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors duration-300 ease-out hover:underline"
+            className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors duration-ui-hover ease-ui hover:underline"
           >
             <ExternalLink size={16} />
             Deploy your own on GitHub

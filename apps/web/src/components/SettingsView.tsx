@@ -233,7 +233,7 @@ export default function SettingsView() {
                     ? 'Replace this source with the selected Timeline JSON'
                     : 'Upload Timeline JSON as a new or updated source'
                 }
-                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-bg transition-colors duration-300 ease-out hover:brightness-110 disabled:opacity-50"
+                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-bg transition-colors duration-ui-hover ease-ui hover:brightness-110 disabled:opacity-50"
               >
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                 {reuploadSourceId ? 'Replace Timeline data' : 'Upload Timeline data'}
@@ -248,7 +248,7 @@ export default function SettingsView() {
                     setFile(null);
                     if (fileRef.current) fileRef.current.value = '';
                   }}
-                  className="rounded-md border border-border px-4 py-2.5 text-sm text-text-muted transition-colors duration-300 ease-out hover:text-text"
+                  className="rounded-md border border-border px-4 py-2.5 text-sm text-text-muted transition-colors duration-ui-hover ease-ui hover:text-text"
                 >
                   Cancel
                 </button>
@@ -314,7 +314,7 @@ export default function SettingsView() {
                         type="button"
                         title="Re-upload Timeline JSON to replace this source"
                         onClick={() => beginReupload(source)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent transition-colors duration-300 ease-out hover:bg-accent/20"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent transition-colors duration-ui-hover ease-ui hover:bg-accent/20"
                       >
                         <RefreshCw size={12} />
                         Re-upload
@@ -327,7 +327,7 @@ export default function SettingsView() {
                           setRenameId(source.id);
                           setRenameValue(source.label);
                         }}
-                        className="rounded p-1.5 text-text-muted transition-colors duration-300 ease-out hover:bg-bg hover:text-text"
+                        className="rounded p-1.5 text-text-muted transition-colors duration-ui-fast ease-ui hover:bg-bg hover:text-text"
                       >
                         <Pencil size={14} />
                       </button>
@@ -336,7 +336,7 @@ export default function SettingsView() {
                         title="Delete this Timeline source and its data"
                         aria-label="Delete"
                         onClick={() => void onDelete(source)}
-                        className="rounded p-1.5 text-text-muted transition-colors duration-300 ease-out hover:bg-bg hover:text-red-400"
+                        className="rounded p-1.5 text-text-muted transition-colors duration-ui-fast ease-ui hover:bg-bg hover:text-red-400"
                       >
                         <Trash2 size={14} />
                       </button>

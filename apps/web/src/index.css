@@ -14,12 +14,28 @@
   --color-cycle: #56d364;
   --color-fly: #79c0ff;
   --color-visit: #bc8cff;
+
+  /* Semantic UI durations — use as duration-ui-fast, etc. */
+  --duration-ui-fast: 150ms;
+  --duration-ui-hover: 200ms;
+  --duration-ui-emphasis: 280ms;
+  --duration-ui-progress: 450ms;
+  --duration-ui-enter: 400ms;
+  --duration-ui-drawer: 750ms;
+
+  --ease-ui: ease-out;
+  --ease-ui-drawer: ease-in-out;
 }
 
 :root {
-  --ui-duration-hover: 300ms;
+  --ui-duration-fast: 150ms;
+  --ui-duration-hover: 200ms;
+  --ui-duration-emphasis: 280ms;
+  --ui-duration-progress: 450ms;
   --ui-duration-enter: 400ms;
+  --ui-duration-drawer: 750ms;
   --ui-ease: ease-out;
+  --ui-ease-drawer: ease-in-out;
 }
 
 * {
@@ -48,7 +64,7 @@ body {
   overflow: hidden;
 }
 
-/* Smooth, slow-ish hover/active baseline for interactive controls */
+/* Default interactive control baseline */
 button,
 a,
 input,
@@ -81,8 +97,18 @@ button:active:not(:disabled) {
 
 @media (prefers-reduced-motion: reduce) {
   :root {
+    --ui-duration-fast: 1ms;
     --ui-duration-hover: 1ms;
+    --ui-duration-emphasis: 1ms;
+    --ui-duration-progress: 1ms;
     --ui-duration-enter: 1ms;
+    --ui-duration-drawer: 1ms;
+    --duration-ui-fast: 1ms;
+    --duration-ui-hover: 1ms;
+    --duration-ui-emphasis: 1ms;
+    --duration-ui-progress: 1ms;
+    --duration-ui-enter: 1ms;
+    --duration-ui-drawer: 1ms;
   }
 
   button,
@@ -112,9 +138,9 @@ button:active:not(:disabled) {
   background: #161b22 !important;
   color: #f0f6fc !important;
   border-color: #30363d !important;
-  transition: background-color var(--ui-duration-hover) var(--ui-ease),
-    color var(--ui-duration-hover) var(--ui-ease),
-    border-color var(--ui-duration-hover) var(--ui-ease) !important;
+  transition: background-color var(--ui-duration-fast) var(--ui-ease),
+    color var(--ui-duration-fast) var(--ui-ease),
+    border-color var(--ui-duration-fast) var(--ui-ease) !important;
 }
 
 .leaflet-control-zoom a:hover {
@@ -153,7 +179,7 @@ button:active:not(:disabled) {
 ::-webkit-scrollbar-thumb {
   background: #30363d;
   border-radius: 3px;
-  transition: background-color var(--ui-duration-hover) var(--ui-ease);
+  transition: background-color var(--ui-duration-fast) var(--ui-ease);
 }
 
 ::-webkit-scrollbar-thumb:hover {

@@ -31,7 +31,7 @@ export default function PasswordInput({
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-text-muted transition-colors duration-300 ease-out hover:text-text"
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-text-muted transition-colors duration-ui-fast ease-ui hover:text-text"
         aria-label={toggleLabel}
         title={toggleLabel}
         tabIndex={-1}
