@@ -75,6 +75,32 @@ function latLngFromE7(point: { latE7?: number; lngE7?: number } | null | undefin
   return [point.latE7 / 1e7, point.lngE7 / 1e7];
 }
 
+/** Parse `"51.3667281°, -0.1896562°"` style coordinates from Timeline.json. */
+function parseDegreeLatLng(raw: string | undefined | null): [number, number] | null {
+  if (!raw) return null;
+  const m = raw.match(/(-?\d+(?:\.\d+)?)\s*°\s*,\s*(-?\d+(?:\.\d+)?)\s*°/);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lon = Number(m[2]);
+  if (Number.isNaN(lat) || Number.isNaN(lon)) return null;
+  return [lat, lon];
+}
+
+function coordsFromLocation(
+  loc:
+    | string
+    | { latE7?: number; lngE7?: number; latLng?: string }
+    | null
+    | undefined,
+): [number, number] | null {
+  if (!loc) return null;
+  if (typeof loc === "string") {
+    return parseGeo(loc) ?? parseDegreeLatLng(loc);
+  }
+  if (loc.latLng) return parseDegreeLatLng(loc.latLng);
+  return latLngFromE7(loc);
+}
+
 function toGeo(lat: number, lon: number): string {
   return `geo:${lat},${lon}`;
 }
@@ -87,8 +113,8 @@ function titleCaseSemantic(raw: string | undefined | null): string {
 }
 
 type TimelineEdit = {
-  inferredSemanticSegment?: SemanticSegment;
-  userEditedSemanticSegment?: SemanticSegment;
+  inferredSemanticSegment?: NestedSemanticSegment;
+  userEditedSemanticSegment?: NestedSemanticSegment;
   rawSignal?: {
     signal?: {
       position?: {
@@ -99,52 +125,98 @@ type TimelineEdit = {
   };
 };
 
-type SemanticSegment = {
+type NestedSemanticSegment = {
   startTime?: string;
   endTime?: string;
   segment?: {
-    visit?: {
-      topCandidate?: {
-        placeId?: string;
-        placeID?: string;
-        semanticType?: string;
-        placeLocation?: string | { latE7?: number; lngE7?: number };
-      };
-    };
-    activity?: {
-      start?: string | { latE7?: number; lngE7?: number };
-      end?: string | { latE7?: number; lngE7?: number };
-      distanceMeters?: number | string;
-      topCandidate?: { type?: string };
-    };
+    visit?: SemanticVisit;
+    activity?: SemanticActivity;
   };
 };
 
-/** Normalize classic array + Timeline Edits exports into RawTimelineRecord[]. */
-export function normalizeTimelineInput(raw: unknown): RawTimelineRecord[] {
-  if (raw === null || typeof raw !== "object") {
-    throw new Error("Timeline JSON must be an array or a Timeline Edits object");
+type SemanticVisit = {
+  topCandidate?: {
+    placeId?: string;
+    placeID?: string;
+    semanticType?: string;
+    placeLocation?: string | { latE7?: number; lngE7?: number; latLng?: string };
+  };
+};
+
+type SemanticActivity = {
+  start?: string | { latE7?: number; lngE7?: number; latLng?: string };
+  end?: string | { latE7?: number; lngE7?: number; latLng?: string };
+  distanceMeters?: number | string;
+  topCandidate?: { type?: string };
+};
+
+type FlatSemanticSegment = {
+  startTime?: string;
+  endTime?: string;
+  visit?: SemanticVisit;
+  activity?: SemanticActivity;
+  timelinePath?: unknown;
+};
+
+function pushVisitActivity(
+  records: RawTimelineRecord[],
+  startTime: string,
+  endTime: string,
+  visit: SemanticVisit | undefined,
+  activity: SemanticActivity | undefined,
+) {
+  if (visit) {
+    const top = visit.topCandidate ?? {};
+    const coords = coordsFromLocation(top.placeLocation);
+    if (!coords) return;
+    records.push({
+      startTime,
+      endTime,
+      visit: {
+        topCandidate: {
+          placeLocation: toGeo(coords[0], coords[1]),
+          semanticType: titleCaseSemantic(top.semanticType),
+          placeID: top.placeId ?? top.placeID,
+        },
+      },
+    });
+    return;
   }
 
-  if (Array.isArray(raw)) return raw as RawTimelineRecord[];
-
-  const obj = raw as Record<string, unknown>;
-  if ("timelineEnabled" in obj || "deviceSettings" in obj) {
-    throw new Error(
-      "This looks like Timeline Settings.json, not location history. Use Timeline Edits.json or a visit/activity array.",
-    );
+  if (activity) {
+    const startCoords = coordsFromLocation(activity.start);
+    const endCoords = coordsFromLocation(activity.end);
+    if (!startCoords || !endCoords) return;
+    records.push({
+      startTime,
+      endTime,
+      activity: {
+        start: toGeo(startCoords[0], startCoords[1]),
+        end: toGeo(endCoords[0], endCoords[1]),
+        distanceMeters: activity.distanceMeters,
+        topCandidate: { type: activity.topCandidate?.type },
+      },
+    });
   }
+}
 
-  if (!Array.isArray(obj.timelineEdits)) {
-    throw new Error("Timeline JSON must be an array of visit/activity records or a Timeline Edits export");
+function fromSemanticSegments(segments: FlatSemanticSegment[]): RawTimelineRecord[] {
+  const records: RawTimelineRecord[] = [];
+  for (const seg of segments) {
+    const startTime = seg.startTime ?? "";
+    const endTime = seg.endTime ?? "";
+    if (!startTime || !endTime) continue;
+    if (!seg.visit && !seg.activity) continue;
+    pushVisitActivity(records, startTime, endTime, seg.visit, seg.activity);
   }
+  return records;
+}
 
-  const edits = obj.timelineEdits as TimelineEdit[];
+function fromTimelineEdits(edits: TimelineEdit[]): RawTimelineRecord[] {
   const records: RawTimelineRecord[] = [];
   const seenSegmentKeys = new Set<string>();
 
-  // Prefer user-edited segments over inferred for the same time window.
-  const segments: Array<{ seg: SemanticSegment; edited: boolean }> = [];
+  const segments: Array<{ seg: NestedSemanticSegment; edited: boolean }> = [];
   for (const edit of edits) {
     if (edit.userEditedSemanticSegment) {
       segments.push({ seg: edit.userEditedSemanticSegment, edited: true });
@@ -162,48 +234,9 @@ export function normalizeTimelineInput(raw: unknown): RawTimelineRecord[] {
     const key = `${startTime.slice(0, 16)}|${endTime.slice(0, 16)}|${seg.segment?.visit ? "v" : "a"}`;
     if (seenSegmentKeys.has(key)) continue;
     seenSegmentKeys.add(key);
-
-    if (seg.segment?.visit) {
-      const top = seg.segment.visit.topCandidate ?? {};
-      let placeLocation: string | undefined;
-      if (typeof top.placeLocation === "string") {
-        placeLocation = top.placeLocation;
-      } else {
-        const coords = latLngFromE7(top.placeLocation);
-        if (coords) placeLocation = toGeo(coords[0], coords[1]);
-      }
-      records.push({
-        startTime,
-        endTime,
-        visit: {
-          topCandidate: {
-            placeLocation,
-            semanticType: titleCaseSemantic(top.semanticType),
-            placeID: top.placeId ?? top.placeID,
-          },
-        },
-      });
-    } else if (seg.segment?.activity) {
-      const act = seg.segment.activity;
-      const startCoords =
-        typeof act.start === "string" ? parseGeo(act.start) : latLngFromE7(act.start);
-      const endCoords =
-        typeof act.end === "string" ? parseGeo(act.end) : latLngFromE7(act.end);
-      if (!startCoords || !endCoords) continue;
-      records.push({
-        startTime,
-        endTime,
-        activity: {
-          start: toGeo(startCoords[0], startCoords[1]),
-          end: toGeo(endCoords[0], endCoords[1]),
-          distanceMeters: act.distanceMeters,
-          topCandidate: { type: act.topCandidate?.type },
-        },
-      });
-    }
+    pushVisitActivity(records, startTime, endTime, seg.segment?.visit, seg.segment?.activity);
   }
 
-  // Position pings → short visits so heatmaps work when semantic history is sparse.
   for (const edit of edits) {
     const position = edit.rawSignal?.signal?.position;
     if (!position?.timestamp) continue;
@@ -212,10 +245,9 @@ export function normalizeTimelineInput(raw: unknown): RawTimelineRecord[] {
     const startTime = position.timestamp;
     const endDt = new Date(startTime);
     endDt.setMinutes(endDt.getMinutes() + 2);
-    const endTime = endDt.toISOString();
     records.push({
       startTime,
-      endTime,
+      endTime: endDt.toISOString(),
       visit: {
         topCandidate: {
           placeLocation: toGeo(coords[0], coords[1]),
@@ -226,6 +258,34 @@ export function normalizeTimelineInput(raw: unknown): RawTimelineRecord[] {
   }
 
   return records;
+}
+
+/** Normalize classic array, semanticSegments Timeline.json, or Timeline Edits. */
+export function normalizeTimelineInput(raw: unknown): RawTimelineRecord[] {
+  if (raw === null || typeof raw !== "object") {
+    throw new Error("Timeline JSON must be an array or a Timeline export object");
+  }
+
+  if (Array.isArray(raw)) return raw as RawTimelineRecord[];
+
+  const obj = raw as Record<string, unknown>;
+  if ("timelineEnabled" in obj || "deviceSettings" in obj) {
+    throw new Error(
+      "This looks like Timeline Settings.json, not location history. Use Timeline.json (semanticSegments) or Timeline Edits.json.",
+    );
+  }
+
+  if (Array.isArray(obj.semanticSegments)) {
+    return fromSemanticSegments(obj.semanticSegments as FlatSemanticSegment[]);
+  }
+
+  if (Array.isArray(obj.timelineEdits)) {
+    return fromTimelineEdits(obj.timelineEdits as TimelineEdit[]);
+  }
+
+  throw new Error(
+    "Timeline JSON must be a visit/activity array, a semanticSegments Timeline.json, or a Timeline Edits export",
+  );
 }
 
 function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
