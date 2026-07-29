@@ -1,44 +1,154 @@
-# Dependencies
+# ─── Dependencies ───
 node_modules/
+**/node_modules/
 .npm/
 .pnpm-store/
+.yarn/
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+bower_components/
+jspm_packages/
 
-# Build
+# ─── Build / bundlers ───
 dist/
-.wrangler/
-.dev.vars
+build/
+out/
+.output/
+.vercel/
+.netlify/
+.turbo/
+.cache/
+.parcel-cache/
+.vite/
 *.tsbuildinfo
+*.esm.js.map
+*.cjs.js.map
 
-# Env / secrets
+# Cloudflare / Wrangler
+.wrangler/
+.wrangler-bundle/
+.dev.vars
+!.dev.vars.example
+wrangler.toml.local
+
+# ─── Environment & secrets ───
 .env
 .env.*
 !.env.example
-.dev.vars
+!.env*.example
 .generated-secret.txt
-.wrangler-bundle/
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+secrets/
+.secret
 
-# Personal location data — never commit
+# ─── Personal location data (never commit) ───
 location-history.json
 **/location-history.json
-../location-history.json
-cache/
-*.db
+**/Records.json
+**/Semantic Location History/
+Takeout/
+takeout-*/
 *.sqlite
+*.sqlite3
+*.db
+cache/
+**/cache.db
 
-# Legacy local artifacts
+# Keep the bundled public sample
+!data/sample-location-history.json
+
+# ─── Legacy / local leftovers ───
 legacy/cache/
 backend/
 frontend/
-.wrangler/
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# OS / IDE
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
-*.swp
-.claude/
-
-# Logs
+# ─── Logs & debug ───
+logs/
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# ─── Test / coverage ───
+coverage/
+.nyc_output/
+*.lcov
+.jest/
+playwright-report/
+test-results/
+cypress/videos/
+cypress/screenshots/
+
+# ─── OS ───
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ─── Editors / IDEs ───
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.project
+.classpath
+.settings/
+*.code-workspace
+
+# Cursor (keep shared MCP config if present)
+.cursor/*
+!.cursor/mcp.json
+
+# ─── Misc local junk ───
+.claude/
+.agents/
+*.tmp
+*.temp
+*.bak
+*.orig
+*.old
+.local/
+tmp/
+temp/
+cookies.txt
+demo-cookies.txt
+*-cookies.txt
+signin.json
+demo-signin.json
+day12.json
+*.local.json
+.fleet/
+.history/
