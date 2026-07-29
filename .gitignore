@@ -1,71 +1,148 @@
-# ─── Dependencies ───
+# =============================================================================
+# .gitignore - Locations monorepo
+# =============================================================================
+
+# ----- Dependencies -----
 node_modules/
 **/node_modules/
 .npm/
 .pnpm-store/
 .yarn/
-.yarn/cache
-.yarn/unplugged
+.yarn/cache/
+.yarn/unplugged/
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+.pnp.js
 bower_components/
 jspm_packages/
 
-# ─── Build / bundlers ───
+# ----- Build / bundler / Workers -----
 dist/
+dist-ssr/
 build/
 out/
 .output/
 .vercel/
 .netlify/
-.turbo/
-.cache/
-.parcel-cache/
+.wrangler/
+.wrangler-bundle/
 .vite/
+.turbo/
+.parcel-cache/
+.cache/
+.sass-cache/
 *.tsbuildinfo
 *.esm.js.map
 *.cjs.js.map
-
-# Cloudflare / Wrangler
-.wrangler/
-.wrangler-bundle/
-.dev.vars
-!.dev.vars.example
 wrangler.toml.local
 
-# ─── Environment & secrets ───
+# ----- Env / secrets (never commit) -----
 .env
 .env.*
 !.env.example
 !.env*.example
+.dev.vars
+!.dev.vars.example
 .generated-secret.txt
 *.pem
 *.key
 *.p12
 *.pfx
+id_rsa
+id_rsa.pub
 credentials.json
-service-account*.json
+secrets.json
 secrets/
 .secret
+**/service-account*.json
+**/google-credentials*.json
 
-# ─── Personal location data (never commit) ───
+# ----- Personal / private location data -----
+# Real Takeout exports - never commit. Sample data under data/ is OK.
 location-history.json
 **/location-history.json
+../location-history.json
+*-location-history.json
+!data/sample-location-history.json
 **/Records.json
 **/Semantic Location History/
+*.mbox
 Takeout/
+**/Takeout/
 takeout-*/
+
+# ----- Databases / local caches -----
+*.db
 *.sqlite
 *.sqlite3
-*.db
 cache/
 **/cache.db
+legacy/cache/
 
-# Keep the bundled public sample
-!data/sample-location-history.json
+# ----- Tests / coverage / Playwright -----
+coverage/
+.nyc_output/
+htmlcov/
+.jest/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+cypress/videos/
+cypress/screenshots/
+*.lcov
 
-# ─── Legacy / local leftovers ───
+# ----- Logs -----
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+wrangler-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# ----- OS -----
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ----- Editors / IDEs -----
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+.project
+.classpath
+.settings/
+
+# ----- Agent / AI local state (keep committed rule sources) -----
+.claude/
+.aider*
+!.aider.conf.yml
+.codex/
+.continual-learning/
+.agents/
+.cursor/*
+!.cursor/rules/
+!.cursor/mcp.json
+
+# ----- Legacy local artifacts -----
 legacy/cache/
 backend/
 frontend/
@@ -82,64 +159,17 @@ env/
 .mypy_cache/
 .ruff_cache/
 
-# ─── Logs & debug ───
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
-
-# ─── Test / coverage ───
-coverage/
-.nyc_output/
-*.lcov
-.jest/
-playwright-report/
-test-results/
-cypress/videos/
-cypress/screenshots/
-
-# ─── OS ───
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-
-# ─── Editors / IDEs ───
-.idea/
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json.example
-*.swp
-*.swo
-*~
-*.sublime-project
-*.sublime-workspace
-.project
-.classpath
-.settings/
-*.code-workspace
-
-# Cursor (keep shared MCP config if present)
-.cursor/*
-!.cursor/mcp.json
-
-# ─── Misc local junk ───
-.claude/
-.agents/
+# ----- Misc junk -----
+*.bak
 *.tmp
 *.temp
-*.bak
 *.orig
 *.old
+*.rej
+.eslintcache
+.stylelintcache
+*.local
+*.local.json
 .local/
 tmp/
 temp/
@@ -149,6 +179,5 @@ demo-cookies.txt
 signin.json
 demo-signin.json
 day12.json
-*.local.json
 .fleet/
 .history/

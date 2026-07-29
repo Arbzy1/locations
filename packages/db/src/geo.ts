@@ -82,7 +82,8 @@ export function parseGeo(geoStr: string | undefined | null): [number, number] | 
 }
 
 export function mapTransportMode(raw: string): string {
-  return TRANSPORT_MODE_MAP[raw] ?? "unknown";
+  const key = raw.trim().toLowerCase().replace(/_/g, " ");
+  return TRANSPORT_MODE_MAP[key] ?? "unknown";
 }
 
 export function makeRouteCacheKey(

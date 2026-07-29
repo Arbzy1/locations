@@ -1,0 +1,7 @@
+# Playwright / Vitest local artifacts (belt-and-suspenders with root .gitignore)
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/coverage/

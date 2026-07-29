@@ -69,6 +69,15 @@ export interface DayData {
   clusters: string[];
 }
 
+/** Lightweight per-day stats for calendar highlights (from day_stats). */
+export interface DaySummary {
+  date: string;
+  total_distance_miles: number;
+  modes: Record<string, number>;
+  visit_count: number;
+  activity_count: number;
+}
+
 export interface DayTrip {
   date: string;
   clusters: string[];
@@ -111,6 +120,22 @@ export interface HeatmapPoint {
   lat: number;
   lon: number;
   count: number;
+  /** Most common visit cluster / place label for this cell */
+  label?: string;
+  /** Town / city / village guessed from coordinates (Nominatim) */
+  settlement?: string | null;
+  totalDurationMinutes?: number;
+  uniqueDays?: number;
+  topTypes?: string[];
+}
+
+/** Named hotspot markers shown on the Hotspots map */
+export interface HotspotLabel {
+  lat: number;
+  lon: number;
+  label: string;
+  count: number;
+  rank: number;
 }
 
 export interface FunFact {
@@ -127,7 +152,36 @@ export interface RouteProgress {
   percent: number;
 }
 
-export type TabId = 'hotspots' | 'day' | 'trips' | 'insights';
+export type TabId = 'hotspots' | 'day' | 'trips' | 'insights' | 'settings';
+
+export interface DataSourceInfo {
+  id: string;
+  label: string;
+  createdAt: string;
+  updatedAt: string;
+  visitCount: number;
+  activityCount: number;
+}
+
+export interface ImportJobInfo {
+  id: string;
+  sourceId: string;
+  status: 'pending' | 'processing' | 'ready' | 'error';
+  error: string | null;
+  visitCount: number | null;
+  activityCount: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ImportStatus {
+  hasData: boolean;
+  visitCount: number;
+  sourceCount: number;
+  sources: DataSourceInfo[];
+  latestJob: ImportJobInfo | null;
+  recentJobs: ImportJobInfo[];
+}
 
 /** Map pan/zoom target when focusing a timeline segment (bounds or point). */
 export type MapFocusTarget =

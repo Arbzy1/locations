@@ -95,8 +95,13 @@ export default function DayTripsView({ onSelectDate }: Props) {
     return (
       <button
         type="button"
+        title={
+          active
+            ? `Sort by ${label} (${sortDir === 'desc' ? 'descending' : 'ascending'}); click to flip`
+            : `Sort day trips by ${label}`
+        }
         onClick={() => toggleSort(field)}
-        className={`text-xs px-2 py-0.5 rounded transition-colors ${
+        className={`text-xs px-2 py-0.5 rounded transition-colors duration-ui-fast ease-ui ${
           active ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text hover:bg-bg/50'
         }`}
       >
@@ -124,8 +129,9 @@ export default function DayTripsView({ onSelectDate }: Props) {
             {activeFilters > 0 && (
               <button
                 type="button"
+                title="Clear year, range, mode, and place filters"
                 onClick={() => { setYearFilter('all'); setMinRange(5); setModeFilter(new Set()); setClusterFilter(''); }}
-                className="ml-2 text-accent hover:text-accent/80 text-xs"
+                className="ml-2 text-accent transition-colors duration-ui-fast ease-ui hover:text-accent/80 text-xs"
               >
                 Clear filters
               </button>
@@ -142,8 +148,13 @@ export default function DayTripsView({ onSelectDate }: Props) {
               <button
                 key={mode}
                 type="button"
+                title={
+                  active
+                    ? `Remove ${MODE_LABELS[mode] || mode} filter`
+                    : `Filter trips that used ${MODE_LABELS[mode] || mode}`
+                }
                 onClick={() => toggleMode(mode)}
-                className="text-xs px-2.5 py-1 rounded-full transition-all font-medium"
+                className="text-xs px-2.5 py-1 rounded-full transition-all duration-ui-fast ease-ui font-medium"
                 style={{
                   backgroundColor: active ? `${color}33` : `${color}11`,
                   color: active ? color : `${color}88`,
@@ -164,6 +175,7 @@ export default function DayTripsView({ onSelectDate }: Props) {
             <select
               value={yearFilter}
               onChange={(e) => setYearFilter(e.target.value)}
+              title="Filter day trips by year"
               className="bg-bg border border-border rounded px-2 py-1 text-xs text-text"
             >
               <option value="all">All Years</option>
@@ -181,6 +193,7 @@ export default function DayTripsView({ onSelectDate }: Props) {
               max={100}
               value={minRange}
               onChange={(e) => setMinRange(Number(e.target.value))}
+              title="Minimum trip range in miles"
               className="w-16"
             />
             <span className="text-text-muted text-xs w-10">{minRange}mi</span>
@@ -191,6 +204,7 @@ export default function DayTripsView({ onSelectDate }: Props) {
             placeholder="Search places..."
             value={clusterFilter}
             onChange={(e) => setClusterFilter(e.target.value)}
+            title="Filter trips by place name"
             className="bg-bg border border-border rounded px-2 py-1 text-xs text-text flex-1 min-w-0"
           />
         </div>
@@ -253,7 +267,8 @@ function TripCard({ trip, focused, modeFilter, onSelect }: {
     <button
       ref={ref}
       onClick={onSelect}
-      className={`w-full text-left bg-bg border rounded-lg p-3 transition-colors ${
+      title={`Open day view for ${formatDate(trip.date)}`}
+      className={`w-full text-left bg-bg border rounded-lg p-3 transition-colors duration-ui-emphasis ease-ui ${
         focused ? 'border-accent ring-1 ring-accent/30' : 'border-border hover:border-accent/40'
       }`}
     >

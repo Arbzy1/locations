@@ -1,0 +1,216 @@
+# Locations - Agent Instructions
+
+## Project overview
+
+Private Google Timeline / location-history explorer: heatmaps, day views, trips, and insights.
+
+| Layer | Tech |
+|-------|------|
+| Edge | Cloudflare Workers + static assets (Wrangler) |
+| API | Hono (`apps/api`) |
+| Auth | Better Auth (email/password, invite-only / `disableSignUp`) |
+| DB | Neon Postgres + Drizzle (`packages/db`) |
+| UI | React 19, Vite, Tailwind 4, Leaflet, Recharts (`apps/web`) |
+
+Monorepo (npm workspaces) under this directory:
+
+```
+apps/web/      React frontend
+apps/api/      Worker entry (Hono)
+packages/db/   Schema, migrate, import, user tooling
+scripts/       Setup wizard, rule sync, helpers
+```
+
+Tenants are isolated in the app layer (`tenant` column + Drizzle filters). There is **no** Postgres RLS. Demo users map to tenant `"demo"`; everyone else uses their user id (`tenantForUser`).
+
+## Code style
+
+- TypeScript throughout; workspace packages are `@locations/web`, `@locations/api`, `@locations/db`.
+- Prefer existing patterns: Hono routes in `apps/api/src/index.ts`, data access in `services.ts`, schema in `packages/db`.
+- Generate Drizzle migrations with `npm run db:generate` - do not hand-write migration SQL.
+- Use **npm** only (`npm install`, `npm run …`, `npm run … -w @locations/<pkg>`).
+- Keep Takeout JSON and secrets out of git (`.env`, `.dev.vars`, real data files).
+
+### No em dashes
+
+<!-- sync:cursor-rule name="no-em-dash" alwaysApply="true" -->
+Never use the Unicode em dash (`—`, U+2014) in prose, comments, commits, docs, UI copy, or chat replies. It reads as generic AI-generated writing.
+
+Also avoid the en dash (`–`, U+2013) unless you are citing a numeric range that already uses it in existing code.
+
+Prefer:
+
+- A comma, colon, parentheses, or a new sentence
+- A normal hyphen-minus (`-`) for compound words and flags (`dev:all`, `type-check`)
+
+```text
+BAD:  Private explorer — heatmaps, day views, and trips.
+GOOD: Private explorer: heatmaps, day views, and trips.
+GOOD: Private explorer - heatmaps, day views, and trips.
+```
+<!-- /sync:cursor-rule -->
+
+### Password fields
+
+<!-- sync:cursor-rule name="password-input" globs="apps/web/**/*.{tsx,jsx}" -->
+Never use a bare `<input type="password">` in the web app.
+
+Use [`PasswordInput`](apps/web/src/components/PasswordInput.tsx), which includes a show/hide toggle with **react-icons** (`FaEye` / `FaEyeSlash`).
+
+```tsx
+// BAD
+<input type="password" value={password} onChange={...} />
+
+// GOOD
+import PasswordInput from './PasswordInput';
+
+<PasswordInput
+  required
+  autoComplete="current-password"
+  value={password}
+  onChange={(e) => setPassword(e.target.value)}
+/>
+```
+
+- Import eye icons from `react-icons` (not lucide-react) for password visibility UI.
+- Keep `type="password"` / `type="text"` toggling inside `PasswordInput`; callers omit `type`.
+- Toggle button needs an `aria-label` for show/hide.
+<!-- /sync:cursor-rule -->
+
+### UI tooltips
+
+<!-- sync:cursor-rule name="ui-tooltips" globs="apps/web/**/*.{tsx,jsx}" -->
+Every interactive control in the web app must have a non-empty `title` tooltip:
+
+- `<button>`, `<input>`, `<select>`, `<textarea>`, `PasswordInput`
+- Custom toggles (`role="switch"` and similar)
+
+Prefer a short action/purpose phrase (e.g. "Toggle heatmap layer", "Minimum trip range in miles").
+
+Icon-only buttons also need `aria-label` (may match `title`).
+
+Do not leave controls with only visible text and no `title`.
+
+Forward `title` through wrappers like `PasswordInput` onto the underlying input. Show/hide toggles inside wrappers need their own `title` too.
+<!-- /sync:cursor-rule -->
+
+### Motion and transitions
+
+<!-- sync:cursor-rule name="ui-motion" globs="apps/web/**/*.{tsx,jsx,css}" -->
+All interactive and mount/unmount UI must feel smooth and deliberately paced - never instant snaps (except where motion would harm usability).
+
+**Hover and active**
+
+- Buttons, links, tabs, chips, toggles, cards, and other interactive elements need CSS transitions on colour, background, border, opacity, shadow, and transform.
+- Prefer Tailwind `transition` / `transition-colors` / `transition-all` with a **slow-ish** duration: about **200-400ms** for hover/active (`duration-300` as the default; `duration-200` minimum; avoid bare instant style changes).
+- Active/pressed states should ease as well (scale or brightness), not hard-cut.
+
+**Entrance and exit**
+
+- Panels, overlays, menus, toasts, and view swaps that appear or disappear need enter/exit motion (fade, soft slide, or opacity + transform).
+- Entrance and exit should be **slow-ish**: about **300-500ms**, ease-out on enter and ease-in on exit.
+- Prefer CSS (`@keyframes`, `transition`, or a small shared utility class in `index.css`) over heavy animation libraries unless already in the project.
+- Respect `prefers-reduced-motion: reduce`: shorten or disable non-essential motion.
+
+**Do not**
+
+- Ship new interactive controls with no hover transition.
+- Use flashy or bouncy motion that fights the calm map-journal aesthetic.
+- Animate layout thrashing (large width/height reflows) when opacity/transform will do.
+<!-- /sync:cursor-rule -->
+
+### Dark / light theme
+
+<!-- sync:cursor-rule name="ui-theme" globs="apps/web/**/*.{tsx,jsx,css,html}" -->
+The web app supports dark and light mode via `html[data-theme="dark"|"light"]` and CSS variables in [`apps/web/src/index.css`](apps/web/src/index.css). All UI edits must work in **both** themes.
+
+**Use semantic tokens only**
+
+- Tailwind: `bg-bg`, `bg-surface`, `text-text`, `text-text-muted`, `border-border`, `text-accent`, `bg-accent`, `text-on-accent`, mode colours (`text-walk`, `text-visit`, …).
+- Raw CSS / inline styles: `var(--bg)`, `var(--surface)`, `var(--border)`, `var(--text)`, `var(--text-muted)`, `var(--accent)`, `var(--on-accent)`, `var(--visit)`, etc.
+- Primary button label colour is `text-on-accent` / `var(--on-accent)`, not a hardcoded dark hex.
+
+**Do not**
+
+- Hardcode theme colours (`#0d1117`, `#161b22`, `#30363d`, `#f0f6fc`, `#8b949e`, `#58a6ff`, or light equivalents) in components, Leaflet HTML, or chart styles.
+- Assume dark-only UI (e.g. white text on a fixed dark panel).
+- Add a second theming system; extend the existing CSS variables and `useTheme()` from [`apps/web/src/lib/theme.tsx`](apps/web/src/lib/theme.tsx).
+
+**When colours must be set in JS** (Recharts ticks, Leaflet `divIcon` HTML, canvas):
+
+- Read live values with `getComputedStyle(document.documentElement).getPropertyValue('--…')`, or use `var(--…)` in style strings.
+- Recompute when `useTheme().theme` changes.
+
+**Map tiles**
+
+- Default basemap should follow theme (Carto `dark_all` / `light_all`) as in [`Map.tsx`](apps/web/src/components/Map.tsx).
+
+**Toggle**
+
+- Theme switching goes through `ThemeToggle` / `useTheme().toggleTheme()`; persist via `locations-theme` localStorage (already handled by the provider + boot script in `index.html`).
+<!-- /sync:cursor-rule -->
+
+## npm scripts (`<domain>:<action>`)
+
+Public scripts live on the **root** `package.json`. Name every new script `domain:action` (e.g. `db:migrate`, `test:unit`, `rules:sync`).
+
+| Script | Purpose |
+|--------|---------|
+| `dev:all` | Build web, then run web + API concurrently |
+| `dev:web` / `dev:api` | Single workspace dev server |
+| `build:all` / `build:web` | Production builds |
+| `deploy:prod` / `deploy:preview` | Wrangler deploy / version upload |
+| `db:*` | generate, migrate, import, import-demo, warm-routes |
+| `auth:create-user` / `auth:create-demo` | Invite users |
+| `setup:project` | Interactive first-time setup |
+| `typecheck:all` / `lint:web` | Quality gates |
+| `rules:sync` | Regenerate tool-specific rule files from `AGENTS.md` (`node scripts/sync-rules.mjs`) |
+| `test:unit` / `test:watch` / `test:e2e` | Vitest / Playwright |
+| `deps:audit` | `npm audit` (high/critical) |
+
+Edit **this file**, then run `npm run rules:sync`. Do not hand-edit generated tool rule files.
+
+## Security
+
+Full checklist: [docs/SECURITY.md](docs/SECURITY.md).
+
+Non-negotiables:
+
+- Scope every data query by session `tenant` (`tenantForUser`). Never authorize from a client-supplied user/tenant id.
+- No `sql.raw()` / string-built SQL with user input.
+- Never reflect arbitrary CORS origins; use the allowlist helper.
+- No secrets in the frontend or `VITE_*` vars.
+- Cross-tenant access → **404**; demo role cannot import/mutate sources.
+- Signup stays invite-only.
+
+<!-- sync:cursor-rule name="security-checklist" globs="apps/api/**/*,packages/db/**/*" -->
+When changing API or DB code, review:
+
+- Missing `tenant` (or equivalent) on reads/writes
+- `sql.raw` or interpolated SQL
+- Mass assignment / spreading request bodies into updates
+- Upload routes: size limits, type sniff, server-generated keys, demo block
+- New routes: session middleware, CORS, rate limits for expensive paths
+
+See [docs/SECURITY.md](docs/SECURITY.md).
+<!-- /sync:cursor-rule -->
+
+## Testing
+
+- **Unit/integration:** Vitest (`npm run test:unit`). Prefer `app.request()` and pure helpers; no Worker pool required for the default suite.
+- **E2E:** Playwright (`npm run test:e2e`). Requires the API (or full stack) at `PLAYWRIGHT_BASE_URL` (default `http://127.0.0.1:8787`) - typically `npm run build:web && npm run dev:api` first.
+- There is **no Postgres RLS**. Cover app-level isolation instead: unauthenticated API → 401, `/api/health` public, demo role blocked from import/source mutations, cross-tenant source access denied.
+- Prioritize auth/tenant boundaries and data-mutating routes over UI-only components. Do not chase 100% coverage.
+- No CI pipeline yet; keep scripts runnable locally. Run `npm run deps:audit` before releases.
+
+## Things not to do
+
+- Do not use the em dash (`—`) anywhere - see **No em dashes** above.
+- Do not use pnpm, yarn, or bun - npm is the standard; do not delete or replace `package-lock.json` with another lockfile.
+- Do not hand-write Drizzle/SQL migrations; use `db:generate`.
+- Do not hand-edit `CLAUDE.md`, `.windsurfrules`, `CONVENTIONS.md`, `.github/copilot-instructions.md`, or generated `.cursor/rules/*.mdc` - change `AGENTS.md` and run `rules:sync`.
+- Do not drop or weaken `tenant` filters on queries; isolation depends on them.
+- Do not commit Takeout JSON, `.env`, `.dev.vars`, or database credentials.
+- Do not enable public signup (`disableSignUp` stays true); invite via `auth:create-user`.
+- Do not restructure the monorepo or rename business domains unless explicitly asked.
+- Do not reflect request `Origin` into CORS allow headers; do not skip session checks on new `/api/*` routes.

@@ -6,6 +6,7 @@ compatibility_date = "2025-03-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 preview_urls = true
+account_id = "8507815ae44383c8d60535ea462f5124"
 
 [assets]
 directory = "apps/web/dist"
@@ -19,6 +20,11 @@ BETTER_AUTH_URL = "https://locations.aden.website"
 # Secrets (set via wrangler secret put):
 #   DATABASE_URL
 #   BETTER_AUTH_SECRET
+
+[[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "locations-uploads"
+preview_bucket_name = "locations-uploads-preview"
 
 # Owner demo domain — remove or replace when deploying your own fork
 [[routes]]
