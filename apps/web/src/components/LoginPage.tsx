@@ -52,7 +52,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative flex h-screen w-screen items-center justify-center overflow-hidden bg-bg">
+    <div className="relative flex h-dvh w-screen items-center justify-center overflow-hidden bg-bg safe-pt safe-pb safe-px">
       <div
         className="pointer-events-none absolute inset-0 opacity-40"
         style={{
@@ -82,7 +82,7 @@ export default function LoginPage() {
             Locations
           </h1>
           <p className="mt-2 text-sm text-text-muted">
-            Private map journal — try the public demo or sign in
+            Private map journal - try the public demo or sign in
           </p>
         </div>
 
@@ -151,7 +151,8 @@ export default function LoginPage() {
             href={GITHUB_URL}
             target="_blank"
             rel="noreferrer"
-            className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-accent transition-colors duration-ui-hover ease-ui hover:underline"
+            title="Open the Locations GitHub repository"
+            className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-accent transition-colors duration-ui-hover ease-ui hover:underline"
           >
             <ExternalLink size={16} />
             Deploy your own on GitHub

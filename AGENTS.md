@@ -150,6 +150,78 @@ The web app supports dark and light mode via `html[data-theme="dark"|"light"]` a
 - Theme switching goes through `ThemeToggle` / `useTheme().toggleTheme()`; persist via `locations-theme` localStorage (already handled by the provider + boot script in `index.html`).
 <!-- /sync:cursor-rule -->
 
+### Mobile layout
+
+<!-- sync:cursor-rule name="ui-mobile" globs="apps/web/**/*.{tsx,jsx,css,html}" -->
+The web app uses a hybrid shell: desktop left rail at `lg` (1024px)+, bottom nav below `lg`. Keep both themes correct on every breakpoint.
+
+**Breakpoints**
+
+- Phone: below `md` (768px) - map-first with bottom sheet panels (`MobilePanel`)
+- Tablet: `md` to `lg` - map-first with dismissible left overlay drawer (`MobilePanel`)
+- Desktop: `lg+` - persistent side panel + left icon rail (current desktop layout)
+
+**Shell**
+
+- Left icon rail: `hidden lg:flex` only.
+- Bottom tab bar: `lg:hidden`, with `safe-area-inset` padding (`safe-pb` / env).
+- Main content below `lg` must reserve space for the bottom nav (`mobile-nav-pad` or equivalent).
+- Prefer `100dvh` / `h-dvh` over `100vh` / `h-screen` for app shells.
+- Viewport meta must include `viewport-fit=cover`.
+
+**Map + list views** (Hotspots, Day View)
+
+- Do not use fixed side-by-side panels (`w-80` / `w-96` + map) below `lg` without a mobile path.
+- Below `lg`, use [`MobilePanel`](apps/web/src/components/MobilePanel.tsx) (sheet on phone, drawer on tablet) over a full-bleed map.
+- Use [`useBreakpoint`](apps/web/src/hooks/useBreakpoint.ts) when CSS alone cannot choose sheet vs drawer.
+
+**Do not**
+
+- Ship a desktop-only split layout that crushes or hides the map on phones/tablets.
+- Ignore safe-area / dynamic viewport on new shell chrome.
+<!-- /sync:cursor-rule -->
+
+### Touch targets
+
+<!-- sync:cursor-rule name="ui-touch" globs="apps/web/**/*.{tsx,jsx}" -->
+Interactive controls must be usable with a finger.
+
+**Hit targets**
+
+- Aim for at least **44×44px** (`h-11 w-11` or equivalent padding) for icon buttons, toggles, and primary taps.
+- Sort chips, filter toggles, and nav items on mobile need comfortable tap area, not `p-1` / `py-0.5` alone.
+
+**No hover-only essential UI**
+
+- Do not gate details, actions, or primary content behind `group-hover` / hover-only tooltips.
+- Selected/expanded/tap states must expose the same information on touch devices.
+- Prefer click/tap expand (or a visible selected panel) over hover cards for primary details.
+
+Hover styles for polish are fine; hover as the only way to reach content is not.
+<!-- /sync:cursor-rule -->
+
+### Map responsiveness
+
+<!-- sync:cursor-rule name="ui-map-responsive" globs="apps/web/src/components/Map.tsx,apps/web/src/components/**/*View.tsx" -->
+Leaflet maps must stay usable when the container is small or resizes.
+
+**Controls and legend**
+
+- Avoid overlapping control clusters on narrow viewports (e.g. heatmap card vs `LayersControl`).
+- Keep legends and overlays compact below `lg` (smaller max-height / max-width).
+- Do not assume a persistent desktop sidebar in map copy or layout hints.
+
+**Size invalidation**
+
+- Call `invalidateSize` (or bump `sizeSignal` on [`Map.tsx`](apps/web/src/components/Map.tsx)) when panels open/close, sheets resize, or breakpoints change.
+- Listen for window resize as a baseline.
+
+**Do not**
+
+- Leave the map at a stale size after a mobile panel animation.
+- Cover most of a phone map with an oversized legend or stacked top-right controls.
+<!-- /sync:cursor-rule -->
+
 ## npm scripts (`<domain>:<action>`)
 
 Public scripts live on the **root** `package.json`. Name every new script `domain:action` (e.g. `db:migrate`, `test:unit`, `rules:sync`).
@@ -214,3 +286,5 @@ See [docs/SECURITY.md](docs/SECURITY.md).
 - Do not enable public signup (`disableSignUp` stays true); invite via `auth:create-user`.
 - Do not restructure the monorepo or rename business domains unless explicitly asked.
 - Do not reflect request `Origin` into CORS allow headers; do not skip session checks on new `/api/*` routes.
+- Do not reintroduce desktop-only side-by-side map layouts without a `<lg` mobile path (sheet/drawer).
+- Do not gate essential UI on hover only; touch must reach the same content.

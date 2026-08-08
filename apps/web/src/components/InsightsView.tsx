@@ -85,8 +85,8 @@ export default function InsightsView() {
   };
 
   return (
-    <div className="h-full bg-surface overflow-y-auto">
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="h-full overflow-y-auto bg-surface">
+      <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
         <h2 className="text-xl font-semibold flex items-center gap-2">
           <TrendingUp size={22} className="text-accent" />
           Insights

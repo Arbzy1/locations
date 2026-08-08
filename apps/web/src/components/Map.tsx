@@ -268,6 +268,24 @@ function DirectionArrows({ positions, color }: { positions: [number, number][]; 
 export interface MapHandle {
   flyToVisit: (visit: Visit) => void;
   flyToActivity: (activity: Activity) => void;
+  invalidateSize: () => void;
+}
+
+/** Refit Leaflet after panel/shell size changes. */
+function MapSizeInvalidator({ signal }: { signal?: number }) {
+  const map = useMap();
+  useEffect(() => {
+    const id = window.setTimeout(() => map.invalidateSize({ animate: false }), 50);
+    return () => window.clearTimeout(id);
+  }, [map, signal]);
+
+  useEffect(() => {
+    const onResize = () => map.invalidateSize({ animate: false });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [map]);
+
+  return null;
 }
 
 interface MapProps {
@@ -286,6 +304,8 @@ interface MapProps {
   center?: [number, number];
   zoom?: number;
   focusTarget?: MapFocusTarget | null;
+  /** Increment to force Leaflet invalidateSize (panel open/close, breakpoint). */
+  sizeSignal?: number;
 }
 
 const MapView = forwardRef<MapHandle, MapProps>(function MapView({
@@ -300,9 +320,21 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
   center = [51.45, -0.2],
   zoom = 10,
   focusTarget = null,
+  sizeSignal = 0,
 }, ref) {
   const mapRef = useRef<L.Map | null>(null);
   const { theme } = useTheme();
+  const [isNarrow, setIsNarrow] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const update = () => setIsNarrow(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   useImperativeHandle(ref, () => ({
     flyToVisit: (v: Visit) => {
@@ -317,6 +349,9 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
         const midLon = (a.start_lon + a.end_lon) / 2;
         mapRef.current?.flyTo([midLat, midLon], 14, { duration: 0.8 });
       }
+    },
+    invalidateSize: () => {
+      mapRef.current?.invalidateSize({ animate: false });
     },
   }));
 
@@ -343,7 +378,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
 
   return (
     <MapContainer center={center} zoom={zoom} className="w-full h-full" ref={mapRef} zoomControl={true}>
-      <LayersControl key={theme} position="topright">
+      <LayersControl key={`${theme}-${isNarrow ? 'n' : 'w'}`} position={isNarrow ? 'bottomleft' : 'topright'}>
         <LayersControl.BaseLayer checked={theme === 'dark'} name="Dark">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; OSM &copy; CARTO' />
         </LayersControl.BaseLayer>
@@ -358,6 +393,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
         </LayersControl.BaseLayer>
       </LayersControl>
 
+      <MapSizeInvalidator signal={sizeSignal} />
       <FitBounds bounds={getBounds()} />
       <FlyToTarget target={focusTarget} />
       {heatmapPoints && heatmapPoints.length > 0 && (
@@ -470,13 +506,13 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
                 {roadSummary && <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: '0.8em' }}>via {roadSummary}</div>}
                 <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 6, color: 'var(--text-muted)', fontSize: '0.8em' }}>
                   {a.is_rail
-                    ? <><strong>Rail journey</strong> — Google detected you were on a {(MODE_LABELS[a.mode] || a.mode).toLowerCase()}.
+                    ? <><strong>Rail journey</strong>: Google detected you were on a {(MODE_LABELS[a.mode] || a.mode).toLowerCase()}.
                       The arc shows the approximate path between stations. Exact rail route not available.</>
                     : a.mode === 'flying'
-                      ? <><strong>Straight line</strong> — Flight path shown as direct line.</>
+                      ? <><strong>Straight line</strong>: Flight path shown as direct line.</>
                       : hasOsrm
-                        ? <><strong>Predicted route</strong> — Road-level route predicted via OSRM. Actual route may differ.</>
-                        : <><strong>Straight line</strong> — Route could not be determined from road data.</>}
+                        ? <><strong>Predicted route</strong>: Road-level route predicted via OSRM. Actual route may differ.</>
+                        : <><strong>Straight line</strong>: Route could not be determined from road data.</>}
                 </div>
                 <div style={{ color: '#484f58', fontSize: '0.75em', marginTop: 4 }}>
                   From: {a.start_lat.toFixed(5)}, {a.start_lon.toFixed(5)} &rarr; To: {a.end_lat.toFixed(5)}, {a.end_lon.toFixed(5)}
@@ -619,10 +655,15 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
         })}
       </ZoomLayer>
 
-      {/* Journey legend â€” hidden when zoomed out to reduce clutter */}
+      {/* Journey legend: hidden when zoomed out to reduce clutter */}
       {totalJourneys > 0 && (
         <ZoomLayer minZoom={13}>
-          <JourneyLegend activities={sortedActivities} totalJourneys={totalJourneys} visits={visits} />
+          <JourneyLegend
+            activities={sortedActivities}
+            totalJourneys={totalJourneys}
+            visits={visits}
+            compact={isNarrow}
+          />
         </ZoomLayer>
       )}
     </MapContainer>
@@ -631,7 +672,17 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
 
 export default MapView;
 
-function JourneyLegend({ activities, totalJourneys, visits }: { activities: Activity[]; totalJourneys: number; visits: Visit[] }) {
+function JourneyLegend({
+  activities,
+  totalJourneys,
+  visits,
+  compact,
+}: {
+  activities: Activity[];
+  totalJourneys: number;
+  visits: Visit[];
+  compact: boolean;
+}) {
   const map = useMap();
   const legendRef = useRef<L.Control | null>(null);
   const { theme } = useTheme();
@@ -640,7 +691,10 @@ function JourneyLegend({ activities, totalJourneys, visits }: { activities: Acti
     const legend = new L.Control({ position: 'bottomright' });
     legend.onAdd = () => {
       const div = L.DomUtil.create('div', 'journey-legend');
-      div.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--text);max-height:260px;overflow-y:auto;min-width:160px;';
+      const maxH = compact ? 'min(140px, 28vh)' : '260px';
+      const minW = compact ? '0' : '160px';
+      const maxW = compact ? 'min(12rem, 42vw)' : 'none';
+      div.style.cssText = `background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:${compact ? '6px 8px' : '8px 10px'};font-size:${compact ? '10px' : '11px'};color:var(--text);max-height:${maxH};overflow-y:auto;min-width:${minW};max-width:${maxW};`;
 
       let html = '<div style="font-weight:600;margin-bottom:6px;color:var(--text-muted);font-size:10px;">YOUR DAY</div>';
 
@@ -690,11 +744,13 @@ function JourneyLegend({ activities, totalJourneys, visits }: { activities: Acti
       });
 
       html += '<div style="border-top:1px solid var(--border);margin-top:6px;padding-top:4px;">';
-      [['\u2014', 'Car'], ['\u00b7 \u00b7 \u00b7', 'Walk'], ['\u2013 \u2013', 'Bus'], ['\u2013\u00b7\u2013', 'Train']].forEach(([sym, label]) => {
+      [['-', 'Car'], ['···', 'Walk'], ['--', 'Bus'], ['-·-', 'Train']].forEach(([sym, label]) => {
         html += `<span style="color:var(--text-muted);font-size:10px;margin-right:8px;">${sym} ${label}</span>`;
       });
       html += '</div>';
-      html += '<div style="color:var(--text-muted);opacity:0.7;font-size:9px;margin-top:4px;">Zoom in further for on-map labels. Click the timeline to focus the map.</div>';
+      html += compact
+        ? '<div style="color:var(--text-muted);opacity:0.7;font-size:9px;margin-top:4px;">Tap the timeline to focus the map.</div>'
+        : '<div style="color:var(--text-muted);opacity:0.7;font-size:9px;margin-top:4px;">Zoom in further for on-map labels. Click the timeline to focus the map.</div>';
 
       div.innerHTML = html;
       L.DomEvent.disableClickPropagation(div);
@@ -708,7 +764,7 @@ function JourneyLegend({ activities, totalJourneys, visits }: { activities: Acti
       legend.remove();
       legendRef.current = null;
     };
-  }, [map, activities, totalJourneys, visits, theme]);
+  }, [map, activities, totalJourneys, visits, theme, compact]);
 
   return null;
 }

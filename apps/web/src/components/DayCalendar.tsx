@@ -104,11 +104,11 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
           type="button"
           onClick={() => canPrevMonth && setViewMonth((m) => subMonths(m, 1))}
           disabled={!canPrevMonth}
-          className="rounded border border-border p-1 transition-colors duration-ui-fast ease-ui hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
+          className="flex h-11 w-11 items-center justify-center rounded border border-border transition-colors duration-ui-fast ease-ui hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
           aria-label="Previous month"
           title="Show previous month"
         >
-          <ChevronLeft size={14} />
+          <ChevronLeft size={16} />
         </button>
         <div className="text-sm font-medium text-text">
           {format(viewMonth, 'MMMM yyyy')}
@@ -117,11 +117,11 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
           type="button"
           onClick={() => canNextMonth && setViewMonth((m) => addMonths(m, 1))}
           disabled={!canNextMonth}
-          className="rounded border border-border p-1 transition-colors duration-ui-fast ease-ui hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
+          className="flex h-11 w-11 items-center justify-center rounded border border-border transition-colors duration-ui-fast ease-ui hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30"
           aria-label="Next month"
           title="Show next month"
         >
-          <ChevronRight size={14} />
+          <ChevronRight size={16} />
         </button>
       </div>
 
