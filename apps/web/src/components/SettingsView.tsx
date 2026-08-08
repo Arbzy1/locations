@@ -302,19 +302,19 @@ export default function SettingsView() {
                     </button>
                   </form>
                 ) : (
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium text-text">{source.label}</div>
                       <div className="mt-0.5 text-xs text-text-muted">
                         {source.visitCount} visits · {source.activityCount} activities
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div className="flex shrink-0 flex-wrap items-center gap-1">
                       <button
                         type="button"
                         title="Re-upload Timeline JSON to replace this source"
                         onClick={() => beginReupload(source)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent transition-colors duration-ui-hover ease-ui hover:bg-accent/20"
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-medium text-accent transition-colors duration-ui-hover ease-ui hover:bg-accent/20"
                       >
                         <RefreshCw size={12} />
                         Re-upload
@@ -327,7 +327,7 @@ export default function SettingsView() {
                           setRenameId(source.id);
                           setRenameValue(source.label);
                         }}
-                        className="rounded p-1.5 text-text-muted transition-colors duration-ui-fast ease-ui hover:bg-bg hover:text-text"
+                        className="flex h-11 w-11 items-center justify-center rounded text-text-muted transition-colors duration-ui-fast ease-ui hover:bg-bg hover:text-text"
                       >
                         <Pencil size={14} />
                       </button>
@@ -336,7 +336,7 @@ export default function SettingsView() {
                         title="Delete this Timeline source and its data"
                         aria-label="Delete"
                         onClick={() => void onDelete(source)}
-                        className="rounded p-1.5 text-text-muted transition-colors duration-ui-fast ease-ui hover:bg-bg hover:text-red-400"
+                        className="flex h-11 w-11 items-center justify-center rounded text-text-muted transition-colors duration-ui-fast ease-ui hover:bg-bg hover:text-red-400"
                       >
                         <Trash2 size={14} />
                       </button>

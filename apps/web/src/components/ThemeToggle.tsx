@@ -15,7 +15,7 @@ export default function ThemeToggle({ className = '' }: Props) {
     <button
       type="button"
       onClick={toggleTheme}
-      className={`flex h-10 w-10 items-center justify-center rounded-lg text-text-muted transition-colors duration-ui-emphasis ease-ui hover:bg-bg/50 hover:text-text ${className}`}
+      className={`flex h-11 w-11 items-center justify-center rounded-lg text-text-muted transition-colors duration-ui-emphasis ease-ui hover:bg-bg/50 hover:text-text ${className}`}
       aria-label={label}
       title={label}
     >

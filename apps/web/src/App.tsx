@@ -23,6 +23,7 @@ import {
   LogOut,
   Settings,
   Upload,
+  MoreHorizontal,
 } from 'lucide-react';
 
 const queryClient = new QueryClient({
@@ -82,9 +83,44 @@ function EmptyDataState({ onOpenSettings }: { onOpenSettings: () => void }) {
   );
 }
 
+function NavTabButton({
+  tab,
+  active,
+  onSelect,
+  compact,
+}: {
+  tab: { id: TabId; label: string; icon: React.ReactNode };
+  active: boolean;
+  onSelect: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex items-center justify-center rounded-lg transition-colors duration-ui-emphasis ease-ui ${
+        compact
+          ? 'h-11 min-w-0 flex-1 flex-col gap-0.5 px-1 text-[10px]'
+          : 'h-11 w-11'
+      } ${
+        active
+          ? 'bg-accent/20 text-accent'
+          : 'text-text-muted hover:bg-bg/50 hover:text-text'
+      }`}
+      title={tab.label}
+      aria-label={tab.label}
+      aria-current={active ? 'page' : undefined}
+    >
+      {tab.icon}
+      {compact && <span className="truncate">{tab.label.split(' ')[0]}</span>}
+    </button>
+  );
+}
+
 function AppContent() {
   const [activeTab, setActiveTab] = useState<TabId>('hotspots');
   const [dayViewDate, setDayViewDate] = useState('');
+  const [moreOpen, setMoreOpen] = useState(false);
   const { data: routeProgress } = useRouteProgress();
   const { data: overview, isLoading: overviewLoading } = useOverview();
   const { data: importStatus } = useImportStatus({
@@ -94,6 +130,11 @@ function AppContent() {
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
 
   useDocumentTitle(`${TAB_LABELS[activeTab]} · Locations`);
+
+  const selectTab = (id: TabId) => {
+    setMoreOpen(false);
+    setActiveTab(id);
+  };
 
   const importing =
     importStatus?.latestJob?.status === 'pending' ||
@@ -109,13 +150,28 @@ function AppContent() {
     setActiveTab('day');
   };
 
+  const signOutButton = (
+    <button
+      type="button"
+      onClick={() => {
+        queryClient.clear();
+        void signOut();
+      }}
+      className="flex h-11 w-11 items-center justify-center rounded-lg text-text-muted transition-colors duration-ui-emphasis ease-ui hover:bg-bg/50 hover:text-text"
+      title={session?.user?.email ? `Sign out (${session.user.email})` : 'Sign out'}
+      aria-label="Sign out"
+    >
+      <LogOut size={16} />
+    </button>
+  );
+
   return (
-    <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-bg">
+    <div className="relative flex h-dvh w-screen flex-col overflow-hidden bg-bg safe-pt safe-px">
       {isDemo && (
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-accent/30 bg-accent/10 px-4 py-2 text-xs text-accent">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-accent/30 bg-accent/10 px-4 py-2 text-xs text-accent sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <span>
-            You’re viewing the <strong className="font-semibold">public demo</strong> with sample
-            places — not real personal history.
+            You&apos;re viewing the <strong className="font-semibold">public demo</strong> with
+            sample places - not real personal history.
           </span>
           <button
             type="button"
@@ -124,14 +180,15 @@ function AppContent() {
               queryClient.clear();
               void signOut();
             }}
-            className="shrink-0 rounded-md border border-accent/40 px-2 py-1 transition-colors duration-ui-hover ease-ui hover:bg-accent/20"
+            className="shrink-0 self-start rounded-md border border-accent/40 px-2 py-1.5 transition-colors duration-ui-hover ease-ui hover:bg-accent/20 sm:self-auto"
           >
             Exit demo
           </button>
         </div>
       )}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-surface py-4">
+        {/* Desktop left rail */}
+        <div className="hidden w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-surface py-4 lg:flex">
           <div
             className="mb-4 font-display text-lg font-bold tracking-tight text-accent"
             title="Locations"
@@ -140,28 +197,21 @@ function AppContent() {
           </div>
 
           {TABS.map((tab) => (
-            <button
+            <NavTabButton
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors duration-ui-emphasis ease-ui ${
-                activeTab === tab.id
-                  ? 'bg-accent/20 text-accent'
-                  : 'text-text-muted hover:bg-bg/50 hover:text-text'
-              }`}
-              title={tab.label}
-              aria-label={tab.label}
-            >
-              {tab.icon}
-            </button>
+              tab={tab}
+              active={activeTab === tab.id}
+              onSelect={() => selectTab(tab.id)}
+            />
           ))}
 
           <div className="mt-auto flex flex-col items-center gap-2">
-            <ThemeToggle />
+            <ThemeToggle className="h-11 w-11" />
             {!isDemo && (
               <button
                 type="button"
-                onClick={() => setActiveTab('settings')}
-                className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors duration-ui-emphasis ease-ui ${
+                onClick={() => selectTab('settings')}
+                className={`flex h-11 w-11 items-center justify-center rounded-lg transition-colors duration-ui-emphasis ease-ui ${
                   activeTab === 'settings'
                     ? 'bg-accent/20 text-accent'
                     : 'text-text-muted hover:bg-bg/50 hover:text-text'
@@ -177,48 +227,122 @@ function AppContent() {
                 <Loader2 size={16} className="animate-spin text-accent" />
               </div>
             )}
-            <button
-              onClick={() => {
-                queryClient.clear();
-                void signOut();
-              }}
-              className="flex h-10 w-10 items-center justify-center rounded-lg text-text-muted transition-colors duration-ui-emphasis ease-ui hover:bg-bg/50 hover:text-text"
-              title={session?.user?.email ? `Sign out (${session.user.email})` : 'Sign out'}
-              aria-label="Sign out"
-            >
-              <LogOut size={16} />
-            </button>
+            {signOutButton}
           </div>
         </div>
 
-        <div className="flex-1 overflow-hidden">
-          {activeTab === 'settings' && !isDemo ? (
-            <div key="settings" className="ui-enter h-full">
-              <SettingsView />
-            </div>
-          ) : overviewLoading && !isDemo ? (
-            <div className="flex h-full items-center justify-center text-text-muted">
-              <Loader2 className="animate-spin text-accent" size={24} />
-            </div>
-          ) : !hasData ? (
-            importing ? (
-              <div className="ui-enter flex h-full flex-col items-center justify-center gap-3 bg-bg text-text-muted">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-hidden mobile-nav-pad lg:pb-0">
+            {activeTab === 'settings' && !isDemo ? (
+              <div key="settings" className="ui-enter h-full">
+                <SettingsView />
+              </div>
+            ) : overviewLoading && !isDemo ? (
+              <div className="flex h-full items-center justify-center text-text-muted">
                 <Loader2 className="animate-spin text-accent" size={24} />
-                <p className="text-sm">Importing Timeline data…</p>
               </div>
+            ) : !hasData ? (
+              importing ? (
+                <div className="ui-enter flex h-full flex-col items-center justify-center gap-3 bg-bg text-text-muted">
+                  <Loader2 className="animate-spin text-accent" size={24} />
+                  <p className="text-sm">Importing Timeline data…</p>
+                </div>
+              ) : (
+                <div key="empty" className="ui-enter h-full">
+                  <EmptyDataState onOpenSettings={() => selectTab('settings')} />
+                </div>
+              )
             ) : (
-              <div key="empty" className="ui-enter h-full">
-                <EmptyDataState onOpenSettings={() => setActiveTab('settings')} />
+              <div key={activeTab} className="ui-enter h-full overflow-hidden">
+                {activeTab === 'hotspots' && <HotspotsView />}
+                {activeTab === 'day' && <DayView initialDate={dayViewDate} />}
+                {activeTab === 'trips' && <DayTripsView onSelectDate={handleSelectDate} />}
+                {activeTab === 'insights' && <InsightsView />}
               </div>
-            )
-          ) : (
-            <div key={activeTab} className="ui-enter h-full overflow-hidden">
-              {activeTab === 'hotspots' && <HotspotsView />}
-              {activeTab === 'day' && <DayView initialDate={dayViewDate} />}
-              {activeTab === 'trips' && <DayTripsView onSelectDate={handleSelectDate} />}
-              {activeTab === 'insights' && <InsightsView />}
+            )}
+          </div>
+
+          {/* Mobile / tablet bottom nav */}
+          <nav
+            className="absolute inset-x-0 bottom-0 z-[1200] flex items-stretch gap-0.5 border-t border-border bg-surface/95 px-1 pt-1 backdrop-blur-sm safe-pb lg:hidden"
+            aria-label="Main"
+          >
+            {TABS.map((tab) => (
+              <NavTabButton
+                key={tab.id}
+                tab={tab}
+                active={activeTab === tab.id}
+                onSelect={() => selectTab(tab.id)}
+                compact
+              />
+            ))}
+            <div className="relative flex flex-1">
+              <button
+                type="button"
+                title="More options"
+                aria-label="More options"
+                aria-expanded={moreOpen}
+                onClick={() => setMoreOpen((v) => !v)}
+                className={`flex h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[10px] transition-colors duration-ui-emphasis ease-ui ${
+                  moreOpen || activeTab === 'settings'
+                    ? 'bg-accent/20 text-accent'
+                    : 'text-text-muted hover:bg-bg/50 hover:text-text'
+                }`}
+              >
+                <MoreHorizontal size={18} />
+                <span>More</span>
+              </button>
+              {moreOpen && (
+                <div className="absolute bottom-full right-0 mb-2 flex min-w-[10rem] flex-col gap-1 rounded-lg border border-border bg-surface p-2 shadow-lg ui-enter">
+                  <div className="flex items-center justify-between gap-2 px-1">
+                    <span className="text-xs text-text-muted">Theme</span>
+                    <ThemeToggle className="h-11 w-11" />
+                  </div>
+                  {!isDemo && (
+                    <button
+                      type="button"
+                      title="Settings"
+                      aria-label="Settings"
+                      onClick={() => selectTab('settings')}
+                      className={`flex h-11 items-center gap-2 rounded-lg px-3 text-sm transition-colors duration-ui-hover ease-ui ${
+                        activeTab === 'settings'
+                          ? 'bg-accent/20 text-accent'
+                          : 'text-text-muted hover:bg-bg/50 hover:text-text'
+                      }`}
+                    >
+                      <Settings size={16} />
+                      Settings
+                    </button>
+                  )}
+                  {routeProgress && routeProgress.percent < 100 && (
+                    <div
+                      className="flex h-11 items-center gap-2 px-3 text-xs text-text-muted"
+                      title={`Routes cached: ${routeProgress.percent}%`}
+                    >
+                      <Loader2 size={14} className="animate-spin text-accent" />
+                      Routes {routeProgress.percent}%
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      queryClient.clear();
+                      void signOut();
+                    }}
+                    className="flex h-11 items-center gap-2 rounded-lg px-3 text-sm text-text-muted transition-colors duration-ui-hover ease-ui hover:bg-bg/50 hover:text-text"
+                    title={
+                      session?.user?.email ? `Sign out (${session.user.email})` : 'Sign out'
+                    }
+                    aria-label="Sign out"
+                  >
+                    <LogOut size={16} />
+                    Sign out
+                  </button>
+                </div>
+              )}
             </div>
-          )}
+          </nav>
         </div>
       </div>
     </div>
@@ -238,7 +362,7 @@ function AuthGate() {
 
   if (isPending) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-bg text-text-muted">
+      <div className="flex h-dvh w-screen items-center justify-center bg-bg text-text-muted">
         <Loader2 className="animate-spin text-accent" size={24} />
       </div>
     );
