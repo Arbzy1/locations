@@ -12,7 +12,7 @@ const CSP = [
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://server.arcgisonline.com https://*.maptiler.com https://*.mapbox.com",
-  "connect-src 'self' https://*.maptiler.com https://*.mapbox.com https://router.project-osrm.org https://nominatim.openstreetmap.org",
+  "connect-src 'self' https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://server.arcgisonline.com https://*.maptiler.com https://*.mapbox.com https://router.project-osrm.org https://nominatim.openstreetmap.org",
   "font-src 'self' data:",
   "worker-src 'self' blob:",
   "object-src 'none'",

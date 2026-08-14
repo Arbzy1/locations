@@ -30,7 +30,7 @@ import PasswordInput from './PasswordInput';
 export default function SettingsView() {
   const { data: session, refetch: refetchSession } = useSession();
   const { data: sources, isLoading } = useSources();
-  const { unit, timezone, entitlements } = useUnits();
+  const { unit, timezone, monthlyRecapEnabled, entitlements } = useUnits();
   const [poll, setPoll] = useState(false);
   const { data: importStatus } = useImportStatus({ poll });
   const invalidate = useInvalidateLocationQueries();
@@ -45,6 +45,7 @@ export default function SettingsView() {
   const [renameValue, setRenameValue] = useState('');
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(unit);
   const [tz, setTz] = useState(timezone ?? '');
+  const [recapEnabled, setRecapEnabled] = useState(monthlyRecapEnabled);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteSource, setDeleteSource] = useState<DataSourceInfo | null>(null);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -62,7 +63,8 @@ export default function SettingsView() {
   useEffect(() => {
     setDistanceUnit(unit);
     setTz(timezone ?? '');
-  }, [unit, timezone]);
+    setRecapEnabled(monthlyRecapEnabled);
+  }, [unit, timezone, monthlyRecapEnabled]);
 
   useEffect(() => {
     if (user?.name) setDisplayName(user.name);
@@ -164,7 +166,11 @@ export default function SettingsView() {
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ distanceUnit, timezone: tz || null }),
+      body: JSON.stringify({
+        distanceUnit,
+        timezone: tz || null,
+        monthlyRecapEnabled: recapEnabled,
+      }),
     });
     if (!res.ok) {
       setError('Could not save preferences');
@@ -540,6 +546,20 @@ export default function SettingsView() {
             placeholder="Europe/London"
             className="mb-3"
           />
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <Label htmlFor="monthly-recap">Monthly recap email</Label>
+              <p className="text-xs text-text-muted">
+                Opt in to a counts-only recap after each month. No place names or coordinates.
+              </p>
+            </div>
+            <Switch
+              id="monthly-recap"
+              title="Enable monthly recap email"
+              checked={recapEnabled}
+              onCheckedChange={setRecapEnabled}
+            />
+          </div>
           <Button type="button" title="Save display preferences" onClick={() => void savePrefs()}>
             Save preferences
           </Button>

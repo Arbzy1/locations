@@ -13,6 +13,7 @@ export const EMAIL_KINDS = [
   "subscription_past_due",
   "subscription_canceled",
   "account_deleted",
+  "monthly_recap",
 ] as const;
 
 export type EmailKind = (typeof EMAIL_KINDS)[number];
@@ -23,4 +24,7 @@ export type EmailVars = {
   visitCount?: number;
   activityCount?: number;
   siteUrl?: string;
+  daysTracked?: number;
+  distanceLabel?: string;
+  monthLabel?: string;
 };

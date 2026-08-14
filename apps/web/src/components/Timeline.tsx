@@ -1,7 +1,14 @@
 import { useState } from 'react';
-import type { Visit, Activity } from '../types';
+import type { Visit, Activity, Connector } from '../types';
 import { MODE_LABELS } from '../types';
 import { formatTime, formatDuration, formatDistance } from '../utils/format';
+import { useUnits } from '../lib/units';
+import {
+  continuesPastDate,
+  startedBeforeDate,
+  UNKNOWN_MOVEMENT_HINT,
+} from '../lib/dayPlayback';
+import { cn } from '../lib/utils';
 import {
   MapPin,
   Footprints,
@@ -155,32 +162,129 @@ function buildDaySummary(visits: Visit[], activities: Activity[]): string {
   return `${first} → ${uniqueMiddle.slice(0, 3).join(' → ')}${uniqueMiddle.length > 3 ? ` → ...` : ''} → ${last}`;
 }
 
-type TimelineEvent =
+type CoreEvent =
   | { type: 'visit'; data: Visit; time: string; endTime: string }
   | { type: 'activity'; data: Activity; time: string; endTime: string; journeyIndex: number };
+
+type TimelineEvent =
+  | CoreEvent
+  | {
+      type: 'unknown';
+      time: string;
+      endTime: string;
+      gapMinutes: number;
+      connector?: Connector;
+    };
 
 interface Props {
   visits: Visit[];
   activities: Activity[];
+  connectors?: Connector[];
+  date: string;
+  /** Playback clock (ms). Highlights the matching row. */
+  activeTime?: number | null;
   /** Focus the map on this visit (e.g. place name / stop). */
   onVisitClick?: (visit: Visit) => void;
   /** Focus the map on this journey segment (walking, car, etc.). */
   onActivityClick?: (activity: Activity) => void;
+  onUnknownClick?: (connector: Connector | null, startIso: string) => void;
 }
+
+function isActiveRow(startIso: string, endIso: string, activeTime?: number | null): boolean {
+  if (activeTime == null) return false;
+  const start = Date.parse(startIso);
+  const end = Date.parse(endIso);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
+  return activeTime >= start && activeTime < end;
+}
+
+function matchConnector(
+  connectors: Connector[],
+  fromIso: string,
+  toIso: string,
+  used: Set<Connector>,
+): Connector | undefined {
+  const exact = connectors.find(
+    (c) => !used.has(c) && c.from_time === fromIso && c.to_time === toIso,
+  );
+  if (exact) return exact;
+  const fromMs = Date.parse(fromIso);
+  const toMs = Date.parse(toIso);
+  return connectors.find((c) => {
+    if (used.has(c)) return false;
+    return Math.abs(Date.parse(c.from_time) - fromMs) < 2000 && Math.abs(Date.parse(c.to_time) - toMs) < 2000;
+  });
+}
+
+function buildTimelineEvents(
+  visits: Visit[],
+  sortedActivities: Activity[],
+  connectors: Connector[],
+): TimelineEvent[] {
+  const core: CoreEvent[] = [
+    ...visits.map((v) => ({ type: 'visit' as const, data: v, time: v.start, endTime: v.end })),
+    ...sortedActivities.map((a, i) => ({
+      type: 'activity' as const,
+      data: a,
+      time: a.start,
+      endTime: a.end,
+      journeyIndex: i,
+    })),
+  ].sort((a, b) => a.time.localeCompare(b.time));
+
+  const used = new Set<Connector>();
+  const events: TimelineEvent[] = [];
+  for (let i = 0; i < core.length; i++) {
+    const event = core[i];
+    events.push(event);
+    if (i === core.length - 1) break;
+    const next = core[i + 1];
+    const connector = matchConnector(connectors, event.endTime, next.time, used);
+    const gapMinutes = Math.max(
+      0,
+      (Date.parse(next.time) - Date.parse(event.endTime)) / 60000,
+    );
+    if (connector) {
+      used.add(connector);
+      events.push({
+        type: 'unknown',
+        time: connector.from_time,
+        endTime: connector.to_time,
+        gapMinutes: Math.max(
+          gapMinutes,
+          (Date.parse(connector.to_time) - Date.parse(connector.from_time)) / 60000,
+        ),
+        connector,
+      });
+    } else if (gapMinutes > 5) {
+      events.push({
+        type: 'unknown',
+        time: event.endTime,
+        endTime: next.time,
+        gapMinutes,
+      });
+    }
+  }
+  return events;
+}
+
+const rowBtnClass =
+  'flex w-full text-left rounded-lg -mx-1 px-1 transition-colors duration-ui-emphasis ease-ui cursor-pointer hover:bg-bg/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40';
 
 export default function Timeline({
   visits,
   activities,
+  connectors = [],
+  date,
+  activeTime = null,
   onVisitClick,
   onActivityClick,
+  onUnknownClick,
 }: Props) {
+  const { timezone, unit } = useUnits();
   const sortedActivities = [...activities].sort((a, b) => a.start.localeCompare(b.start));
   const totalJourneys = sortedActivities.length;
-
-  const events: TimelineEvent[] = [
-    ...visits.map((v) => ({ type: 'visit' as const, data: v, time: v.start, endTime: v.end })),
-    ...sortedActivities.map((a, i) => ({ type: 'activity' as const, data: a, time: a.start, endTime: a.end, journeyIndex: i })),
-  ].sort((a, b) => a.time.localeCompare(b.time));
+  const events = buildTimelineEvents(visits, sortedActivities, connectors);
 
   if (events.length === 0) {
     return <div className="text-text-muted text-sm p-4">No events for this day.</div>;
@@ -202,18 +306,13 @@ export default function Timeline({
       <div className="relative">
         {events.map((event, i) => {
           const isLast = i === events.length - 1;
+          const active = isActiveRow(event.time, event.endTime, activeTime);
 
           if (event.type === 'visit') {
             const v = event.data;
             const stopNum = v.stop_number || i + 1;
-
-            // Calculate time gap to next event
-            let gapMinutes = 0;
-            if (!isLast) {
-              const nextTime = new Date(events[i + 1].time).getTime();
-              const thisEnd = new Date(v.end).getTime();
-              gapMinutes = Math.max(0, (nextTime - thisEnd) / 60000);
-            }
+            const fromYesterday = startedBeforeDate(v.start, date);
+            const overnight = continuesPastDate(v.end, date);
 
             return (
               <div key={`v-${i}`} className="relative">
@@ -222,29 +321,25 @@ export default function Timeline({
                   onClick={() => onVisitClick?.(v)}
                   disabled={!onVisitClick}
                   title={onVisitClick ? 'Show this visit on the map' : 'Visit details'}
-                  className={
-                    onVisitClick
-                      ? 'flex w-full text-left rounded-lg -mx-1 px-1 pb-0 transition-colors duration-ui-emphasis ease-ui cursor-pointer hover:bg-bg/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40'
-                      : 'flex w-full text-left'
-                  }
+                  className={cn(
+                    onVisitClick ? rowBtnClass : 'flex w-full text-left',
+                    'pb-0',
+                    active && 'bg-accent/10 ring-1 ring-accent/30',
+                  )}
                 >
-                  {/* Left: time + spine */}
                   <div className="w-16 shrink-0 flex flex-col items-center">
                     <div className="text-[10px] text-text-muted font-mono mb-1 w-full text-center">
-                      {formatTime(v.start)}
+                      {formatTime(v.start, timezone)}
                     </div>
-                    {/* Stop dot */}
                     <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold text-white z-10"
                       style={{ background: '#bc8cff', border: '2.5px solid rgba(255,255,255,0.4)' }}>
                       {stopNum}
                     </div>
-                    {/* Spine continues down */}
                     {!isLast && (
                       <div className="w-0.5 flex-1 bg-border/60 min-h-2" />
                     )}
                   </div>
 
-                  {/* Right: content */}
                   <div className="flex-1 min-w-0 pb-2 pt-5">
                     <div className="text-sm font-semibold text-text leading-tight">
                       {v.place_name || v.cluster}
@@ -256,7 +351,6 @@ export default function Timeline({
                       <div className="text-[11px] text-accent">{v.semantic_type}</div>
                     )}
 
-                    {/* Stay bar — visual representation of time */}
                     <div className="flex items-center gap-2 mt-1.5">
                       <div className="h-5 rounded flex items-center px-2 gap-1"
                         style={{
@@ -270,9 +364,18 @@ export default function Timeline({
                         </span>
                       </div>
                       <span className="text-[10px] text-text-muted">
-                        {formatTime(v.start)} – {formatTime(v.end)}
+                        {formatTime(v.start, timezone)} - {formatTime(v.end, timezone)}
                       </span>
                     </div>
+                    {(fromYesterday || overnight) && (
+                      <div className="mt-1 text-[10px] text-accent">
+                        {fromYesterday && <span>Started yesterday</span>}
+                        {fromYesterday && overnight ? ' · ' : null}
+                        {overnight && (
+                          <span>Continues past midnight (left {formatTime(v.end, timezone)})</span>
+                        )}
+                      </div>
+                    )}
                     {(v.arrived_by || v.departed_by) && (
                       <div className="mt-1 text-[10px] text-text-muted">
                         {v.arrived_by && (
@@ -286,86 +389,114 @@ export default function Timeline({
                     )}
                   </div>
                 </button>
-
-                {/* Time gap indicator (if gap > 5 min between this and next) */}
-                {gapMinutes > 5 && !isLast && (
-                  <div className="flex">
-                    <div className="w-16 flex justify-center">
-                      <div className="w-0.5 bg-border/30 h-4" style={{ borderLeft: '2px dashed #30363d44' }} />
-                    </div>
-                    <div className="text-[10px] text-text-muted/40 italic pt-1">
-                      {formatDuration(gapMinutes)} gap
-                    </div>
-                  </div>
-                )}
               </div>
             );
-          } else {
-            const a = event.data;
-            const color = getJourneyColor(event.journeyIndex, totalJourneys);
-            const mainRoads = a.steps?.filter((s) => s.name && s.distance_meters > 100).slice(0, 3).map((s) => s.name).filter(Boolean);
+          }
 
+          if (event.type === 'unknown') {
+            const c = event.connector;
+            const clickable = Boolean(onUnknownClick);
             return (
-              <div key={`a-${i}`} className="relative">
+              <div key={`u-${i}`} className="relative">
                 <button
                   type="button"
-                  onClick={() => onActivityClick?.(a)}
-                  disabled={!onActivityClick}
-                  title={onActivityClick ? 'Show this journey on the map' : 'Journey details'}
-                  className={
-                    onActivityClick
-                      ? 'flex w-full text-left rounded-lg -mx-1 px-1 transition-colors duration-ui-emphasis ease-ui cursor-pointer hover:bg-bg/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40'
-                      : 'flex w-full text-left'
-                  }
+                  onClick={() => onUnknownClick?.(c ?? null, event.time)}
+                  disabled={!clickable}
+                  title={clickable ? 'Show unknown movement on the map' : 'Unknown movement'}
+                  className={cn(
+                    clickable ? rowBtnClass : 'flex w-full text-left',
+                    active && 'bg-accent/10 ring-1 ring-accent/30',
+                  )}
                 >
-                  {/* Left: spine with journey indicator */}
                   <div className="w-16 shrink-0 flex flex-col items-center">
-                    <div className="text-[10px] font-mono w-full text-center" style={{ color: `${color}99` }}>
-                      {formatTime(a.start)}
+                    <div className="text-[10px] text-text-muted font-mono w-full text-center">
+                      {formatTime(event.time, timezone)}
                     </div>
-                    {/* Journey connector line */}
                     <div className="flex-1 flex flex-col items-center py-0.5">
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 z-10"
-                        style={{ backgroundColor: `${color}25`, border: `2px solid ${color}66` }}>
-                        <span style={{ color }}>{MODE_ICONS[a.mode] || <CircleDot size={10} />}</span>
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-dashed border-text-muted/50 text-text-muted z-10">
+                        <HelpCircle size={10} />
                       </div>
-                      {/* Colored journey line */}
-                      <div className="w-0.5 flex-1 min-h-3" style={{ backgroundColor: `${color}55` }} />
-                      <ArrowDown size={10} style={{ color: `${color}77` }} className="shrink-0 -mt-1" />
+                      {!isLast && (
+                        <div className="w-0.5 flex-1 min-h-3 border-l-2 border-dashed border-text-muted/30" />
+                      )}
                     </div>
                   </div>
-
-                  {/* Right: compact journey info */}
                   <div className="flex-1 min-w-0 py-1.5">
-                    <div className="rounded-lg px-2.5 py-1.5" style={{ backgroundColor: `${color}08`, borderLeft: `3px solid ${color}55` }}>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold" style={{ color }}>
-                          {a.from_place && a.to_place
-                            ? `${a.from_place} → ${a.to_place}`
-                            : MODE_LABELS[a.mode] || a.mode}
-                        </span>
+                    <div className="rounded-lg border border-dashed border-border px-2.5 py-1.5">
+                      <div className="text-xs font-semibold text-text-muted">Unknown movement</div>
+                      <div className="mt-0.5 text-[11px] text-text-muted">
+                        {formatDuration(event.gapMinutes)}
+                        {c && c.distance_meters > 0 ? ` · ${formatDistance(c.distance_meters, unit)}` : ''}
                       </div>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-[10px] px-1 rounded font-mono"
-                          style={{ backgroundColor: `${color}20`, color }}>
-                          {MODE_LABELS[a.mode] || a.mode}
-                        </span>
-                        <span className="text-[11px] text-text-muted">
-                          {formatDistance(a.distance_meters)} · {formatDuration(a.duration_minutes)}
-                        </span>
+                      <div className="mt-1 text-[10px] leading-snug text-text-muted/70">
+                        {UNKNOWN_MOVEMENT_HINT}
                       </div>
-                      {mainRoads && mainRoads.length > 0 && (
-                        <div className="text-[10px] text-text-muted/50 mt-0.5 truncate">
-                          via {mainRoads.join(' → ')}
-                        </div>
-                      )}
-                      <ActivitySteps activity={a} />
                     </div>
                   </div>
                 </button>
               </div>
             );
           }
+
+          const a = event.data;
+          const color = getJourneyColor(event.journeyIndex, totalJourneys);
+          const mainRoads = a.steps?.filter((s) => s.name && s.distance_meters > 100).slice(0, 3).map((s) => s.name).filter(Boolean);
+
+          return (
+            <div key={`a-${i}`} className="relative">
+              <button
+                type="button"
+                onClick={() => onActivityClick?.(a)}
+                disabled={!onActivityClick}
+                title={onActivityClick ? 'Show this journey on the map' : 'Journey details'}
+                className={cn(
+                  onActivityClick ? rowBtnClass : 'flex w-full text-left',
+                  active && 'bg-accent/10 ring-1 ring-accent/30',
+                )}
+              >
+                <div className="w-16 shrink-0 flex flex-col items-center">
+                  <div className="text-[10px] font-mono w-full text-center" style={{ color: `${color}99` }}>
+                    {formatTime(a.start, timezone)}
+                  </div>
+                  <div className="flex-1 flex flex-col items-center py-0.5">
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 z-10"
+                      style={{ backgroundColor: `${color}25`, border: `2px solid ${color}66` }}>
+                      <span style={{ color }}>{MODE_ICONS[a.mode] || <CircleDot size={10} />}</span>
+                    </div>
+                    <div className="w-0.5 flex-1 min-h-3" style={{ backgroundColor: `${color}55` }} />
+                    <ArrowDown size={10} style={{ color: `${color}77` }} className="shrink-0 -mt-1" />
+                  </div>
+                </div>
+
+                <div className="flex-1 min-w-0 py-1.5">
+                  <div className="rounded-lg px-2.5 py-1.5" style={{ backgroundColor: `${color}08`, borderLeft: `3px solid ${color}55` }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold" style={{ color }}>
+                        {a.from_place && a.to_place
+                          ? `${a.from_place} → ${a.to_place}`
+                          : MODE_LABELS[a.mode] || a.mode}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="text-[10px] px-1 rounded font-mono"
+                        style={{ backgroundColor: `${color}20`, color }}>
+                        {MODE_LABELS[a.mode] || a.mode}
+                      </span>
+                      <span className="text-[11px] text-text-muted">
+                        {formatDistance(a.distance_meters, unit)} · {formatDuration(a.duration_minutes)}
+                      </span>
+                    </div>
+                    {mainRoads && mainRoads.length > 0 && (
+                      <div className="text-[10px] text-text-muted/50 mt-0.5 truncate">
+                        via {mainRoads.join(' → ')}
+                      </div>
+                    )}
+                    <ActivitySteps activity={a} />
+                  </div>
+                </div>
+              </button>
+            </div>
+          );
         })}
 
         {/* End marker */}

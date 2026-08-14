@@ -12,8 +12,10 @@ import {
   subMonths,
 } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { MODE_COLORS, MODE_LABELS } from '../types';
 import type { DaySummary } from '../types';
+import { Button } from './ui/button';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
@@ -110,9 +112,9 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
         >
           <ChevronLeft size={16} />
         </button>
-        <div className="text-sm font-medium text-text">
-          {format(viewMonth, 'MMMM yyyy')}
-        </div>
+        <Button variant="ghost" asChild title="Open month page" className="h-11 px-3 text-sm font-medium text-text">
+          <Link to={`/month/${format(viewMonth, 'yyyy-MM')}`}>{format(viewMonth, 'MMMM yyyy')}</Link>
+        </Button>
         <button
           type="button"
           onClick={() => canNextMonth && setViewMonth((m) => addMonths(m, 1))}

@@ -53,9 +53,23 @@ import {
   wipeTenantData,
   emailForTenant,
   getImportJob,
+  listClusters,
+  getCluster,
+  listClusterVisits,
+  getCorridorDetail,
+  getTripRange,
+  listNamedTrips,
+  upsertNamedTrip,
+  deleteNamedTrip,
+  listChapters,
+  upsertChapter,
+  deleteChapter,
+  listImportJobs,
+  staffTenantStats,
 } from "./services";
 import { billingEmailKind, sendProductEmail } from "./email";
 import { parsePlaceColor, sanitizePlaceTags } from "./place-labels";
+import { runMonthlyRecaps } from "./monthly-recap";
 
 const MAX_UPLOAD_BYTES = 80 * 1024 * 1024;
 
@@ -162,6 +176,10 @@ app.use("/api/*", async (c, next) => {
   return next();
 });
 
+function isErrorResult(value: unknown): value is { error: string } {
+  return typeof value === "object" && value !== null && "error" in value;
+}
+
 function isUploadFile(value: unknown): value is File {
   return (
     !!value &&
@@ -183,6 +201,7 @@ app.get("/api/config", (c) =>
       "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     mapAttr: c.env.MAP_TILE_ATTR || "&copy; OSM &copy; CARTO",
     signupDisabled: c.env.DISABLE_SIGNUP === "true",
+    globe: c.env.GLOBE_ENABLED !== "false",
   }),
 );
 
@@ -321,7 +340,54 @@ app.get("/api/analytics/areas", async (c) => {
 app.get("/api/analytics/year-in-review", async (c) => {
   const db = getDb(c.env);
   const tenant = c.get("tenant");
+  const yearRaw = c.req.query("year");
+  const year = yearRaw ? Number(yearRaw) : undefined;
+  if (year && Number.isFinite(year)) {
+    const keyed = await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, `year-in-review:${year}`));
+    if (keyed && !Array.isArray(keyed)) return c.json(keyed);
+    const yearly = (await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "yearly"))) as {
+      year: number;
+      distance_miles: number;
+      visits: number;
+      activities: number;
+      days_tracked: number;
+      modes: Record<string, number>;
+    }[];
+    const monthly = (await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "monthly"))) as {
+      month: string;
+      top_places: [string, number][];
+    }[];
+    const y = Array.isArray(yearly) ? yearly.find((row) => row.year === year) : undefined;
+    if (!y) return c.json(null);
+    const places = new Map<string, number>();
+    for (const m of Array.isArray(monthly) ? monthly : []) {
+      if (!m.month.startsWith(String(year))) continue;
+      for (const [name, n] of m.top_places ?? []) places.set(name, (places.get(name) ?? 0) + n);
+    }
+    return c.json({
+      ...y,
+      top_places: [...places.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8),
+    });
+  }
   return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "year-in-review")));
+});
+
+app.get("/api/analytics/flights", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "flights")));
+});
+
+app.get("/api/analytics/train-hops", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "train-hops")));
+});
+
+app.get("/api/analytics/low-movement", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "low-movement")));
 });
 
 app.get("/api/route-progress", async (c) => {
@@ -520,12 +586,239 @@ app.get("/api/search", async (c) => {
   return c.json(await withTenant(db, tenant, (tx) => searchTenant(tx, tenant, q)));
 });
 
+app.get("/api/clusters", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const limit = Number(c.req.query("limit") ?? 50);
+  return c.json(
+    await withTenant(db, tenant, (tx) =>
+      listClusters(tx, tenant, {
+        q: c.req.query("q") ?? undefined,
+        sort: c.req.query("sort") ?? undefined,
+        limit: Number.isFinite(limit) ? limit : 50,
+        cursor: c.req.query("cursor") ?? undefined,
+      }),
+    ),
+  );
+});
+
+app.get("/api/clusters/:key/visits", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const key = decodeURIComponent(c.req.param("key"));
+  return c.json(
+    await withTenant(db, tenant, (tx) =>
+      listClusterVisits(tx, tenant, key, {
+        from: c.req.query("from") ?? undefined,
+        to: c.req.query("to") ?? undefined,
+        limit: Number(c.req.query("limit") ?? 40),
+        cursor: c.req.query("cursor") ?? undefined,
+      }),
+    ),
+  );
+});
+
+app.get("/api/clusters/:key", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const key = decodeURIComponent(c.req.param("key"));
+  const row = await withTenant(db, tenant, (tx) => getCluster(tx, tenant, key));
+  if (!row) return c.json({ error: "Not found" }, 404);
+  return c.json(row);
+});
+
+app.get("/api/corridors/:a/:b", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const a = decodeURIComponent(c.req.param("a"));
+  const b = decodeURIComponent(c.req.param("b"));
+  const row = await withTenant(db, tenant, (tx) => getCorridorDetail(tx, tenant, a, b));
+  if (!row) return c.json({ error: "Not found" }, 404);
+  return c.json(row);
+});
+
+app.get("/api/trip-range/:start/:end", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    getTripRange(tx, tenant, c.req.param("start"), c.req.param("end")),
+  );
+  if (isErrorResult(result)) {
+    return c.json(result, 400);
+  }
+  return c.json(result);
+});
+
+app.get("/api/trips", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  return c.json(await withTenant(db, tenant, (tx) => listNamedTrips(tx, tenant)));
+});
+
+app.post("/api/trips", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const body = (await c.req.json().catch(() => null)) as {
+    name?: string;
+    start?: string;
+    end?: string;
+    dates?: string[];
+  } | null;
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    upsertNamedTrip(tx, tenant, {
+      name: body?.name ?? "",
+      start: body?.start ?? "",
+      end: body?.end ?? "",
+      dates: body?.dates,
+    }),
+  );
+  if (isErrorResult(result)) {
+    return c.json(result, result.error === "Not found" ? 404 : 400);
+  }
+  return c.json(result);
+});
+
+app.patch("/api/trips/:id", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const body = (await c.req.json().catch(() => null)) as {
+    name?: string;
+    start?: string;
+    end?: string;
+    dates?: string[];
+  } | null;
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    upsertNamedTrip(tx, tenant, {
+      id: c.req.param("id"),
+      name: body?.name ?? "",
+      start: body?.start ?? "",
+      end: body?.end ?? "",
+      dates: body?.dates,
+    }),
+  );
+  if (isErrorResult(result)) {
+    return c.json(result, result.error === "Not found" ? 404 : 400);
+  }
+  return c.json(result);
+});
+
+app.delete("/api/trips/:id", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) => deleteNamedTrip(tx, tenant, c.req.param("id")));
+  if (isErrorResult(result)) return c.json(result, 404);
+  return c.json(result);
+});
+
+app.get("/api/chapters", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  return c.json(await withTenant(db, tenant, (tx) => listChapters(tx, tenant)));
+});
+
+app.post("/api/chapters", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const body = (await c.req.json().catch(() => null)) as {
+    name?: string;
+    start?: string;
+    end?: string;
+  } | null;
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    upsertChapter(tx, tenant, {
+      name: body?.name ?? "",
+      start: body?.start ?? "",
+      end: body?.end ?? "",
+    }),
+  );
+  if (isErrorResult(result)) {
+    return c.json(result, result.error === "Not found" ? 404 : 400);
+  }
+  return c.json(result);
+});
+
+app.patch("/api/chapters/:id", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const body = (await c.req.json().catch(() => null)) as {
+    name?: string;
+    start?: string;
+    end?: string;
+  } | null;
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    upsertChapter(tx, tenant, {
+      id: c.req.param("id"),
+      name: body?.name ?? "",
+      start: body?.start ?? "",
+      end: body?.end ?? "",
+    }),
+  );
+  if (isErrorResult(result)) {
+    return c.json(result, result.error === "Not found" ? 404 : 400);
+  }
+  return c.json(result);
+});
+
+app.delete("/api/chapters/:id", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) => deleteChapter(tx, tenant, c.req.param("id")));
+  if (isErrorResult(result)) return c.json(result, 404);
+  return c.json(result);
+});
+
+app.get("/api/import/jobs", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  return c.json(await withTenant(db, tenant, (tx) => listImportJobs(tx, tenant)));
+});
+
+app.get("/api/admin/stats", async (c) => {
+  if (!isStaffRole(c.get("user")?.role)) return c.json({ error: "Not found" }, 404);
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  return c.json(await withTenant(db, tenant, (tx) => staffTenantStats(tx, tenant)));
+});
+
+for (const key of [
+  "away-nights",
+  "commute",
+  "firsts",
+  "data-health",
+  "moving",
+  "anomaly",
+  "streaks",
+  "place-deltas",
+  "lapsed-places",
+  "hour-of-week",
+  "personality",
+] as const) {
+  app.get(`/api/analytics/${key}`, async (c) => {
+    const db = getDb(c.env);
+    const tenant = c.get("tenant");
+    return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, key)));
+  });
+}
+
 app.patch("/api/account/settings", async (c) => {
   const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
   const body = (await c.req.json().catch(() => null)) as {
     distanceUnit?: "mi" | "km";
     timezone?: string | null;
+    monthlyRecapEnabled?: boolean;
   } | null;
   const db = getDb(c.env);
   const tenant = c.get("tenant");
@@ -533,6 +826,7 @@ app.patch("/api/account/settings", async (c) => {
     upsertUserSettings(tx, tenant, {
       distanceUnit: body?.distanceUnit,
       timezone: body?.timezone,
+      monthlyRecapEnabled: body?.monthlyRecapEnabled,
     }),
   );
   return c.json(settings);
@@ -847,5 +1141,8 @@ export default {
       await runImportJob(env, msg.body);
       msg.ack();
     }
+  },
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    await runMonthlyRecaps(env);
   },
 };

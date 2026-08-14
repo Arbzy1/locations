@@ -4,15 +4,20 @@ import type { DistanceUnit } from '../utils/format';
 import { useSession } from './auth';
 
 type MeResponse = {
-  settings?: { distanceUnit?: DistanceUnit; timezone?: string | null };
+  settings?: {
+    distanceUnit?: DistanceUnit;
+    timezone?: string | null;
+    monthlyRecapEnabled?: boolean;
+  };
   entitlements?: { entitled: boolean; status: string; graceUntil: string | null };
 };
 
 const UnitsContext = createContext<{
   unit: DistanceUnit;
   timezone: string | null;
+  monthlyRecapEnabled: boolean;
   entitlements: MeResponse['entitlements'] | undefined;
-}>({ unit: 'mi', timezone: null, entitlements: undefined });
+}>({ unit: 'mi', timezone: null, monthlyRecapEnabled: false, entitlements: undefined });
 
 export function UnitsProvider({ children }: { children: ReactNode }) {
   const { data: session } = useSession();
@@ -31,6 +36,7 @@ export function UnitsProvider({ children }: { children: ReactNode }) {
     () => ({
       unit: data?.settings?.distanceUnit === 'km' ? ('km' as const) : ('mi' as const),
       timezone: data?.settings?.timezone ?? null,
+      monthlyRecapEnabled: Boolean(data?.settings?.monthlyRecapEnabled),
       entitlements: data?.entitlements,
     }),
     [data],

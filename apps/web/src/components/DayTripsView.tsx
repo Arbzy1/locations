@@ -1,9 +1,11 @@
 import { useState, useMemo, useRef } from 'react';
-import { useDayTrips } from '../hooks/useApi';
+import { useDayTrips, useMultiDayTrips, usePlaceLabels } from '../hooks/useApi';
 import { formatDate, formatMilesOrKm } from '../utils/format';
 import { useUnits } from '../lib/units';
 import { MODE_COLORS, MODE_LABELS } from '../types';
 import type { DayTrip } from '../types';
+import { multiDayTripLabel } from '../lib/trips';
+import { Button } from './ui/button';
 import {
   Compass,
   Filter,
@@ -63,6 +65,9 @@ function SortBtn({
 
 export default function DayTripsView({ onSelectDate }: Props) {
   const { data: trips, isLoading } = useDayTrips();
+  const { data: multiDay } = useMultiDayTrips();
+  const { data: labels } = usePlaceLabels();
+  const { unit } = useUnits();
   const [yearFilter, setYearFilter] = useState<string>('all');
   const [minRange, setMinRange] = useState(5);
   const [modeFilter, setModeFilter] = useState<Set<string>>(new Set());
@@ -119,6 +124,24 @@ export default function DayTripsView({ onSelectDate }: Props) {
     });
     return list;
   }, [filtered, sortField, sortDir]);
+
+  const hiddenKeys = useMemo(
+    () => new Set((labels ?? []).filter((l) => l.hidden).map((l) => l.placeKey)),
+    [labels],
+  );
+
+  const namedMultiDay = useMemo(() => {
+    if (!Array.isArray(multiDay)) return [];
+    return multiDay
+      .filter((t) => {
+        if (yearFilter === 'all') return true;
+        const dates = t.dates?.length ? t.dates : [t.start, t.end];
+        return dates.some((d) => d.startsWith(yearFilter));
+      })
+      .map((t) => ({ trip: t, name: multiDayTripLabel(t, hiddenKeys) }))
+      .filter((row): row is { trip: (typeof multiDay)[number]; name: string } => Boolean(row.name))
+      .slice(0, 20);
+  }, [multiDay, yearFilter, hiddenKeys]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -268,6 +291,51 @@ export default function DayTripsView({ onSelectDate }: Props) {
           <div className="p-4 text-text-muted text-sm">Loading day trips...</div>
         ) : (
           <div className="p-2 space-y-1.5">
+            {namedMultiDay.length > 0 && (
+              <div className="mb-3 space-y-1.5">
+                <h3 className="px-2 pt-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  Multi-day trips
+                </h3>
+                {namedMultiDay.map(({ trip: t, name }) => (
+                  <Button
+                    key={`${t.start}-${t.end}`}
+                    type="button"
+                    variant="ghost"
+                    title={`Open Day View for ${t.start}`}
+                    className="h-auto min-h-11 w-full justify-start whitespace-normal rounded-lg border border-border bg-bg px-3 py-3 text-left font-normal"
+                    onClick={() => onSelectDate(t.start)}
+                  >
+                    <span className="flex min-w-0 flex-col gap-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate font-semibold text-text">{name}</span>
+                        <span className="shrink-0 font-mono text-sm text-accent">
+                          {formatMilesOrKm(t.total_miles, unit)}
+                        </span>
+                      </span>
+                      <span className="text-xs text-text-muted">
+                        {formatDate(t.start)} to {formatDate(t.end)}
+                      </span>
+                      {t.modes && t.modes.length > 0 && (
+                        <span className="flex flex-wrap gap-1">
+                          {t.modes.map((mode) => (
+                            <span
+                              key={mode}
+                              className="rounded-full border px-2 py-0.5 text-[11px]"
+                              style={{
+                                color: MODE_COLORS[mode] || 'var(--text-muted)',
+                                borderColor: MODE_COLORS[mode] || 'var(--border)',
+                              }}
+                            >
+                              {MODE_LABELS[mode] || mode}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </span>
+                  </Button>
+                ))}
+              </div>
+            )}
             {sorted.map((trip) => (
               <TripCard
                 key={trip.date}

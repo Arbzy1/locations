@@ -9,8 +9,10 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { LegalFooter } from './LegalFooter';
 import { enterMotion } from '../lib/motion';
+import { usePublicConfig } from '../hooks/useApi';
 
 export default function SignupPage() {
+  const { data: config } = usePublicConfig();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -55,6 +57,26 @@ export default function SignupPage() {
       setLoading(false);
     }
   };
+
+  if (config?.signupDisabled) {
+    return (
+      <div className="relative flex h-dvh w-screen items-center justify-center bg-bg safe-pt safe-pb safe-px">
+        <div className="absolute right-4 top-4">
+          <ThemeToggle />
+        </div>
+        <motion.div {...enterMotion} className="w-full max-w-md rounded-2xl border border-border bg-surface p-6">
+          <h1 className="font-display text-2xl font-semibold text-text">Signup is closed</h1>
+          <p className="mt-2 text-sm text-text-muted">
+            New accounts are not open right now. If you already have access, sign in. Operators can still invite users.
+          </p>
+          <Button asChild className="mt-4 w-full" title="Go to sign in">
+            <Link to="/">Sign in</Link>
+          </Button>
+          <LegalFooter />
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex h-dvh w-screen items-center justify-center bg-bg safe-pt safe-pb safe-px">

@@ -21,6 +21,7 @@ export type Env = {
   OSRM_BASE?: string;
   GEOCODE_BASE?: string;
   MAP_TILE_ATTR?: string;
+  GLOBE_ENABLED?: string;
 };
 
 export type ImportQueueMessage = {

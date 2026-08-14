@@ -15,6 +15,7 @@ import 'leaflet/dist/leaflet.css';
 import type { Visit, Activity, HeatmapPoint, Connector, MapFocusTarget, HotspotLabel } from '../types';
 import { MODE_LABELS } from '../types';
 import { formatTime, formatDistance, formatDuration } from '../utils/format';
+import { continuesPastDate, startedBeforeDate, UNKNOWN_MOVEMENT_HINT } from '../lib/dayPlayback';
 import { useTheme } from '../lib/theme';
 import { useQuery } from '@tanstack/react-query';
 import { useUnits } from '../lib/units';
@@ -216,12 +217,62 @@ function HeatmapLayer({ points, enabled, opacity, intensity }: HeatmapLayerProps
   return null;
 }
 
-function FitBounds({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
+function FitBounds({
+  bounds,
+  disabled,
+}: {
+  bounds: L.LatLngBoundsExpression | null;
+  disabled?: boolean;
+}) {
   const map = useMap();
   useEffect(() => {
-    if (bounds) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
-  }, [map, bounds]);
+    if (disabled || !bounds) return;
+    map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+  }, [map, bounds, disabled]);
   return null;
+}
+
+function PlayheadLayer({
+  playhead,
+  follow,
+}: {
+  playhead: { lat: number; lon: number } | null;
+  follow: boolean;
+}) {
+  const map = useMap();
+  const lat = playhead?.lat;
+  const lon = playhead?.lon;
+
+  useEffect(() => {
+    if (lat == null || lon == null || !follow) return;
+    const reduce =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    map.panTo([lat, lon], { animate: !reduce, duration: reduce ? 0 : 0.2 });
+  }, [map, lat, lon, follow]);
+
+  if (lat == null || lon == null) return null;
+
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="
+      width:16px;height:16px;border-radius:50%;
+      background:var(--accent);border:2px solid var(--on-accent);
+      box-shadow:0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent);
+      pointer-events:none;
+    "></div>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
+
+  return (
+    <Marker
+      position={[lat, lon]}
+      icon={icon}
+      interactive={false}
+      zIndexOffset={1000}
+    />
+  );
 }
 
 /** Hook to track current zoom level */
@@ -313,6 +364,12 @@ interface MapProps {
   focusTarget?: MapFocusTarget | null;
   /** Increment to force Leaflet invalidateSize (panel open/close, breakpoint). */
   sizeSignal?: number;
+  /** Estimated playback position along the day's path. */
+  playhead?: { lat: number; lon: number } | null;
+  /** Pan the map to the playhead (scrub / play). */
+  followPlayhead?: boolean;
+  /** Selected Day View calendar date (YYYY-MM-DD) for overnight copy. */
+  dayDate?: string;
 }
 
 const MapView = forwardRef<MapHandle, MapProps>(function MapView({
@@ -332,6 +389,9 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
   zoom = 2,
   focusTarget = null,
   sizeSignal = 0,
+  playhead = null,
+  followPlayhead = false,
+  dayDate,
 }, ref) {
   const mapRef = useRef<L.Map | null>(null);
   const { theme } = useTheme();
@@ -432,8 +492,9 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
       )}
 
       <MapSizeInvalidator signal={sizeSignal} />
-      <FitBounds bounds={getBounds()} />
+      <FitBounds bounds={getBounds()} disabled={followPlayhead} />
       <FlyToTarget target={focusTarget} />
+      <PlayheadLayer playhead={playhead} follow={followPlayhead} />
       {heatmapPoints && heatmapPoints.length > 0 && (
         <HeatmapLayer
           points={heatmapPoints}
@@ -544,7 +605,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
             pathOptions={{ color: '#484f58', weight: 2, opacity: 0.5, dashArray: '3 6' }}>
             <Popup>
               <div className="text-sm" style={{ maxWidth: 280 }}>
-                <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--text-muted)' }}>Gap between events</div>
+                <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--text-muted)' }}>Unknown movement</div>
                 <div style={{ marginBottom: 4 }}>
                   {c.from_label || 'Previous event'} &rarr; {c.to_label || 'Next event'}
                 </div>
@@ -552,8 +613,11 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
                 <div>{formatDistance(c.distance_meters, unit)}</div>
                 <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 6, color: 'var(--text-muted)', fontSize: '0.8em' }}>
                   {isStraight
-                    ? <><strong>Straight line</strong> â€” Gap under 300m, direct connection between GPS coordinates.</>
-                    : <><strong>Predicted route</strong> â€” Gap over 300m. Route predicted via OSRM road mapping.</>}
+                    ? <><strong>Straight line</strong>: gap under 300m, direct connection between recorded points.</>
+                    : <><strong>Predicted route</strong>: gap over 300m. Path inferred via road mapping.</>}
+                </div>
+                <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: '0.8em' }}>
+                  {UNKNOWN_MOVEMENT_HINT}
                 </div>
               </div>
             </Popup>
@@ -618,6 +682,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
         const totalStops = v.total_stops || visits.length;
         const arrivedBy = v.arrived_by ? MODE_LABELS[v.arrived_by] || v.arrived_by : null;
         const departedBy = v.departed_by ? MODE_LABELS[v.departed_by] || v.departed_by : null;
+        const fromYesterday = dayDate ? startedBeforeDate(v.start, dayDate) : false;
+        const overnight = dayDate ? continuesPastDate(v.end, dayDate) : false;
 
         return (
           <CircleMarker key={`visit-${i}`} center={[v.lat, v.lon]} radius={7}
@@ -640,6 +706,12 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
                   <div>Arrived: <strong>{formatTime(v.start)}</strong></div>
                   <div>Left: <strong>{formatTime(v.end)}</strong></div>
                   <div style={{ color: '#bc8cff', fontWeight: 600, marginTop: 2 }}>Stayed {formatDuration(v.duration_minutes)}</div>
+                  {(fromYesterday || overnight) && (
+                    <div style={{ color: 'var(--accent)', marginTop: 4, fontSize: '0.85em' }}>
+                      {fromYesterday && <div>Started yesterday</div>}
+                      {overnight && <div>Continues past midnight</div>}
+                    </div>
+                  )}
                 </div>
                 {(arrivedBy || departedBy) && (
                   <div style={{ borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 6, color: 'var(--text-muted)', fontSize: '0.85em' }}>

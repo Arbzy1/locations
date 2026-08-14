@@ -163,5 +163,19 @@ export function renderEmail(
         `We removed your account, Timeline rows, uploads, sessions, and billing customer. This cannot be undone.`,
         vars,
       );
+    case "monthly_recap": {
+      const days = vars.daysTracked ?? 0;
+      const journeys = vars.activityCount ?? 0;
+      const month = vars.monthLabel ?? "last month";
+      const distance = vars.distanceLabel ?? "";
+      const origin = site(vars);
+      const link = cta(`${origin}/insights`, "Open Insights");
+      return wrap(
+        `Your Locations recap for ${month}`,
+        `<p>You tracked ${days} days and ${journeys} journeys in ${escapeHtml(month)}.${distance ? ` Distance: ${escapeHtml(distance)}.` : ""}</p>${link.html}`,
+        `You tracked ${days} days and ${journeys} journeys in ${month}.${distance ? ` Distance: ${distance}.` : ""}\n${link.text}`,
+        vars,
+      );
+    }
   }
 }

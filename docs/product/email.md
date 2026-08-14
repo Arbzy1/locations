@@ -22,16 +22,17 @@ Stripe still sends its own receipts. We send a separate billing *status* message
 | `subscription_past_due` | Status `past_due` or `unpaid` |
 | `subscription_canceled` | Status `canceled` |
 | `account_deleted` | Last send before account wipe |
+| `monthly_recap` | Opt-in counts-only recap for the previous month (days, journeys, distance label). Off by default. |
 
-Messages never include coordinates, place names, day routes, or Takeout payloads. Import mail uses counts only.
+Messages never include coordinates, place names, day routes, or Takeout payloads. Import mail uses counts only. The monthly recap is the same: counts and a generic Insights link, never "you visited X".
 
 ## What we do not send
 
-Marketing, newsletters, year-in-review mail, "you visited X", or magic links that open a specific day or map.
+Marketing, newsletters, year-in-review mail, "you visited X", or magic links that open a specific day or map. The opt-in monthly recap is product mail, not a digest of places.
 
 ## Opt-out
 
-These messages are transactional (sign-in, security, import, billing, deletion). There is no unsubscribe. Delete the account to stop them.
+These messages are transactional (sign-in, security, import, billing, deletion). There is no unsubscribe for those. The monthly recap is **opt-in** in Settings and stays off until you enable it. Delete the account to stop all mail.
 
 ## Operator setup
 

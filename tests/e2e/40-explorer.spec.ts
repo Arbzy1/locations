@@ -1,7 +1,12 @@
-import { test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 test.describe("40 explorer", () => {
-  test.skip("hotspots/day/trips/insights after login", async () => {
-    // Requires DEMO_EMAIL in the running API. Health + login cover the public path.
+  test("catalog place directory requires sign in", async ({ page }) => {
+    await page.goto("/places");
+    await expect(page.locator('input[type="email"]')).toBeVisible({ timeout: 15_000 });
+  });
+
+  test.skip("directory -> place -> day after login", async () => {
+    // Needs a signed-in tenant with Timeline data. Health + login cover the public path.
   });
 });

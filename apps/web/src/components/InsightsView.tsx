@@ -10,6 +10,10 @@ import {
   useMultiDayTrips,
   usePlaceLabels,
   useHeatmap,
+  useFlights,
+  useTrainHops,
+  useLowMovementDays,
+  useStreaks,
 } from '../hooks/useApi';
 import StatCard from './StatCard';
 import MapView from './Map';
@@ -17,6 +21,13 @@ import { Button } from './ui/button';
 import { MODE_COLORS, MODE_LABELS } from '../types';
 import { formatMilesOrKm } from '../utils/format';
 import { useUnits } from '../lib/units';
+import { formatFunFact, isGridCluster, multiDayTripLabel } from '../lib/trips';
+import { corridorPath, placePath, tripPath } from '../lib/paths';
+import { downloadElementPng, downloadTextFile, insightsCsv } from '../lib/insights-export';
+import { InsightsStory } from './InsightsStory';
+import { isStreaks } from '../lib/year-review';
+import { Link } from 'react-router-dom';
+import type { FlightSummary } from '../types';
 import { useTheme } from '../lib/theme';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -40,6 +51,8 @@ import {
   Globe,
   Zap,
   ArrowLeftRight,
+  Plane,
+  TrainFront,
 } from 'lucide-react';
 
 function useChartColors() {
@@ -66,8 +79,12 @@ export default function InsightsView() {
   const { data: corridors } = useCorridors();
   const { data: homeWork } = useHomeWork();
   const { data: yearReview } = useYearInReview();
+  const { data: streaksRaw } = useStreaks();
   const { data: areas } = useAreas();
   const { data: multiDay } = useMultiDayTrips();
+  const { data: flights } = useFlights();
+  const { data: trainHops } = useTrainHops();
+  const { data: lowMovement } = useLowMovementDays();
   const { data: labels } = usePlaceLabels();
   const { data: heatmapPoints } = useHeatmap();
   const { unit } = useUnits();
@@ -135,6 +152,43 @@ export default function InsightsView() {
     return lines;
   }, [visibleCorridors, coordByName]);
 
+  const namedTrips = useMemo(() => {
+    if (!Array.isArray(multiDay)) return [];
+    return multiDay
+      .map((t) => ({ trip: t, name: multiDayTripLabel(t, hiddenKeys) }))
+      .filter((row): row is { trip: typeof multiDay[number]; name: string } => Boolean(row.name))
+      .slice(0, 20);
+  }, [multiDay, hiddenKeys]);
+
+  const flightSummary = useMemo((): FlightSummary | null => {
+    if (!flights || Array.isArray(flights)) return null;
+    if (flights.tagged <= 0 && flights.guessed <= 0) return null;
+    return flights;
+  }, [flights]);
+
+  const visibleTrainHops = useMemo(
+    () =>
+      (Array.isArray(trainHops) ? trainHops : []).filter(
+        (h) =>
+          !hiddenKeys.has(h.from) &&
+          !hiddenKeys.has(h.to) &&
+          !isGridCluster(h.from) &&
+          !isGridCluster(h.to),
+      ),
+    [trainHops, hiddenKeys],
+  );
+
+  const visibleLowMovement = useMemo(
+    () =>
+      (Array.isArray(lowMovement) ? lowMovement : [])
+        .map((d) => ({
+          ...d,
+          clusters: d.clusters.filter((c) => !hiddenKeys.has(c) && !isGridCluster(c)),
+        }))
+        .filter((d) => d.clusters.length > 0),
+    [lowMovement, hiddenKeys],
+  );
+
   useEffect(() => {
     setMapSize((n) => n + 1);
   }, [areaMarkers.length, corridorLines.length]);
@@ -169,11 +223,41 @@ export default function InsightsView() {
 
   return (
     <div className="h-full overflow-y-auto bg-surface">
-      <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <TrendingUp size={22} className="text-accent" />
-          Insights
-        </h2>
+      <div id="insights-export" className="mx-auto max-w-5xl space-y-6 bg-surface p-4 sm:p-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="flex items-center gap-2 text-xl font-semibold">
+            <TrendingUp size={22} className="text-accent" />
+            Insights
+          </h2>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              title="Download Insights as CSV"
+              onClick={() => {
+                const streaks = isStreaks(streaksRaw) ? streaksRaw : null;
+                const csv = insightsCsv(yearly, monthly, facts, streaks, {}, unit);
+                const day = new Date().toISOString().slice(0, 10);
+                downloadTextFile(`locations-insights-${day}.csv`, csv, 'text/csv');
+              }}
+            >
+              CSV
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              title="Download a private PNG of Insights"
+              onClick={() =>
+                void downloadElementPng(
+                  'insights-export',
+                  `locations-insights-${new Date().toISOString().slice(0, 10)}.png`,
+                )
+              }
+            >
+              PNG
+            </Button>
+          </div>
+        </div>
 
         {/* Overview cards */}
         {overview && (
@@ -226,7 +310,7 @@ export default function InsightsView() {
                 <Tooltip
                   contentStyle={tooltipStyle}
                   formatter={(value) => [
-                    `${Math.round(Number(value ?? 0))} mi`,
+                    formatMilesOrKm(Number(value ?? 0), unit),
                     'Distance',
                   ]}
                 />
@@ -299,24 +383,32 @@ export default function InsightsView() {
               </h3>
               <div className="space-y-2">
                 {visibleCorridors.slice(0, 10).map((c, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-text truncate">
-                        {c.from} ↔ {c.to}
+                  <Button
+                    key={i}
+                    variant="ghost"
+                    asChild
+                    title={`Open corridor ${c.from} to ${c.to}`}
+                    className="h-auto min-h-11 w-full justify-start px-1 font-normal"
+                  >
+                    <Link to={corridorPath(c.from, c.to)}>
+                      <div className="flex w-full items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-xs text-text">
+                            {c.from} ↔ {c.to}
+                          </div>
+                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface">
+                            <div
+                              className="h-full rounded-full bg-accent"
+                              style={{
+                                width: `${(c.count / visibleCorridors[0].count) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <span className="shrink-0 font-mono text-xs text-text-muted">{c.count}</span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-surface overflow-hidden mt-1">
-                        <div
-                          className="h-full rounded-full bg-accent"
-                          style={{
-                            width: `${(c.count / visibleCorridors[0].count) * 100}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <span className="text-xs text-text-muted font-mono shrink-0">
-                      {c.count}
-                    </span>
-                  </div>
+                    </Link>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -335,6 +427,8 @@ export default function InsightsView() {
                   <tr className="text-text-muted text-xs border-b border-border">
                     <th className="text-left p-2">Year</th>
                     <th className="text-right p-2">Distance</th>
+                    <th className="text-right p-2">Driving</th>
+                    <th className="text-right p-2">Transit</th>
                     <th className="text-right p-2">Visits</th>
                     <th className="text-right p-2">Journeys</th>
                     <th className="text-right p-2">Days</th>
@@ -350,6 +444,12 @@ export default function InsightsView() {
                       <td className="p-2 text-right text-accent">
                         {formatMilesOrKm(y.distance_miles, unit)}
                       </td>
+                      <td className="p-2 text-right text-text-muted">
+                        {y.drive_miles != null ? formatMilesOrKm(y.drive_miles, unit) : '-'}
+                      </td>
+                      <td className="p-2 text-right text-text-muted">
+                        {y.transit_miles != null ? formatMilesOrKm(y.transit_miles, unit) : '-'}
+                      </td>
                       <td className="p-2 text-right">{y.visits.toLocaleString()}</td>
                       <td className="p-2 text-right">
                         {y.activities.toLocaleString()}
@@ -363,14 +463,34 @@ export default function InsightsView() {
           </div>
         )}
 
+        <InsightsStory yearly={yearly} monthly={monthly} hiddenKeys={hiddenKeys} chart={chart} />
+
         {yearReview && yearReview.year && (
           <div className="rounded-lg border border-border bg-bg p-4">
-            <h3 className="mb-3 text-sm font-semibold text-text-muted">Year in review · {yearReview.year}</h3>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold text-text-muted">
+                Year in review · {yearReview.year}
+              </h3>
+              <Button
+                type="button"
+                asChild
+                title={`Open ${yearReview.year} review`}
+                className="ml-auto h-11"
+              >
+                <Link to={`/review/${yearReview.year}`}>Open {yearReview.year} review</Link>
+              </Button>
+            </div>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <StatCard label="Distance" value={formatMilesOrKm(yearReview.distance_miles, unit)} />
               <StatCard label="Visits" value={yearReview.visits.toLocaleString()} />
               <StatCard label="Journeys" value={yearReview.activities.toLocaleString()} />
               <StatCard label="Days" value={String(yearReview.days_tracked)} />
+              {yearReview.drive_miles != null && (
+                <StatCard label="Driving" value={formatMilesOrKm(yearReview.drive_miles, unit)} />
+              )}
+              {yearReview.transit_miles != null && (
+                <StatCard label="Transit" value={formatMilesOrKm(yearReview.transit_miles, unit)} />
+              )}
             </div>
             {yearReview.top_places?.some(([name]) => !hiddenKeys.has(name)) && (
               <div className="mt-4">
@@ -413,7 +533,14 @@ export default function InsightsView() {
           <div className="rounded-lg border border-border bg-bg p-4">
             <h3 className="mb-3 text-sm font-semibold text-text-muted">Home and work (guessed)</h3>
             <p className="text-sm text-text">
-              Home: {homeWork.home?.cluster ?? 'unknown'}
+              Home:{' '}
+              {homeWork.home ? (
+                <Link className="text-accent" to={placePath(homeWork.home.cluster)} title="Open home guess">
+                  {homeWork.home.cluster}
+                </Link>
+              ) : (
+                'unknown'
+              )}
               {homeWork.home ? ` (${homeWork.home.visits} overnight visits)` : ''}
             </p>
             <p className="mt-1 text-sm text-text">
@@ -454,20 +581,110 @@ export default function InsightsView() {
           </div>
         )}
 
-        {Array.isArray(multiDay) && multiDay.length > 0 && (
+        {namedTrips.length > 0 && (
           <div className="rounded-lg border border-border bg-bg p-4">
             <h3 className="mb-3 text-sm font-semibold text-text-muted">Multi-day trips</h3>
             <ul className="space-y-1 text-sm">
-              {multiDay.slice(0, 12).map((t) => (
+              {namedTrips.slice(0, 12).map(({ trip: t, name }) => (
                 <li key={`${t.start}-${t.end}`}>
                   <Button
                     type="button"
                     variant="ghost"
-                    title={`Open Day View for ${t.start}`}
+                    title={`Open trip ${t.start} to ${t.end}`}
                     className="h-auto min-h-11 w-full justify-start whitespace-normal px-2 py-2 text-left font-normal"
-                    onClick={() => void navigate(`/day/${t.start}`)}
+                    onClick={() => void navigate(tripPath(t.start, t.end))}
                   >
-                    {t.start} to {t.end} · {formatMilesOrKm(t.total_miles, unit)} · {t.clusters.slice(0, 4).join(', ')}
+                    <span className="flex min-w-0 flex-col gap-1">
+                      <span className="font-medium text-text">{name}</span>
+                      <span className="text-text-muted">
+                        {t.start} to {t.end} · {formatMilesOrKm(t.total_miles, unit)}
+                      </span>
+                      {t.modes && t.modes.length > 0 && (
+                        <span className="flex flex-wrap gap-1">
+                          {t.modes.map((mode) => (
+                            <span
+                              key={mode}
+                              className="rounded-full border px-2 py-0.5 text-[11px]"
+                              style={{
+                                color: MODE_COLORS[mode] || 'var(--text-muted)',
+                                borderColor: MODE_COLORS[mode] || 'var(--border)',
+                              }}
+                            >
+                              {MODE_LABELS[mode] || mode}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </span>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {flightSummary && (
+          <div className="rounded-lg border border-border bg-bg p-4">
+            <h3 className="mb-2 text-sm font-semibold text-text-muted flex items-center gap-2">
+              <Plane size={14} />
+              Flights
+            </h3>
+            <p className="text-sm text-text">
+              {flightSummary.tagged} tagged as flying
+              {flightSummary.taggedMiles > 0
+                ? ` (${formatMilesOrKm(flightSummary.taggedMiles, unit)})`
+                : ''}
+              {flightSummary.guessed > 0
+                ? ` · ${flightSummary.guessed} guessed from distance or speed (${formatMilesOrKm(flightSummary.guessedMiles, unit)})`
+                : ''}
+            </p>
+            <p className="mt-1 text-[11px] text-text-muted">
+              Guessed legs are a heuristic (about 400 km or 250 km/h). Timeline flying mode is not overwritten.
+            </p>
+          </div>
+        )}
+
+        {visibleTrainHops.length > 0 && (
+          <div className="rounded-lg border border-border bg-bg p-4">
+            <h3 className="mb-3 text-sm font-semibold text-text-muted flex items-center gap-2">
+              <TrainFront size={14} />
+              Train hops (guess)
+            </h3>
+            <ul className="space-y-1 text-sm">
+              {visibleTrainHops.slice(0, 12).map((h) => (
+                <li key={`${h.date}-${h.from}-${h.to}`}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    title={`Open Day View for ${h.date}`}
+                    className="h-auto min-h-11 w-full justify-start whitespace-normal px-2 py-2 text-left font-normal"
+                    onClick={() => void navigate(`/day/${h.date}`)}
+                  >
+                    {h.from} to {h.to} · {formatMilesOrKm(h.miles, unit)} · {h.hops} legs · {h.date}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {visibleLowMovement.length > 0 && (
+          <div className="rounded-lg border border-border bg-bg p-4">
+            <h3 className="mb-2 text-sm font-semibold text-text-muted">Low-movement days</h3>
+            <p className="mb-3 text-[11px] text-text-muted">
+              Little range and few places. A guess only, not a diagnosis.
+            </p>
+            <ul className="space-y-1 text-sm">
+              {visibleLowMovement.slice(0, 12).map((d) => (
+                <li key={d.date}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    title={`Open Day View for ${d.date}`}
+                    className="h-auto min-h-11 w-full justify-start whitespace-normal px-2 py-2 text-left font-normal"
+                    onClick={() => void navigate(`/day/${d.date}`)}
+                  >
+                    {d.date} · {formatMilesOrKm(d.miles, unit)} · {d.clusters.join(', ')}
                   </Button>
                 </li>
               ))}
@@ -483,14 +700,17 @@ export default function InsightsView() {
               Fun Facts
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {facts.map((fact, i) => (
-                <StatCard
-                  key={i}
-                  label={fact.label}
-                  value={fact.value}
-                  description={fact.description}
-                />
-              ))}
+              {facts.map((fact, i) => {
+                const formatted = formatFunFact(fact, unit);
+                return (
+                  <StatCard
+                    key={i}
+                    label={fact.label}
+                    value={formatted.value}
+                    description={formatted.description}
+                  />
+                );
+              })}
             </div>
           </div>
         )}

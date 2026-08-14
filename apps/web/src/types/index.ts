@@ -93,8 +93,10 @@ export interface MonthlyStats {
   distance_miles: number;
   visits: number;
   activities: number;
+  days_tracked?: number;
   top_places: [string, number][];
   modes: Record<string, number>;
+  mode_miles?: Record<string, number>;
 }
 
 export interface YearlyStats {
@@ -104,6 +106,9 @@ export interface YearlyStats {
   activities: number;
   days_tracked: number;
   modes: Record<string, number>;
+  drive_miles?: number;
+  transit_miles?: number;
+  mode_miles?: Record<string, number>;
 }
 
 export interface Overview {
@@ -147,6 +152,79 @@ export interface FunFact {
   label: string;
   value: string;
   description: string;
+  miles?: number;
+  date?: string;
+  minutes?: number;
+}
+
+export interface Streaks {
+  current: number;
+  longest: number;
+  longestGap: number;
+  lastDate: string | null;
+}
+
+export interface PlaceDeltaMonth {
+  month: string;
+  newClusters: string[];
+  returnedClusters: string[];
+}
+
+export interface LapsedPlace {
+  cluster: string;
+  lastDate: string;
+  years: number;
+}
+
+export interface PersonalityTag {
+  id: 'walker' | 'flyer' | 'creature_of_habit';
+  reason: string;
+}
+
+export interface YearInReviewChapter {
+  year: number;
+  distance_miles: number;
+  visits: number;
+  activities: number;
+  days_tracked: number;
+  top_places: [string, number][];
+  modes: Record<string, number>;
+  drive_miles?: number;
+  transit_miles?: number;
+  trips?: MultiDayTrip[];
+  firsts?: { cluster: string; date: string }[];
+  streaks?: { longest: number; current: number };
+}
+
+export interface MultiDayTrip {
+  start: string;
+  end: string;
+  dates: string[];
+  total_miles: number;
+  clusters: string[];
+  name?: string;
+  modes?: string[];
+}
+
+export interface FlightSummary {
+  tagged: number;
+  guessed: number;
+  taggedMiles: number;
+  guessedMiles: number;
+}
+
+export interface TrainHop {
+  date: string;
+  from: string;
+  to: string;
+  miles: number;
+  hops: number;
+}
+
+export interface LowMovementDay {
+  date: string;
+  miles: number;
+  clusters: string[];
 }
 
 export interface RouteProgress {

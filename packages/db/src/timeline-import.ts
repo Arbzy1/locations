@@ -8,6 +8,7 @@ import {
   analyticsCache,
   dataSources,
   dayStats,
+  userSettings,
   visits,
   type TenantId,
 } from "./schema.js";
@@ -17,7 +18,7 @@ import {
   METERS_TO_MILES,
   parseGeo,
 } from "./geo.js";
-import { buildStore, computeAllAnalytics } from "./analytics.js";
+import { buildStore, computeAllAnalytics, computeHourOfWeek } from "./analytics.js";
 
 type Db = NeonHttpDatabase<typeof schema> | NeonDatabase<typeof schema>;
 
@@ -467,7 +468,12 @@ export async function rebuildTenantAggregates(
     .from(dayStats)
     .where(eq(dayStats.tenant, tenant));
   const store = buildStore(visitSelect, activitySelect, daySelect);
-  const analytics = computeAllAnalytics(store);
+  const settingsRows = await db
+    .select({ timezone: userSettings.timezone })
+    .from(userSettings)
+    .where(eq(userSettings.tenant, tenant))
+    .limit(1);
+  const analytics = computeAllAnalytics(store, { timezone: settingsRows[0]?.timezone });
 
   for (const [key, data] of Object.entries(analytics)) {
     await db
@@ -480,6 +486,24 @@ export async function rebuildTenantAggregates(
   }
 
   return { days: dayStatRows.length };
+}
+
+/** Rebuild only the hour-of-week cache after a timezone change. */
+export async function rebuildHourOfWeekCache(
+  db: Db,
+  tenant: TenantId,
+  timezone?: string | null,
+): Promise<void> {
+  const visitSelect = await db.select().from(visits).where(eq(visits.tenant, tenant));
+  const store = buildStore(visitSelect, [], []);
+  const data = computeHourOfWeek(store, timezone);
+  await db
+    .insert(analyticsCache)
+    .values({ tenant, key: "hour-of-week", data })
+    .onConflictDoUpdate({
+      target: [analyticsCache.tenant, analyticsCache.key],
+      set: { data, updatedAt: new Date() },
+    });
 }
 
 /**

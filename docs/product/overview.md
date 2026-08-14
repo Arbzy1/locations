@@ -11,7 +11,7 @@ People who exported Timeline from Google Takeout (or still can) and want a hoste
 Full list: [Features](features.md). Ideas that are not a commitment to build: [Further features and pages](ideas.md).
 
 - **Hotspots:** visit density heatmap and named places
-- **Day View:** calendar, map, and timeline for one day
+- **Day View:** calendar, map, timeline, and playback for one day
 - **Day Trips:** days with more range or more places
 - **Insights:** totals, charts, corridors, yearly stats
 - **Settings:** Timeline sources, account, billing, units

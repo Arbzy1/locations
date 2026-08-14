@@ -31,7 +31,10 @@ describe("renderEmail", () => {
         url: "https://locations.aden.website/verify",
         otp: "123456",
         visitCount: 12,
-        activityCount: 4,
+        daysTracked: 11,
+        activityCount: 6,
+        distanceLabel: "12 mi",
+        monthLabel: "July 2026",
         siteUrl: "https://locations.aden.website",
       });
       expect(rendered.subject.length).toBeGreaterThan(4);
@@ -52,6 +55,22 @@ describe("renderEmail", () => {
     expect(rendered.text).toContain("4 journeys");
     expect(rendered.text).not.toMatch(COORD_RE);
     expect(rendered.html).not.toMatch(/51\.\d+/);
+  });
+
+  it("monthly_recap is counts only with a generic Insights link", () => {
+    const rendered = renderEmail("monthly_recap", {
+      daysTracked: 11,
+      activityCount: 6,
+      visitCount: 20,
+      distanceLabel: "42 mi",
+      monthLabel: "July 2026",
+      siteUrl: "https://locations.aden.website",
+    });
+    expect(rendered.text).toContain("You tracked 11 days and 6 journeys in July 2026");
+    expect(rendered.text).toContain("Open Insights");
+    expect(rendered.text).toContain("https://locations.aden.website/insights");
+    expect(rendered.text).not.toMatch(/you visited/i);
+    expect(rendered.text).not.toMatch(COORD_RE);
   });
 });
 

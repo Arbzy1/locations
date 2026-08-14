@@ -1,15 +1,25 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { useDayData, useDays } from '../hooks/useApi';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import MapView from './Map';
 import Timeline from './Timeline';
 import DayCalendar from './DayCalendar';
+import DayPlaybackBar from './DayPlaybackBar';
 import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from './MobilePanel';
 import { formatDate, formatMilesOrKm } from '../utils/format';
 import { useUnits } from '../lib/units';
 import { MODE_COLORS, MODE_LABELS } from '../types';
-import type { Visit, Activity, MapFocusTarget } from '../types';
+import type { Visit, Activity, Connector, MapFocusTarget } from '../types';
+import {
+  buildPlaybackSegments,
+  playbackRange,
+  positionAt,
+  PLAYBACK_SPEEDS,
+  DEFAULT_PLAYBACK_SPEED,
+  type PlaybackSpeed,
+} from '../lib/dayPlayback';
+import { sunTimes } from '../utils/sunTimes';
 import {
   ChevronDown,
   ChevronLeft,
@@ -37,14 +47,30 @@ function focusTargetForActivity(a: Activity): MapFocusTarget {
   };
 }
 
+function focusTargetForConnector(c: Connector): MapFocusTarget {
+  if (c.route_geometry && c.route_geometry.length > 1) {
+    return {
+      bounds: L.latLngBounds(
+        c.route_geometry.map((p) => [p[0], p[1]] as [number, number]),
+      ),
+    };
+  }
+  return {
+    bounds: L.latLngBounds([
+      [c.from_lat, c.from_lon],
+      [c.to_lat, c.to_lon],
+    ]),
+  };
+}
+
 interface Props {
   initialDate?: string;
 }
 
 export default function DayView({ initialDate }: Props) {
   const { data: allDays } = useDays();
-  const { isDesktop } = useBreakpoint();
-  const { unit } = useUnits();
+  const { isDesktop, isPhone, isTablet } = useBreakpoint();
+  const { unit, timezone } = useUnits();
   const [selectedDate, setSelectedDate] = useState(initialDate || '');
   const [mapFocus, setMapFocus] = useState<MapFocusTarget | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(() => {
@@ -57,16 +83,126 @@ export default function DayView({ initialDate }: Props) {
   const [sheetHeight, setSheetHeight] = useState<MobilePanelHeight>('half');
   const [sizeSignal, setSizeSignal] = useState(0);
   const [prevInitialDate, setPrevInitialDate] = useState(initialDate);
+  const [playTime, setPlayTime] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState<PlaybackSpeed>(DEFAULT_PLAYBACK_SPEED);
+  const [followPlayhead, setFollowPlayhead] = useState(false);
   const { data: dayData, isLoading, isFetching, progress } = useDayData(selectedDate);
 
   const bumpSize = useCallback(() => setSizeSignal((n) => n + 1), []);
 
+  const segments = useMemo(() => {
+    if (!selectedDate || !dayData || 'error' in dayData) return [];
+    return buildPlaybackSegments(selectedDate, dayData.visits, dayData.activities, dayData.connectors);
+  }, [dayData, selectedDate]);
+
+  const range = useMemo(() => playbackRange(segments), [segments]);
+  const rangeKey = range ? `${selectedDate}:${range.startMs}:${range.endMs}` : '';
+  const [prevRangeKey, setPrevRangeKey] = useState(rangeKey);
+  if (rangeKey !== prevRangeKey) {
+    setPrevRangeKey(rangeKey);
+    setPlaying(false);
+    setFollowPlayhead(false);
+    setPlayTime(range?.startMs ?? null);
+  }
+
+  const playTimeRef = useRef(playTime);
+  const speedRef = useRef(speed);
+  const rangeRef = useRef(range);
+  useEffect(() => {
+    playTimeRef.current = playTime;
+    speedRef.current = speed;
+    rangeRef.current = range;
+  });
+
+  useEffect(() => {
+    if (!playing) return;
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const r = rangeRef.current;
+      if (!r) {
+        setPlaying(false);
+        return;
+      }
+      const dt = now - last;
+      last = now;
+      const advanceMs = (speedRef.current * 60_000 * dt) / 1000;
+      const next = Math.min(r.endMs, (playTimeRef.current ?? r.startMs) + advanceMs);
+      setPlayTime(next);
+      if (next >= r.endMs) {
+        setPlaying(false);
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing]);
+
+  const playheadPos = useMemo(() => {
+    if (playTime == null || segments.length === 0) return null;
+    return positionAt(segments, playTime);
+  }, [segments, playTime]);
+
+  const sunLoc = useMemo(() => {
+    if (!dayData || 'error' in dayData) return null;
+    const v = dayData.visits[0];
+    if (v) return { lat: v.lat, lon: v.lon };
+    const a = dayData.activities[0];
+    if (a) return { lat: a.start_lat, lon: a.start_lon };
+    return null;
+  }, [dayData]);
+
+  const sun = useMemo(() => {
+    if (!sunLoc || !selectedDate) return { sunrise: null as Date | null, sunset: null as Date | null };
+    return sunTimes(sunLoc.lat, sunLoc.lon, selectedDate);
+  }, [sunLoc, selectedDate]);
+
+  const seek = useCallback((t: number) => {
+    setPlayTime(t);
+    setFollowPlayhead(true);
+    setMapFocus(null);
+  }, []);
+
+  const togglePlay = useCallback(() => {
+    const r = rangeRef.current;
+    if (!r) return;
+    if (playing) {
+      setPlaying(false);
+      return;
+    }
+    const t = playTimeRef.current ?? r.startMs;
+    if (t >= r.endMs) setPlayTime(r.startMs);
+    setFollowPlayhead(true);
+    setMapFocus(null);
+    setPlaying(true);
+  }, [playing]);
+
+  const cycleSpeed = useCallback(() => {
+    setSpeed((s) => PLAYBACK_SPEEDS[(PLAYBACK_SPEEDS.indexOf(s) + 1) % PLAYBACK_SPEEDS.length]);
+  }, []);
+
   const handleVisitOnMap = useCallback((v: Visit) => {
+    setPlaying(false);
+    setFollowPlayhead(false);
+    setPlayTime(Date.parse(v.start));
     setMapFocus(focusTargetForVisit(v));
   }, []);
 
   const handleActivityOnMap = useCallback((a: Activity) => {
+    setPlaying(false);
+    setFollowPlayhead(false);
+    setPlayTime(Date.parse(a.start));
     setMapFocus(focusTargetForActivity(a));
+  }, []);
+
+  const handleUnknownOnMap = useCallback((connector: Connector | null, startIso: string) => {
+    setPlaying(false);
+    setFollowPlayhead(false);
+    setPlayTime(Date.parse(startIso));
+    if (connector) setMapFocus(focusTargetForConnector(connector));
+    else setMapFocus(null);
   }, []);
 
   const dateList = useMemo(
@@ -79,7 +215,6 @@ export default function DayView({ initialDate }: Props) {
     setMapFocus(null);
   };
 
-  // Adjust state during render when navigating from Day Trips or when days first load.
   if (initialDate !== prevInitialDate) {
     setPrevInitialDate(initialDate);
     if (initialDate && initialDate !== selectedDate) {
@@ -103,6 +238,46 @@ export default function DayView({ initialDate }: Props) {
 
   const iconBtn =
     'flex h-11 w-11 items-center justify-center rounded border border-border transition-colors duration-ui-fast ease-ui hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30';
+
+  const barInPanel =
+    !isDesktop && ((isPhone && panelOpen && sheetHeight === 'full') || (isTablet && panelOpen));
+
+  const playbackBar =
+    range && playTime != null ? (
+      <DayPlaybackBar
+        rangeStart={range.startMs}
+        rangeEnd={range.endMs}
+        time={playTime}
+        playing={playing}
+        speed={speed}
+        sunriseMs={sun.sunrise?.getTime() ?? null}
+        sunsetMs={sun.sunset?.getTime() ?? null}
+        timezone={timezone}
+        compact={!isDesktop}
+        onTogglePlay={togglePlay}
+        onCycleSpeed={cycleSpeed}
+        onSeek={seek}
+      />
+    ) : null;
+
+  const overlayClass = isDesktop
+    ? 'bottom-3 left-3 w-[min(22rem,calc(100%-11rem))]'
+    : isTablet
+      ? 'left-3 right-3 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px)+0.75rem)]'
+      : !panelOpen || sheetHeight === 'peek'
+        ? 'left-3 right-3 bottom-[calc(38%+0.5rem)]'
+        : 'left-3 right-3 bottom-[calc(55%+0.5rem)]';
+
+  const mapProps = {
+    visits: dayData && !('error' in dayData) ? dayData.visits : undefined,
+    activities: dayData && !('error' in dayData) ? dayData.activities : undefined,
+    connectors: dayData && !('error' in dayData) ? dayData.connectors : undefined,
+    focusTarget: mapFocus,
+    sizeSignal,
+    playhead: playheadPos ? { lat: playheadPos.lat, lon: playheadPos.lon } : null,
+    followPlayhead,
+    dayDate: selectedDate || undefined,
+  };
 
   const sidePanel = (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-surface">
@@ -222,6 +397,10 @@ export default function DayView({ initialDate }: Props) {
         </div>
       )}
 
+      {barInPanel && playbackBar && (
+        <div className="shrink-0 border-b border-border p-3">{playbackBar}</div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto">
         {isLoading || (isFetching && progress) ? (
           <div className="flex flex-col gap-4 p-6">
@@ -263,8 +442,12 @@ export default function DayView({ initialDate }: Props) {
           <Timeline
             visits={dayData.visits}
             activities={dayData.activities}
+            connectors={dayData.connectors}
+            date={selectedDate}
+            activeTime={playTime}
             onVisitClick={handleVisitOnMap}
             onActivityClick={handleActivityOnMap}
+            onUnknownClick={handleUnknownOnMap}
           />
         ) : (
           <div className="p-4 text-sm text-text-muted">
@@ -277,19 +460,20 @@ export default function DayView({ initialDate }: Props) {
     </div>
   );
 
+  const mapWithOverlay = (
+    <div className="relative min-h-0 flex-1">
+      <MapView {...mapProps} />
+      {!barInPanel && playbackBar && (
+        <div className={`pointer-events-none absolute z-[1000] ${overlayClass}`}>
+          <div className="pointer-events-auto">{playbackBar}</div>
+        </div>
+      )}
+    </div>
+  );
+
   const mapPane = (
     <div className="relative min-h-0 flex-1">
-      {dayData && !('error' in dayData) ? (
-        <MapView
-          visits={dayData.visits}
-          activities={dayData.activities}
-          connectors={dayData.connectors}
-          focusTarget={mapFocus}
-          sizeSignal={sizeSignal}
-        />
-      ) : (
-        <MapView sizeSignal={sizeSignal} />
-      )}
+      {mapWithOverlay}
       <MobilePanelOpenButton
         label="Show day panel"
         visible={!panelOpen}
@@ -315,19 +499,7 @@ export default function DayView({ initialDate }: Props) {
         <div className="flex w-96 shrink-0 flex-col overflow-hidden border-r border-border bg-surface">
           {sidePanel}
         </div>
-        <div className="min-h-0 flex-1">
-          {dayData && !('error' in dayData) ? (
-            <MapView
-              visits={dayData.visits}
-              activities={dayData.activities}
-              connectors={dayData.connectors}
-              focusTarget={mapFocus}
-              sizeSignal={sizeSignal}
-            />
-          ) : (
-            <MapView sizeSignal={sizeSignal} />
-          )}
-        </div>
+        {mapWithOverlay}
       </div>
     );
   }

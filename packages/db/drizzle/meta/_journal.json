@@ -47,5 +47,19 @@
     "when": 1755213600000,
     "tag": "0006_place_meta",
     "breakpoints": true
+  },
+  {
+    "idx": 7,
+    "version": "7",
+    "when": 1755220000000,
+    "tag": "0007_monthly_recap",
+    "breakpoints": true
+  },
+  {
+    "idx": 8,
+    "version": "7",
+    "when": 1755223600000,
+    "tag": "0008_catalog_pages",
+    "breakpoints": true
   }
 ]

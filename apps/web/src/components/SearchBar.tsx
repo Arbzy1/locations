@@ -4,6 +4,7 @@ import { Search } from 'lucide-react';
 import { useSearch } from '../hooks/useApi';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
+import { placePath } from '../lib/paths';
 
 export default function SearchBar() {
   const [q, setQ] = useState('');
@@ -31,11 +32,11 @@ export default function SearchBar() {
               key={`${p.cluster}-${p.date}-${i}`}
               type="button"
               variant="ghost"
-              title={`Open ${p.cluster} on ${p.date}`}
+              title={`Open place ${p.cluster}`}
               className="h-11 w-full justify-start px-2 text-left font-normal"
               onClick={() => {
                 setQ('');
-                void navigate(`/day/${p.date}`);
+                void navigate(placePath(p.cluster));
               }}
             >
               {p.cluster}

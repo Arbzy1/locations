@@ -27,6 +27,14 @@ import {
   renameSource,
   removeSource,
   upsertPlaceLabel,
+  listClusters,
+  getCluster,
+  getCorridorDetail,
+  listClusterVisits,
+  upsertNamedTrip,
+  upsertChapter,
+  listImportJobs,
+  staffTenantStats,
 } from "@locations/api/services";
 
 const env = testEnv();
@@ -302,5 +310,89 @@ describe("API auth boundaries", () => {
     });
     expect(res.status).toBe(400);
     expect(upsertPlaceLabel).not.toHaveBeenCalled();
+  });
+
+  it("rejects unauthenticated access to /api/clusters", async () => {
+    getSession.mockResolvedValue(null);
+    const res = await request("/api/clusters");
+    expect(res.status).toBe(401);
+  });
+
+  it("allows the owner to list clusters", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
+    vi.mocked(listClusters).mockResolvedValueOnce({ clusters: [], cursor: null } as never);
+    const res = await request("/api/clusters");
+    expect(res.status).toBe(200);
+    expect(listClusters).toHaveBeenCalledWith(expect.anything(), "user-a", expect.any(Object));
+  });
+
+  it("returns 404 for a missing cluster", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
+    vi.mocked(getCluster).mockResolvedValueOnce(null);
+    const res = await request("/api/clusters/missing");
+    expect(res.status).toBe(404);
+  });
+
+  it("blocks demo users from creating named trips", async () => {
+    getSession.mockResolvedValue(sessionUser({ role: "demo", id: "demo-1" }));
+    const res = await request("/api/trips", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Holiday", start: "2024-01-01", end: "2024-01-03" }),
+    });
+    expect(res.status).toBe(403);
+    expect(upsertNamedTrip).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for staff stats when the user is not staff", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a", role: "user" }));
+    const res = await request("/api/admin/stats");
+    expect(res.status).toBe(404);
+    expect(staffTenantStats).not.toHaveBeenCalled();
+  });
+
+  it("allows staff to read own-tenant admin stats", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a", role: "admin" }));
+    vi.mocked(staffTenantStats).mockResolvedValueOnce({
+      visitCount: 3,
+      sourceCount: 1,
+      latestJobStatus: "ready",
+      recentJobCount: 1,
+    } as never);
+    const res = await request("/api/admin/stats");
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 404 for a missing corridor", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
+    vi.mocked(getCorridorDetail).mockResolvedValueOnce(null);
+    const res = await request("/api/corridors/Home/Work");
+    expect(res.status).toBe(404);
+  });
+
+  it("allows the owner to list cluster visits", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
+    vi.mocked(listClusterVisits).mockResolvedValueOnce({ visits: [], cursor: null } as never);
+    const res = await request("/api/clusters/Home/visits");
+    expect(res.status).toBe(200);
+    expect(listClusterVisits).toHaveBeenCalled();
+  });
+
+  it("blocks demo users from creating life chapters", async () => {
+    getSession.mockResolvedValue(sessionUser({ role: "demo", id: "demo-1" }));
+    const res = await request("/api/chapters", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Uni", start: "2020-01-01", end: "2023-01-01" }),
+    });
+    expect(res.status).toBe(403);
+    expect(upsertChapter).not.toHaveBeenCalled();
+  });
+
+  it("rejects unauthenticated access to import jobs", async () => {
+    getSession.mockResolvedValue(null);
+    const res = await request("/api/import/jobs");
+    expect(res.status).toBe(401);
+    expect(listImportJobs).not.toHaveBeenCalled();
   });
 });

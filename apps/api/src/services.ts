@@ -9,6 +9,8 @@ import {
   routeCache,
   placeCache,
   placeLabels,
+  namedTrips,
+  lifeChapters,
   userSettings,
   subscriptions,
   user,
@@ -23,6 +25,7 @@ import {
   deleteSourceData,
   ensureDataSource,
   importSourceData,
+  rebuildHourOfWeekCache,
   and,
   eq,
   sql,
@@ -32,6 +35,7 @@ import {
   inArray,
   gte,
   lte,
+  lt,
   type RouteStep,
   type ActivityRow,
   type VisitRow,
@@ -530,7 +534,74 @@ export async function getAnalytics(
     .from(analyticsCache)
     .where(and(eq(analyticsCache.tenant, tenant), eq(analyticsCache.key, key)))
     .limit(1);
-  return rows[0]?.data ?? [];
+  const data = rows[0]?.data ?? [];
+  const hidden = await hiddenPlaceKeySet(db, tenant);
+  return filterHiddenAnalytics(key, data, hidden);
+}
+
+function isHiddenCluster(name: string, hidden: Set<string>): boolean {
+  return hidden.has(name);
+}
+
+function filterYearChapter(chapter: unknown, hidden: Set<string>): unknown {
+  if (!chapter || typeof chapter !== "object" || Array.isArray(chapter)) return chapter;
+  const row = chapter as {
+    top_places?: [string, number][];
+    firsts?: { cluster: string; date: string }[];
+    trips?: { clusters?: string[] }[];
+  };
+  return {
+    ...row,
+    top_places: (row.top_places ?? []).filter(([name]) => !isHiddenCluster(name, hidden)),
+    firsts: (row.firsts ?? []).filter((f) => !isHiddenCluster(f.cluster, hidden)),
+    trips: (row.trips ?? []).map((t) => ({
+      ...t,
+      clusters: (t.clusters ?? []).filter((c) => !isHiddenCluster(c, hidden)),
+    })),
+  };
+}
+
+export function filterHiddenAnalytics(key: string, data: unknown, hidden: Set<string>): unknown {
+  if (!hidden.size) return data;
+  if (key === "lapsed-places" && Array.isArray(data)) {
+    return data.filter(
+      (row) =>
+        row &&
+        typeof row === "object" &&
+        "cluster" in row &&
+        !isHiddenCluster(String((row as { cluster: string }).cluster), hidden),
+    );
+  }
+  if (key === "place-deltas" && Array.isArray(data)) {
+    return data.map((row) => {
+      if (!row || typeof row !== "object") return row;
+      const m = row as { newClusters?: string[]; returnedClusters?: string[] };
+      return {
+        ...m,
+        newClusters: (m.newClusters ?? []).filter((c) => !isHiddenCluster(c, hidden)),
+        returnedClusters: (m.returnedClusters ?? []).filter((c) => !isHiddenCluster(c, hidden)),
+      };
+    });
+  }
+  if (key === "firsts" && data && typeof data === "object" && !Array.isArray(data) && "clusters" in data) {
+    const row = data as { clusters: { name: string }[]; types?: unknown };
+    return {
+      ...row,
+      clusters: (row.clusters ?? []).filter((c) => !isHiddenCluster(c.name, hidden)),
+    };
+  }
+  if (key === "year-in-review") {
+    if (!data || typeof data !== "object") return data;
+    if (Array.isArray(data)) return data;
+    if ("year" in data) return filterYearChapter(data, hidden);
+    const out: Record<string, unknown> = {};
+    for (const [year, chapter] of Object.entries(data as Record<string, unknown>)) {
+      out[year] = filterYearChapter(chapter, hidden);
+    }
+    return out;
+  }
+  if (key.startsWith("year-in-review:")) return filterYearChapter(data, hidden);
+  return data;
 }
 
 export async function getRouteProgress(db: ReturnType<typeof createDb>, tenant: TenantId) {
@@ -581,12 +652,22 @@ export async function getDay(
   const dayVisits = await db
     .select()
     .from(visits)
-    .where(and(eq(visits.tenant, tenant), eq(visits.date, date)))
+    .where(
+      and(
+        eq(visits.tenant, tenant),
+        or(eq(visits.date, date), and(lt(visits.date, date), gte(visits.end, date))),
+      ),
+    )
     .orderBy(visits.start);
   const dayActivities = await db
     .select()
     .from(activities)
-    .where(and(eq(activities.tenant, tenant), eq(activities.date, date)))
+    .where(
+      and(
+        eq(activities.tenant, tenant),
+        or(eq(activities.date, date), and(lt(activities.date, date), gte(activities.end, date))),
+      ),
+    )
     .orderBy(activities.start);
 
   await report({
@@ -1202,25 +1283,64 @@ export async function getSubscription(db: ReturnType<typeof createDb>, tenant: T
 
 export async function getUserSettings(db: ReturnType<typeof createDb>, tenant: TenantId) {
   const rows = await db.select().from(userSettings).where(eq(userSettings.tenant, tenant)).limit(1);
-  return rows[0] ?? { tenant, distanceUnit: "mi" as DistanceUnit, timezone: null, updatedAt: new Date() };
+  return (
+    rows[0] ?? {
+      tenant,
+      distanceUnit: "mi" as DistanceUnit,
+      timezone: null,
+      monthlyRecapEnabled: false,
+      monthlyRecapLastYm: null,
+      updatedAt: new Date(),
+    }
+  );
 }
 
 export async function upsertUserSettings(
   db: ReturnType<typeof createDb>,
   tenant: TenantId,
-  patch: { distanceUnit?: DistanceUnit; timezone?: string | null },
+  patch: {
+    distanceUnit?: DistanceUnit;
+    timezone?: string | null;
+    monthlyRecapEnabled?: boolean;
+    monthlyRecapLastYm?: string | null;
+  },
 ) {
   const current = await getUserSettings(db, tenant);
   const distanceUnit = patch.distanceUnit ?? current.distanceUnit ?? "mi";
   const timezone = patch.timezone === undefined ? current.timezone : patch.timezone;
+  const monthlyRecapEnabled =
+    patch.monthlyRecapEnabled === undefined
+      ? (current.monthlyRecapEnabled ?? false)
+      : patch.monthlyRecapEnabled;
+  const monthlyRecapLastYm =
+    patch.monthlyRecapLastYm === undefined
+      ? (current.monthlyRecapLastYm ?? null)
+      : patch.monthlyRecapLastYm;
+  const timezoneChanged = patch.timezone !== undefined && patch.timezone !== current.timezone;
   await db
     .insert(userSettings)
-    .values({ tenant, distanceUnit, timezone, updatedAt: new Date() })
+    .values({
+      tenant,
+      distanceUnit,
+      timezone,
+      monthlyRecapEnabled,
+      monthlyRecapLastYm,
+      updatedAt: new Date(),
+    })
     .onConflictDoUpdate({
       target: userSettings.tenant,
-      set: { distanceUnit, timezone, updatedAt: new Date() },
+      set: {
+        distanceUnit,
+        timezone,
+        monthlyRecapEnabled,
+        monthlyRecapLastYm,
+        updatedAt: new Date(),
+      },
     });
-  return { tenant, distanceUnit, timezone };
+  if (timezoneChanged) {
+    await rebuildHourOfWeekCache(db, tenant, timezone);
+  }
+  return { tenant, distanceUnit, timezone, monthlyRecapEnabled, monthlyRecapLastYm };
 }
 
 export async function searchTenant(
@@ -1313,6 +1433,8 @@ export async function wipeTenantData(
   await db.delete(importJobs).where(eq(importJobs.tenant, tenant));
   await db.delete(dataSources).where(eq(dataSources.tenant, tenant));
   await db.delete(placeLabels).where(eq(placeLabels.tenant, tenant));
+  await db.delete(namedTrips).where(eq(namedTrips.tenant, tenant));
+  await db.delete(lifeChapters).where(eq(lifeChapters.tenant, tenant));
   await db.delete(userSettings).where(eq(userSettings.tenant, tenant));
   await db.delete(subscriptions).where(eq(subscriptions.tenant, tenant));
   await db.delete(session).where(eq(session.userId, userId));
@@ -1321,3 +1443,19 @@ export async function wipeTenantData(
 }
 
 void METERS_TO_MILES;
+
+export {
+  listClusters,
+  getCluster,
+  listClusterVisits,
+  getCorridorDetail,
+  getTripRange,
+  listNamedTrips,
+  upsertNamedTrip,
+  deleteNamedTrip,
+  listChapters,
+  upsertChapter,
+  deleteChapter,
+  listImportJobs,
+  staffTenantStats,
+} from "./catalog";

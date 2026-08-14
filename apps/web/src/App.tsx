@@ -23,6 +23,9 @@ import ThemeToggle from './components/ThemeToggle';
 import SearchBar from './components/SearchBar';
 import { Button } from './components/ui/button';
 import { Toaster } from './components/ui/sonner';
+import ExploreMenu from './components/ExploreMenu';
+import CatalogRouter from './components/catalog/CatalogRouter';
+import { isCatalogPath, catalogTitle } from './lib/paths';
 import {
   Flame,
   Calendar,
@@ -63,8 +66,8 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 
 function tabFromPath(pathname: string): TabId {
   if (pathname.startsWith('/day')) return 'day';
-  if (pathname.startsWith('/trips')) return 'trips';
-  if (pathname.startsWith('/insights')) return 'insights';
+  if (pathname === '/trips' || pathname === '/trips/') return 'trips';
+  if (pathname.startsWith('/insights') || pathname.startsWith('/review')) return 'insights';
   if (pathname.startsWith('/settings')) return 'settings';
   return 'hotspots';
 }
@@ -95,6 +98,9 @@ function EmptyDataState({ onOpenSettings }: { onOpenSettings: () => void }) {
       </div>
       <Button type="button" title="Open Settings to upload Timeline data" onClick={onOpenSettings}>
         Open Settings
+      </Button>
+      <Button type="button" variant="outline" title="Open onboarding steps" asChild>
+        <Link to="/onboarding">Onboarding</Link>
       </Button>
     </div>
   );
@@ -145,7 +151,8 @@ function AppContent() {
   const { data: session } = useSession();
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
 
-  useDocumentTitle(`${TAB_LABELS[activeTab]} · Locations`);
+  const exploring = isCatalogPath(location.pathname);
+  useDocumentTitle(`${exploring ? catalogTitle(location.pathname) : TAB_LABELS[activeTab]} · Locations`);
 
   const selectTab = (id: TabId, date?: string) => {
     setMoreOpen(false);
@@ -160,6 +167,13 @@ function AppContent() {
     isDemo ||
     (overview?.total_visits ?? 0) > 0 ||
     (overview?.total_activities ?? 0) > 0;
+
+  useEffect(() => {
+    if (isDemo || overviewLoading || importing || hasData) return;
+    if (location.pathname === '/hotspots') {
+      void navigate('/onboarding', { replace: true });
+    }
+  }, [isDemo, overviewLoading, importing, hasData, location.pathname, navigate]);
 
   const handleSelectDate = (date: string) => {
     selectTab('day', date);
@@ -218,10 +232,11 @@ function AppContent() {
             <NavTabButton
               key={tab.id}
               tab={tab}
-              active={activeTab === tab.id}
+              active={!exploring && activeTab === tab.id}
               onSelect={() => selectTab(tab.id)}
             />
           ))}
+          <ExploreMenu />
 
           <div className="mt-auto flex flex-col items-center gap-2">
             <ThemeToggle className="h-11 w-11" />
@@ -252,7 +267,11 @@ function AppContent() {
             <SearchBar />
           </div>
           <div className="min-h-0 flex-1 overflow-hidden mobile-nav-pad lg:pb-0">
-            {activeTab === 'settings' && !isDemo ? (
+            {exploring ? (
+              <div key={location.pathname} className="ui-enter h-full overflow-hidden">
+                <CatalogRouter />
+              </div>
+            ) : activeTab === 'settings' && !isDemo ? (
               <div key="settings" className="ui-enter h-full">
                 <SettingsView />
               </div>
@@ -294,7 +313,7 @@ function AppContent() {
               <NavTabButton
                 key={tab.id}
                 tab={tab}
-                active={activeTab === tab.id}
+                active={!exploring && activeTab === tab.id}
                 onSelect={() => selectTab(tab.id)}
                 compact
               />
@@ -307,7 +326,7 @@ function AppContent() {
                 aria-expanded={moreOpen}
                 onClick={() => setMoreOpen((v) => !v)}
                 className={`flex h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[10px] transition-colors duration-300 ease-ui ${
-                  moreOpen || activeTab === 'settings'
+                  moreOpen || activeTab === 'settings' || exploring
                     ? 'bg-accent/20 text-accent'
                     : 'text-text-muted hover:bg-bg/50 hover:text-text'
                 }`}
@@ -320,6 +339,9 @@ function AppContent() {
                   <div className="flex items-center justify-between gap-2 px-1">
                     <span className="text-xs text-text-muted">Theme</span>
                     <ThemeToggle className="h-11 w-11" />
+                  </div>
+                  <div className="max-h-48 overflow-y-auto">
+                    <ExploreMenu compact />
                   </div>
                   {!isDemo && (
                     <Button
@@ -378,8 +400,36 @@ function AuthedShell() {
         <Route path="/hotspots" element={<AppContent />} />
         <Route path="/day/:date?" element={<AppContent />} />
         <Route path="/trips" element={<AppContent />} />
+        <Route path="/trips/new" element={<AppContent />} />
+        <Route path="/trips/:start/:end" element={<AppContent />} />
         <Route path="/insights" element={<AppContent />} />
         <Route path="/settings" element={<AppContent />} />
+        <Route path="/places" element={<AppContent />} />
+        <Route path="/places/:key" element={<AppContent />} />
+        <Route path="/corridors/:a/:b" element={<AppContent />} />
+        <Route path="/areas" element={<AppContent />} />
+        <Route path="/areas/:settlement" element={<AppContent />} />
+        <Route path="/coverage" element={<AppContent />} />
+        <Route path="/compare" element={<AppContent />} />
+        <Route path="/replay" element={<AppContent />} />
+        <Route path="/month/:ym" element={<AppContent />} />
+        <Route path="/week/:date" element={<AppContent />} />
+        <Route path="/on-this-day" element={<AppContent />} />
+        <Route path="/gaps" element={<AppContent />} />
+        <Route path="/review" element={<AppContent />} />
+        <Route path="/review/:year" element={<AppContent />} />
+        <Route path="/holidays" element={<AppContent />} />
+        <Route path="/commute" element={<AppContent />} />
+        <Route path="/weekday" element={<AppContent />} />
+        <Route path="/firsts" element={<AppContent />} />
+        <Route path="/chapters" element={<AppContent />} />
+        <Route path="/moving" element={<AppContent />} />
+        <Route path="/anomaly" element={<AppContent />} />
+        <Route path="/onboarding" element={<AppContent />} />
+        <Route path="/imports" element={<AppContent />} />
+        <Route path="/health" element={<AppContent />} />
+        <Route path="/admin" element={<AppContent />} />
+        <Route path="/globe" element={<AppContent />} />
         <Route path="*" element={<Navigate to="/hotspots" replace />} />
       </Routes>
     </UnitsProvider>

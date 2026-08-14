@@ -164,6 +164,7 @@ export const visits = pgTable(
     index("visits_tenant_date_idx").on(t.tenant, t.date),
     index("visits_place_id_idx").on(t.placeId),
     index("visits_tenant_source_idx").on(t.tenant, t.sourceId),
+    index("visits_tenant_cluster_idx").on(t.tenant, t.cluster),
   ],
 );
 
@@ -248,10 +249,41 @@ export const placeLabels = pgTable(
   (t) => [primaryKey({ columns: [t.tenant, t.placeKey] })],
 );
 
+export const namedTrips = pgTable(
+  "named_trips",
+  {
+    id: text("id").primaryKey(),
+    tenant: text("tenant").notNull(),
+    name: text("name").notNull(),
+    start: text("start").notNull(),
+    end: text("end").notNull(),
+    dates: jsonb("dates").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("named_trips_tenant_idx").on(t.tenant)],
+);
+
+export const lifeChapters = pgTable(
+  "life_chapters",
+  {
+    id: text("id").primaryKey(),
+    tenant: text("tenant").notNull(),
+    name: text("name").notNull(),
+    start: text("start").notNull(),
+    end: text("end").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("life_chapters_tenant_idx").on(t.tenant)],
+);
+
 export const userSettings = pgTable("user_settings", {
   tenant: text("tenant").primaryKey(),
   distanceUnit: text("distance_unit").notNull().$type<DistanceUnit>().default("mi"),
   timezone: text("timezone"),
+  monthlyRecapEnabled: boolean("monthly_recap_enabled").notNull().default(false),
+  monthlyRecapLastYm: text("monthly_recap_last_ym"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

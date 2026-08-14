@@ -9,11 +9,21 @@ import type {
   YearlyStats,
   DayTrip,
   FunFact,
+  FlightSummary,
+  TrainHop,
+  LowMovementDay,
+  MultiDayTrip,
+  Streaks,
+  PlaceDeltaMonth,
+  LapsedPlace,
+  PersonalityTag,
+  YearInReviewChapter,
   RouteProgress,
   DataSourceInfo,
   ImportStatus,
 } from '../types';
 import { useSession } from '../lib/auth';
+import { pickLatestYearReview } from '../lib/year-review';
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { credentials: 'include' });
@@ -299,17 +309,9 @@ export function useHomeWork() {
 
 export function useYearInReview() {
   const tenantKey = useTenantKey();
-  return useQuery<{
-    year: number;
-    distance_miles: number;
-    visits: number;
-    activities: number;
-    days_tracked: number;
-    top_places: [string, number][];
-    modes: Record<string, number>;
-  } | null>({
+  return useQuery<YearInReviewChapter | null>({
     queryKey: ['year-in-review', tenantKey],
-    queryFn: () => fetchJson('/api/analytics/year-in-review'),
+    queryFn: async () => pickLatestYearReview(await fetchJson('/api/analytics/year-in-review')),
     staleTime: Infinity,
     enabled: tenantKey !== 'anon',
   });
@@ -327,11 +329,39 @@ export function useAreas() {
 
 export function useMultiDayTrips() {
   const tenantKey = useTenantKey();
-  return useQuery<
-    { start: string; end: string; dates: string[]; total_miles: number; clusters: string[] }[]
-  >({
+  return useQuery<MultiDayTrip[]>({
     queryKey: ['multi-day', tenantKey],
     queryFn: () => fetchJson('/api/analytics/multi-day'),
+    staleTime: Infinity,
+    enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useFlights() {
+  const tenantKey = useTenantKey();
+  return useQuery<FlightSummary | []>({
+    queryKey: ['flights', tenantKey],
+    queryFn: () => fetchJson('/api/analytics/flights'),
+    staleTime: Infinity,
+    enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useTrainHops() {
+  const tenantKey = useTenantKey();
+  return useQuery<TrainHop[]>({
+    queryKey: ['train-hops', tenantKey],
+    queryFn: () => fetchJson('/api/analytics/train-hops'),
+    staleTime: Infinity,
+    enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useLowMovementDays() {
+  const tenantKey = useTenantKey();
+  return useQuery<LowMovementDay[]>({
+    queryKey: ['low-movement', tenantKey],
+    queryFn: () => fetchJson('/api/analytics/low-movement'),
     staleTime: Infinity,
     enabled: tenantKey !== 'anon',
   });
@@ -347,5 +377,231 @@ export function useInvalidateLocationQueries() {
         return key === tenantKey;
       },
     });
+    void queryClient.invalidateQueries({ queryKey: ['me'] });
   }, [queryClient, tenantKey]);
+}
+
+export function useClusters(q: string, sort: string) {
+  const tenantKey = useTenantKey();
+  return useQuery<{
+    clusters: {
+      cluster: string;
+      label: string;
+      visits: number;
+      duration_minutes: number;
+      lat: number;
+      lon: number;
+      first: string;
+      last: string;
+    }[];
+    cursor: string | null;
+  }>({
+    queryKey: ['clusters', tenantKey, q, sort],
+    queryFn: () =>
+      fetchJson(`/api/clusters?q=${encodeURIComponent(q)}&sort=${encodeURIComponent(sort)}&limit=80`),
+    enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useCluster(key: string) {
+  const tenantKey = useTenantKey();
+  return useQuery<{
+    cluster: string;
+    label: string;
+    hidden: boolean;
+    visits: number;
+    duration_minutes: number;
+    lat: number;
+    lon: number;
+    first: string;
+    last: string;
+    hour_histogram: number[];
+    corridors: { from: string; to: string; count: number }[];
+  }>({
+    queryKey: ['cluster', tenantKey, key],
+    queryFn: () => fetchJson(`/api/clusters/${encodeURIComponent(key)}`),
+    enabled: tenantKey !== 'anon' && !!key,
+  });
+}
+
+export function useClusterVisits(key: string) {
+  const tenantKey = useTenantKey();
+  return useQuery<{
+    visits: {
+      date: string;
+      start: string;
+      end: string;
+      duration_minutes: number;
+      semantic_type: string;
+      lat: number;
+      lon: number;
+    }[];
+  }>({
+    queryKey: ['cluster-visits', tenantKey, key],
+    queryFn: () => fetchJson(`/api/clusters/${encodeURIComponent(key)}/visits?limit=40`),
+    enabled: tenantKey !== 'anon' && !!key,
+  });
+}
+
+export function useCorridorDetail(a: string, b: string) {
+  const tenantKey = useTenantKey();
+  return useQuery<{
+    from: string;
+    to: string;
+    count: number;
+    from_lat: number | null;
+    from_lon: number | null;
+    to_lat: number | null;
+    to_lon: number | null;
+    transitions: { date: string; from: string; to: string; mode: string; duration_minutes: number }[];
+  }>({
+    queryKey: ['corridor', tenantKey, a, b],
+    queryFn: () => fetchJson(`/api/corridors/${encodeURIComponent(a)}/${encodeURIComponent(b)}`),
+    enabled: tenantKey !== 'anon' && !!a && !!b,
+  });
+}
+
+export function useTripRange(start: string, end: string) {
+  const tenantKey = useTenantKey();
+  return useQuery<{
+    start: string;
+    end: string;
+    dates: string[];
+    truncated: boolean;
+    total_miles: number;
+    visits: {
+      start: string;
+      end: string;
+      lat: number;
+      lon: number;
+      cluster: string;
+      semantic_type: string;
+      duration_minutes: number;
+    }[];
+    activities: {
+      start: string;
+      end: string;
+      start_lat: number;
+      start_lon: number;
+      end_lat: number;
+      end_lon: number;
+      mode: string;
+      distance_meters: number;
+      duration_minutes: number;
+    }[];
+  }>({
+    queryKey: ['trip-range', tenantKey, start, end],
+    queryFn: () => fetchJson(`/api/trip-range/${start}/${end}`),
+    enabled: tenantKey !== 'anon' && !!start && !!end,
+  });
+}
+
+export function useNamedTrips() {
+  const tenantKey = useTenantKey();
+  return useQuery<{ id: string; name: string; start: string; end: string; dates: string[] }[]>({
+    queryKey: ['named-trips', tenantKey],
+    queryFn: () => fetchJson('/api/trips'),
+    enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useChapters() {
+  const tenantKey = useTenantKey();
+  return useQuery<{ id: string; name: string; start: string; end: string }[]>({
+    queryKey: ['chapters', tenantKey],
+    queryFn: () => fetchJson('/api/chapters'),
+    enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useImportJobs() {
+  const tenantKey = useTenantKey();
+  return useQuery<
+    {
+      id: string;
+      sourceId: string;
+      status: string;
+      error: string | null;
+      visitCount: number | null;
+      activityCount: number | null;
+      parsedCount: number | null;
+      createdAt: string;
+      updatedAt: string;
+    }[]
+  >({
+    queryKey: ['import-jobs', tenantKey],
+    queryFn: () => fetchJson('/api/import/jobs'),
+    enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useAdminStats() {
+  const tenantKey = useTenantKey();
+  return useQuery<{
+    visitCount: number;
+    sourceCount: number;
+    latestJobStatus: string | null;
+    recentJobCount: number;
+  }>({
+    queryKey: ['admin-stats', tenantKey],
+    queryFn: () => fetchJson('/api/admin/stats'),
+    enabled: tenantKey !== 'anon',
+    retry: false,
+  });
+}
+
+export function useCachedAnalytics<T>(key: string) {
+  const tenantKey = useTenantKey();
+  return useQuery<T>({
+    queryKey: ['analytics', tenantKey, key],
+    queryFn: () => fetchJson(`/api/analytics/${key}`),
+    staleTime: Infinity,
+    enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useYearReview(year?: number) {
+  const tenantKey = useTenantKey();
+  const qs = year ? `?year=${year}` : '';
+  return useQuery<YearInReviewChapter | null>({
+    queryKey: ['year-in-review', tenantKey, year ?? 'latest'],
+    queryFn: async () => {
+      const data = await fetchJson(`/api/analytics/year-in-review${qs}`);
+      if (year) {
+        if (!data || Array.isArray(data)) return null;
+        return data as YearInReviewChapter;
+      }
+      return pickLatestYearReview(data);
+    },
+    staleTime: Infinity,
+    enabled: tenantKey !== 'anon' && (year == null || Number.isFinite(year)),
+  });
+}
+
+export function useStreaks() {
+  return useCachedAnalytics<Streaks | []>('streaks');
+}
+
+export function usePlaceDeltas() {
+  return useCachedAnalytics<PlaceDeltaMonth[] | []>('place-deltas');
+}
+
+export function useLapsedPlaces() {
+  return useCachedAnalytics<LapsedPlace[] | []>('lapsed-places');
+}
+
+export function useHourOfWeek() {
+  return useCachedAnalytics<number[][] | []>('hour-of-week');
+}
+
+export function usePersonality() {
+  return useCachedAnalytics<PersonalityTag[] | []>('personality');
+}
+
+export function usePublicConfig() {
+  return useQuery<{ signupDisabled?: boolean; globe?: boolean }>({
+    queryKey: ['public-config'],
+    queryFn: () => fetchJson('/api/config'),
+    staleTime: 60_000,
+  });
 }

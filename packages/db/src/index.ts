@@ -25,4 +25,4 @@ export * from "./timeline-import.js";
 export * from "./with-tenant.js";
 export * from "./entitlements.js";
 export * from "./quotas.js";
-export { and, eq, sql, desc, or, ilike, inArray, gte, lte } from "drizzle-orm";
+export { and, eq, sql, desc, or, ilike, inArray, gte, lte, lt } from "drizzle-orm";

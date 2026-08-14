@@ -6,67 +6,32 @@ Privacy default stays: no live tracking, and no sharing maps with strangers unle
 
 Items marked **(API ready)** already have endpoints or schema fields. They need UI, not a new backend.
 
-Highest leverage with the current schema: place page, trip page, real year-in-review screen.
+Highest leverage remaining: merge/split clusters, seasonal heatmaps, sharing (if ever).
 
 Do not start with live sharing, family tenancy, or an LLM that sees coordinates.
 
 ## What already ships
 
-Hotspots (including type filters, visit vs time ranking, favourites, tags/colours, hide/unhide, home/work pins), Day View (including arrived/departed on timeline rows), Day Trips, Insights (unique places, monthly top places, year-in-review places/modes, area and corridor map), Settings (display name, JSON export, billing grace copy), login / signup / forgot / reset-password, magic link and email OTP, legal pages, import, billing, search (including phones), place rename, heatmap, OSRM routes.
+Hotspots, Day View, Day Trips, Insights, Settings, auth, legal, import, billing, search.
+
+Explore overflow (not extra bottom-nav tabs) also includes: place directory and place page, corridor page, coverage map, compare days, time-lapse replay, month/week/on-this-day/gaps, year-in-review page with private PNG download, multi-day trip story and named trips, away nights, commute, weekend vs weekday, firsts, life chapters, moving history, routine vs anomaly, onboarding, import history, data health, staff console (own tenant, no coordinates), waitlist copy when signup is disabled, and an optional MapLibre globe of heatmap points.
 
 ---
 
 ## 0. Quick wins
 
-The catalog items that were API-ready are in the product. See [Features](features.md). Remaining ideas start at new pages below.
+Shipped. See [Features](features.md).
 
 ---
 
 ## 1. New pages (whole screens)
 
-### Exploration
+The screens listed here in earlier drafts now live under Explore. Remaining whole-screen ideas:
 
-- **Place page** (`/places/:key`): all visits, time-of-day histogram, first/last seen, related corridors, map of that cluster
-- **Place directory** (`/places`): searchable, sortable list of every named cluster
-- **Corridor page** (`/corridors/:a/:b`): every transition between two places, typical mode, duration
-- **Area / city page**: visits grouped by settlement / country
-- **World / coverage map**: where you have any data, not just hotspots
-- **Compare two dates** (`/compare`): split map or overlay two days
-- **Time-lapse** (`/replay`): animate a day, a week, or a year
-- **3D globe / flyover** (deck.gl / MapLibre) as an optional view
+- Trip cover photos (opt-in; not in the product)
+- Family tenancy / shared maps (see Social)
+- Public year-in-review URLs (rejected: PNG download only)
 
-### Trips
-
-- **Trip page** (`/trips/:id`): a multi-day grouping as one story (map + days + stats)
-- **Trip builder**: stitch consecutive days, name the trip (no cover photo unless the product later allows photos)
-- **Holiday / away detector**: nights not at home
-- **Commute page**: weekday home-work-home loops, typical departure times
-- **Weekend vs weekday** explorer
-
-### Time
-
-- **Year in review page** (`/review/2024`): full-screen recap, shareable as a private PNG the user downloads, not a public URL
-- **Month view** (`/month/2024-08`): calendar + monthly heatmap
-- **Week view**: seven-day strip
-- **On this day** (`/on-this-day`): same calendar date across years
-- **Gaps page**: days with no Timeline (phone off, Takeout holes)
-- **Firsts**: first visit to each city / country / place type
-
-### People-adjacent (still private)
-
-- **Life chapters**: user-named date ranges (uni, job, city you lived in)
-- **Moving history**: inferred home changes over years
-- **Routine vs anomaly**: days that do not look like your typical Tuesday
-
-### Account / ops
-
-- **Onboarding wizard** after signup: verify email, how to Takeout, first import, first heatmap
-- **Import history page**: every job with counts, errors, retry
-- **Data health**: duplicate visits, overlapping activities, unknown modes
-- **Staff console** (admin/developer only): tenant counts, stuck jobs, no PII coordinates in UI
-- **Waitlist page** when `DISABLE_SIGNUP=true`
-
----
 
 ## 2. Hotspots and places
 
@@ -87,10 +52,9 @@ The catalog items that were API-ready are in the product. See [Features](feature
 
 ## 3. Day View and timeline
 
-- Scrubber: drag time, map follows
-- Playback with speed control
+Shipped in the app (see [features.md](features.md)): time scrubber and playback, sunrise/sunset on the scrubber, overnight stay labels, unknown-movement gaps.
+
 - Weather at the time (historical API; optional, privacy-safe: date + grid only)
-- Sunrise / sunset markers
 - Photo pins if you later allow local EXIF import (opt-in, never email coords)
 - Notes on a visit (tenant-only journal)
 - Correct a mode (walk that was tagged car)
@@ -99,19 +63,11 @@ The catalog items that were API-ready are in the product. See [Features](feature
 - Print / PDF a day
 - Accessibility: timeline as a table, keyboard day hopping
 - Offline day cache for last N days
-- Detect stays that crossed midnight more clearly
-- Show connector gaps as "unknown movement" with a repair hint
 
 ---
 
 ## 4. Trips, travel, and mobility
 
-- Named trips with start/end, distance, countries, modes
-- Flight detector vs flying mode already in data
-- Train line guess from stations
-- Driving vs public transit split for a year
-- Longest day, farthest from home, most stops
-- "Stuck in one place" days (illness, WFH, lockdown)
 - Carbon estimate from modes (labelled as rough)
 - Speed histograms
 - Typical commute duration over years
@@ -123,17 +79,9 @@ The catalog items that were API-ready are in the product. See [Features](feature
 
 ## 5. Insights and storytelling
 
-- Full year-in-review with chapters: places, modes, trips, firsts, streaks
-- Monthly recap email (transactional only: no coordinates or place names, per email-privacy)
-- Streaks: consecutive days with data
-- New places this month vs last
-- "You have not been to X in N years"
-- Personality-style cards: walker, flyer, creature of habit (keep them skippable, not creepy)
-- Compare two years
-- Goals: walk N km this month (local only)
-- Charts: hour-of-week heatmap, mode by year stacked area, distance vs temperature if weather added
-- Export Insights as PNG / CSV
-- Fun facts: already there; add "most boring Tuesday", "longest stay without leaving"
+- Distance vs temperature if a historical weather API is added
+
+Shipped from this list: year-in-review chapters, streaks, new/lapsed places, personality cards, year compare, walk goal, hour-of-week heatmap, stacked modes, Insights CSV/PNG, extra fun facts, opt-in monthly recap email.
 
 ---
 

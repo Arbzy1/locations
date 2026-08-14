@@ -24,10 +24,12 @@ export function DropdownMenuContent({
 export function DropdownMenuItem({
   className,
   title,
+  asChild,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Item>) {
   return (
     <DropdownMenuPrimitive.Item
+      asChild={asChild}
       title={title}
       className={cn(
         "flex h-11 cursor-pointer items-center rounded-lg px-3 text-sm text-text-muted outline-none transition duration-300 hover:bg-bg/50 hover:text-text",

@@ -12,6 +12,8 @@ import { useSession } from '../lib/auth';
 import MapView from './Map';
 import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from './MobilePanel';
 import { Flame, MapPin, EyeOff, Eye, Star } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { placePath } from '../lib/paths';
 import { formatDuration } from '../utils/format';
 import type { HeatmapPoint, HotspotLabel, MapFocusTarget } from '../types';
 import { Input } from './ui/input';
@@ -106,6 +108,9 @@ function AreaDetails({
   return (
     <div className="rounded-lg border border-border bg-bg/50 p-3">
       <div className="mb-2 text-sm font-semibold leading-snug text-text">{area.label}</div>
+      <Button variant="outline" size="sm" asChild title="Open place page" className="mb-2">
+        <Link to={placePath(area.cluster)}>Place page</Link>
+      </Button>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
         <dt className="text-text-muted">Visits</dt>
         <dd className="text-right font-mono">{area.count}</dd>

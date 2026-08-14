@@ -309,7 +309,7 @@ Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_s
 
 <!-- sync:cursor-rule name="email-privacy" order="130" alwaysApply="true" -->
 - Transactional email only. Never put coordinates, place names, day routes, or Takeout payloads in email.
-- Catalog: `verify_email_link`, `verify_email_otp`, `password_reset_link`, `magic_link`, `signin_otp`, `change_email_verify`, `password_changed`, `email_changed`, `import_ready`, `import_failed`, `subscription_active`, `subscription_past_due`, `subscription_canceled`, `account_deleted`.
+- Catalog: `verify_email_link`, `verify_email_otp`, `password_reset_link`, `magic_link`, `signin_otp`, `change_email_verify`, `password_changed`, `email_changed`, `import_ready`, `import_failed`, `subscription_active`, `subscription_past_due`, `subscription_canceled`, `account_deleted`, `monthly_recap`.
 - No marketing, newsletters, activity digests, or "you visited X" mail.
 - Skip send when `RESEND_API_KEY` is unset; do not throw. Demo tenant / `role === "demo"` never send.
 - Log `{ kind, ok }` only, never `to`.

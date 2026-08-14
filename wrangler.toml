@@ -18,6 +18,9 @@ run_worker_first = ["/api/*"]
 [observability]
 enabled = true
 
+[triggers]
+crons = ["0 8 1 * *"]
+
 [secrets]
 required = ["DATABASE_URL", "BETTER_AUTH_SECRET"]
 
@@ -25,6 +28,7 @@ required = ["DATABASE_URL", "BETTER_AUTH_SECRET"]
 BETTER_AUTH_URL = "http://localhost:8787"
 DISABLE_SIGNUP = "false"
 CSP_ENFORCE = "false"
+GLOBE_ENABLED = "true"
 
 # Local / preview R2. Staging and production override this binding.
 [[r2_buckets]]
@@ -45,6 +49,7 @@ required = ["DATABASE_URL", "BETTER_AUTH_SECRET"]
 BETTER_AUTH_URL = "https://locations-staging.aden.website"
 DISABLE_SIGNUP = "false"
 CSP_ENFORCE = "false"
+GLOBE_ENABLED = "true"
 
 [[env.staging.r2_buckets]]
 binding = "UPLOADS"
@@ -63,6 +68,9 @@ queue = "locations-imports-staging"
 queue = "locations-imports-staging"
 max_batch_size = 1
 
+[env.staging.triggers]
+crons = ["0 8 1 * *"]
+
 # ----- production -----
 [env.production]
 name = "locations"
@@ -76,6 +84,7 @@ required = ["DATABASE_URL", "BETTER_AUTH_SECRET"]
 BETTER_AUTH_URL = "https://locations.aden.website"
 DISABLE_SIGNUP = "false"
 CSP_ENFORCE = "true"
+GLOBE_ENABLED = "true"
 
 [[env.production.r2_buckets]]
 binding = "UPLOADS"
@@ -93,3 +102,6 @@ queue = "locations-imports"
 [[env.production.queues.consumers]]
 queue = "locations-imports"
 max_batch_size = 1
+
+[env.production.triggers]
+crons = ["0 8 1 * *"]

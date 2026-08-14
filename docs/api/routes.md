@@ -8,12 +8,23 @@ All other `/api/*` require a session.
 |--------|------|--------|
 | GET | `/api/health` | `{ ok, db? }` |
 | GET | `/api/me` | user, tenant, entitlements, settings |
-| GET | `/api/config` | map tile templates |
+| GET | `/api/config` | map tile templates, `signupDisabled`, `globe` |
 | GET | `/api/overview` | tenant summary; query `sourceId`, `from`, `to` |
 | GET | `/api/days` | |
 | GET | `/api/day/:date` | optional `?stream=1` |
 | GET | `/api/heatmap` | |
-| GET | `/api/analytics/*` | monthly, yearly, day-trips, corridors, facts |
+| GET | `/api/analytics/*` | monthly, yearly, day-trips, corridors, facts, multi-day, home-work, areas, year-in-review (`?year=`), flights, train-hops, low-movement, away-nights, commute, firsts, data-health, moving, anomaly |
+| GET | `/api/clusters` | directory; `q`, `sort`, `limit`, `cursor`; hidden omitted |
+| GET | `/api/clusters/:key` | summary, hour histogram, related corridors |
+| GET | `/api/clusters/:key/visits` | paginated visits |
+| GET | `/api/corridors/:a/:b` | transitions; 404 if none |
+| GET | `/api/trip-range/:start/:end` | up to 14 days of visits/activities |
+| GET/POST | `/api/trips` | named trips; POST not demo |
+| PATCH/DELETE | `/api/trips/:id` | not demo; missing 404 |
+| GET/POST | `/api/chapters` | life chapters; POST not demo |
+| PATCH/DELETE | `/api/chapters/:id` | not demo |
+| GET | `/api/import/jobs` | job list without R2 keys |
+| GET | `/api/admin/stats` | staff only; own tenant counts; others 404 |
 | GET | `/api/search` | `q=` places/days |
 | GET | `/api/sources` | |
 | PATCH/DELETE | `/api/sources/:id` | not demo |
