@@ -31,7 +31,7 @@ Tenants are isolated by `tenant` column **and** Postgres FORCE RLS. Demo users m
 - Prefer existing patterns: Hono routes in `apps/api/src/index.ts`, data access in `services.ts`, schema in `packages/db`.
 - Generate Drizzle migrations with `npm run db:generate`. Custom SQL is allowed only for `FORCE ROW LEVEL SECURITY` and role GRANTs (see `packages/db/drizzle/0003_rls.sql`).
 - Use **npm** only (`npm install`, `npm run …`, `npm run … -w @locations/<pkg>`).
-- Keep Takeout JSON and secrets out of git (`.env`, `.dev.vars`, real data files).
+- Keep Takeout JSON and secrets out of git (`.env`, `.env.staging`, `.env.production`, `.dev.vars`, `.dev.vars.staging`, `.dev.vars.production`, real data files).
 - App chrome uses shadcn primitives + Motion. Do not add a second theme or CSS-in-JS system.
 
 ### No em dashes
@@ -290,6 +290,7 @@ Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_s
 - Rotate the session on password or email change.
 - Demo login must not embed a password in the client bundle. Use `POST /api/auth/demo`.
 - `user.role` is server-only (`input: false`). Demo cannot mutate sources or billing.
+- Staff roles (`admin`, `developer`) skip the Stripe import gate and count as entitled on `/api/me`. They still use their own tenant. Promote with `auth:promote-admin` / `auth:promote-developer`.
 - Delete account wipes Neon tenant rows, R2 prefix, sessions, and the Stripe customer.
 - Password fields use `PasswordInput`.
 <!-- /sync:cursor-rule -->
@@ -299,7 +300,7 @@ Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_s
 <!-- sync:cursor-rule name="billing" order="120" globs="apps/api/**/*" -->
 - Stripe Checkout Sessions and Customer Portal sessions are created on the server. Never trust a client `priceId` or `customerId`.
 - Webhooks: verify signature on the raw body, reject skew, store `stripe_events.id` for idempotency, re-fetch the subscription from Stripe before granting access.
-- Entitlements (`active` / `trialing`) gate import and expensive GETs. Demo stays free.
+- Entitlements (`active` / `trialing`) gate import when `STRIPE_SECRET_KEY` is set. Demo and staff (`admin`, `developer`) skip that gate.
 - Failed payment: read-only grace, then disable import. Do not silently delete Timeline on the first failed charge.
 - Price ids come from env (`STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_YEARLY`).
 <!-- /sync:cursor-rule -->
@@ -381,11 +382,16 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 | `build:all` / `build:web` | Production builds |
 | `deploy:staging` / `deploy:prod` / `deploy:preview` | Wrangler `--env staging` / `--env production` / staging version upload |
 | `db:*` | generate, migrate, import, import-demo, warm-routes |
+| `env:merge` / `env:sync` | Fill missing keys from per-env examples / copy secrets `.env*` → `.dev.vars*` |
+| `secrets:generate` / `secrets:rotate` | Fill or rotate `BETTER_AUTH_SECRET` (optional `--env` push) |
 | `auth:create-user` / `auth:create-demo` | Invite / seed users |
+| `auth:promote-admin` / `auth:promote-developer` | Set `user.role` to staff |
 | `setup:project` | Interactive first-time setup |
 | `typecheck:all` / `lint:web` | Quality gates |
 | `rules:sync` | Regenerate tool-specific rule files from `AGENTS.md` |
-| `test:unit` / `test:integration` / `test:rls` / `test:watch` / `test:e2e` / `test:all` | Vitest / Playwright |
+| `test:unit` / `test:integration` / `test:rls` / `test:watch` / `test:e2e` / `test:all` / `test:report` | Vitest / Playwright / markdown report |
+| `loc` / `loc:report` | Lines-of-code summary / write `reports/loc.md` |
+| `kill:servers` | Free ports 5173 and 8787 |
 | `deps:audit` | `npm audit` (high/critical) |
 
 Edit **this file**, then run `npm run rules:sync`. Do not hand-edit generated tool rule files.
@@ -419,7 +425,7 @@ Non-negotiables:
 - Do not hand-write Drizzle/SQL migrations except the documented FORCE RLS / GRANT file.
 - Do not hand-edit `CLAUDE.md`, `.windsurfrules`, `CONVENTIONS.md`, `.github/copilot-instructions.md`, or generated `.cursor/rules/*.mdc` - change `AGENTS.md` and run `rules:sync`.
 - Do not drop or weaken `tenant` filters or RLS policies.
-- Do not commit Takeout JSON, `.env`, `.dev.vars`, or database credentials.
+- Do not commit Takeout JSON, `.env*`, `.dev.vars*`, or database credentials.
 - Do not skip email verification before import; do not embed demo passwords in the client.
 - Do not restructure the monorepo or rename business domains unless explicitly asked.
 - Do not reflect request `Origin` into CORS allow headers; do not skip session checks on new `/api/*` routes.

@@ -5,6 +5,7 @@ import {
   tenantForUser,
   withTenant,
   isEntitled,
+  isStaffRole,
   quotaForEntitled,
   type TenantId,
 } from "@locations/db";
@@ -177,7 +178,8 @@ app.get("/api/me", async (c) => {
     await getSubscription(tx, tenant),
     await getUserSettings(tx, tenant),
   ]);
-  const entitled = isEntitled(sub, { isDemo: user?.role === "demo" });
+  const entitled =
+    isEntitled(sub, { isDemo: user?.role === "demo" }) || isStaffRole(user?.role);
   return c.json({
     user,
     tenant,
@@ -394,7 +396,8 @@ app.post("/api/import", async (c) => {
   }
 
   const sub = await withTenant(db, tenant, (tx) => getSubscription(tx, tenant));
-  const entitled = isEntitled(sub, { isDemo: false });
+  const entitled =
+    isEntitled(sub, { isDemo: false }) || isStaffRole(sessionUser.role);
   if (c.env.STRIPE_SECRET_KEY && !entitled) {
     return c.json({ error: "An active subscription is required to import" }, 402);
   }

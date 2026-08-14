@@ -1,4 +1,4 @@
-import { config } from "dotenv";
+import { loadEnvFiles } from "./load-env.js";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,8 +6,7 @@ import { sql } from "drizzle-orm";
 import { createHttpDb } from "./index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-config({ path: resolve(__dirname, "../../../.env") });
-config({ path: resolve(__dirname, "../../../.dev.vars") });
+const envName = loadEnvFiles();
 
 function splitSql(body: string): string[] {
   const withoutLineComments = body
@@ -26,7 +25,7 @@ function splitSql(body: string): string[] {
 
 async function main() {
   const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is required");
+  if (!url) throw new Error(`DATABASE_URL is required (${envName} env files)`);
 
   const dir = resolve(__dirname, "../drizzle");
   const files = readdirSync(dir)

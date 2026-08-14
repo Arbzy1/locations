@@ -117,7 +117,7 @@ Security: [docs/security/README.md](docs/security/README.md). Agent conventions:
 ## Privacy
 
 - Real Takeout JSON is gitignored. Only sample data ships in the repo.
-- Do not commit `.env`, `.dev.vars`, or database credentials.
+- Do not commit `.env`, `.env.staging`, `.env.production`, `.dev.vars*`, or database credentials.
 - Delete account in Settings wipes Neon rows, R2 uploads, and the Stripe customer.
 
 ## License

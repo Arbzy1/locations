@@ -1,5 +1,12 @@
-# Local Wrangler secrets (gitignored). Copy from .env.example values.
-# Optional: `.dev.vars.staging` if you run `wrangler dev --env staging` against remote bindings.
+# Local Wrangler secrets (gitignored as `.dev.vars`). Used by `wrangler dev` (no --env).
+# Other environments: `.dev.vars.staging` / `.dev.vars.production`.
 DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
 BETTER_AUTH_SECRET=dev-secret-change-me-to-a-long-random-string
 BETTER_AUTH_URL=http://localhost:8787
+RESEND_API_KEY=
+DEMO_EMAIL=demo@locations.app
+DEMO_PASSWORD=
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_MONTHLY=
+STRIPE_PRICE_YEARLY=

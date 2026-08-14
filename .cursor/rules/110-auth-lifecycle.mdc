@@ -14,5 +14,6 @@ alwaysApply: false
 - Rotate the session on password or email change.
 - Demo login must not embed a password in the client bundle. Use `POST /api/auth/demo`.
 - `user.role` is server-only (`input: false`). Demo cannot mutate sources or billing.
+- Staff roles (`admin`, `developer`) skip the Stripe import gate and count as entitled on `/api/me`. They still use their own tenant. Promote with `auth:promote-admin` / `auth:promote-developer`.
 - Delete account wipes Neon tenant rows, R2 prefix, sessions, and the Stripe customer.
 - Password fields use `PasswordInput`.

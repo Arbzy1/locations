@@ -16,6 +16,7 @@
     "import": "tsx src/import.ts",
     "warm-routes": "tsx src/warm-routes.ts",
     "create-user": "tsx src/create-user.ts",
+    "promote-user": "tsx src/promote-user.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

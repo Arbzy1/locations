@@ -1,4 +1,4 @@
-import { config } from "dotenv";
+import { loadEnvFiles } from "./load-env.js";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { neon } from "@neondatabase/serverless";
@@ -8,8 +8,7 @@ import { activities, routeCache, type RouteStep } from "./schema.js";
 import { makeRouteCacheKey } from "./geo.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-config({ path: resolve(__dirname, "../../../.env") });
-config({ path: resolve(__dirname, "../../../.dev.vars") });
+loadEnvFiles();
 
 const OSRM_BASE = "https://router.project-osrm.org/route/v1";
 const MODE_TO_PROFILE: Record<string, string> = {

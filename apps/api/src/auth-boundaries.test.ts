@@ -65,6 +65,7 @@ function sessionUser(overrides: {
   email?: string;
   name?: string;
   role?: string;
+  emailVerified?: boolean;
 } = {}) {
   return {
     user: {
@@ -72,12 +73,13 @@ function sessionUser(overrides: {
       email: overrides.email ?? "a@example.com",
       name: overrides.name ?? "User A",
       role: overrides.role ?? "user",
+      emailVerified: overrides.emailVerified ?? false,
     },
   };
 }
 
-async function request(path: string, init?: RequestInit) {
-  return app.request(path, init, env, executionCtx);
+async function request(path: string, init?: RequestInit, requestEnv: Env = env) {
+  return app.request(path, init, requestEnv, executionCtx);
 }
 
 describe("API auth boundaries", () => {
@@ -210,5 +212,49 @@ describe("API auth boundaries", () => {
       "user-a",
       "other-tenant-source",
     );
+  });
+
+  it("returns 402 for a paying-gated user import when Stripe is configured", async () => {
+    getSession.mockResolvedValue(
+      sessionUser({ id: "user-pay", emailVerified: true, role: "user" }),
+    );
+    const stripeEnv = { ...env, STRIPE_SECRET_KEY: "sk_test_x" };
+    const res = await request("/api/import", { method: "POST" }, stripeEnv);
+    expect(res.status).toBe(402);
+    expect(await res.json()).toEqual({
+      error: "An active subscription is required to import",
+    });
+  });
+
+  it("skips the Stripe import gate for admin", async () => {
+    getSession.mockResolvedValue(
+      sessionUser({ id: "user-admin", emailVerified: true, role: "admin" }),
+    );
+    const stripeEnv = { ...env, STRIPE_SECRET_KEY: "sk_test_x" };
+    const res = await request("/api/import", { method: "POST" }, stripeEnv);
+    expect(res.status).not.toBe(402);
+    expect(res.status).toBe(400);
+  });
+
+  it("skips the Stripe import gate for developer", async () => {
+    getSession.mockResolvedValue(
+      sessionUser({
+        id: "user-dev",
+        emailVerified: true,
+        role: "developer",
+      }),
+    );
+    const stripeEnv = { ...env, STRIPE_SECRET_KEY: "sk_test_x" };
+    const res = await request("/api/import", { method: "POST" }, stripeEnv);
+    expect(res.status).not.toBe(402);
+    expect(res.status).toBe(400);
+  });
+
+  it("marks staff entitled on /api/me without a subscription", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-admin", role: "admin" }));
+    const res = await request("/api/me");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { entitlements: { entitled: boolean } };
+    expect(body.entitlements.entitled).toBe(true);
   });
 });

@@ -45,6 +45,7 @@ wrangler.toml.local
 .dev.vars
 .dev.vars.*
 !.dev.vars.example
+!.dev.vars*.example
 .generated-secret.txt
 *.pem
 *.key
@@ -88,6 +89,7 @@ htmlcov/
 .jest/
 test-results/
 playwright-report/
+reports/
 blob-report/
 playwright/.cache/
 cypress/videos/

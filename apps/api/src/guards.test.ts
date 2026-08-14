@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tenantForUser } from "@locations/db";
+import { isStaffRole, tenantForUser } from "@locations/db";
 import { blockDemo } from "./guards";
 
 describe("tenantForUser", () => {
@@ -10,8 +10,20 @@ describe("tenantForUser", () => {
   it("uses the user id for non-demo roles", () => {
     expect(tenantForUser({ id: "user-1", role: "user" })).toBe("user-1");
     expect(tenantForUser({ id: "user-1", role: "admin" })).toBe("user-1");
+    expect(tenantForUser({ id: "user-1", role: "developer" })).toBe("user-1");
     expect(tenantForUser({ id: "user-1", role: null })).toBe("user-1");
     expect(tenantForUser({ id: "user-1" })).toBe("user-1");
+  });
+});
+
+describe("isStaffRole", () => {
+  it("is true for admin and developer only", () => {
+    expect(isStaffRole("admin")).toBe(true);
+    expect(isStaffRole("developer")).toBe(true);
+    expect(isStaffRole("user")).toBe(false);
+    expect(isStaffRole("demo")).toBe(false);
+    expect(isStaffRole(null)).toBe(false);
+    expect(isStaffRole(undefined)).toBe(false);
   });
 });
 

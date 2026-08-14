@@ -20,9 +20,11 @@ Push to `main` deploys staging. Production is a manual promote (`npm run deploy:
 2. Migrate each database:
 
    ```bash
-   DATABASE_URL=<staging-url> npm run db:migrate
-   DATABASE_URL=<production-url> npm run db:migrate
+   npm run db:migrate -- --env staging
+   npm run db:migrate -- --env production
    ```
+
+   Fill `.env.staging` / `.env.production` first (`npm run env:merge`). Each file needs its own `DATABASE_URL`.
 
 3. Cloudflare resources (same account as `wrangler.toml`): R2 `locations-uploads-staging`, queues `locations-imports-staging` and `locations-imports`. Production R2 `locations-uploads` already exists. Staging custom domain is `locations-staging.aden.website` (`custom_domain = true` in the staging env).
 4. Put Worker secrets per env. Worker secrets stay on Cloudflare. Do not put `DATABASE_URL` in GitHub Actions.
@@ -62,7 +64,7 @@ Push to `main` deploys staging. Production is a manual promote (`npm run deploy:
 
 7. GitHub: add repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (`8507815ae44383c8d60535ea462f5124`). Enable the deploy workflows. Token needs Workers, R2, and Queues edit on this account.
 
-Local secrets stay in `.dev.vars`. Optional `.dev.vars.staging` if you run `wrangler dev --env staging` against remote bindings.
+Local CLI secrets: `.env` / `.dev.vars`. Staging: `.env.staging` / `.dev.vars.staging`. Production: `.env.production` / `.dev.vars.production`. Wrangler named envs read `.dev.vars.<env>` during `wrangler dev --env …`.
 
 ## npm scripts
 

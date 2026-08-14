@@ -283,3 +283,8 @@ export function tenantForUser(user: {
 export function canWriteAsRole(role: string | null | undefined): boolean {
   return role !== "demo";
 }
+
+/** Owner/staff roles that skip the Stripe import gate. Not a tenant bypass. */
+export function isStaffRole(role: string | null | undefined): boolean {
+  return role === "admin" || role === "developer";
+}
