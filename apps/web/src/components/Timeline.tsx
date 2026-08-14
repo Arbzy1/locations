@@ -273,6 +273,17 @@ export default function Timeline({
                         {formatTime(v.start)} – {formatTime(v.end)}
                       </span>
                     </div>
+                    {(v.arrived_by || v.departed_by) && (
+                      <div className="mt-1 text-[10px] text-text-muted">
+                        {v.arrived_by && (
+                          <span>Arrived by {MODE_LABELS[v.arrived_by] || v.arrived_by}</span>
+                        )}
+                        {v.arrived_by && v.departed_by ? ' · ' : null}
+                        {v.departed_by && (
+                          <span>Left by {MODE_LABELS[v.departed_by] || v.departed_by}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </button>
 

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { signUp } from '../lib/auth';
+import { authClient, signUp } from '../lib/auth';
 import PasswordInput from './PasswordInput';
 import ThemeToggle from './ThemeToggle';
 import { Button } from './ui/button';
@@ -17,6 +17,26 @@ export default function SignupPage() {
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+
+  const verifyOtp = async () => {
+    setOtpError('');
+    setOtpLoading(true);
+    try {
+      const result = await authClient.emailOtp.verifyEmail({ email, otp });
+      if (result.error) {
+        setOtpError(result.error.message || 'Invalid code');
+        return;
+      }
+      window.location.assign('/');
+    } catch {
+      setOtpError('Unable to verify code.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -49,7 +69,31 @@ export default function SignupPage() {
         <h1 className="font-display text-2xl font-semibold text-text">Create account</h1>
         <p className="mt-1 text-sm text-text-muted">Verify your email before importing Timeline data.</p>
         {done ? (
-          <p className="mt-4 text-sm text-walk">Check your inbox for a verification link, then sign in.</p>
+          <div className="mt-4 space-y-3">
+            <p className="text-sm text-walk">
+              Check your inbox for a verification link, or enter the 6-digit code we sent.
+            </p>
+            <Label htmlFor="otp">Verification code</Label>
+            <Input
+              id="otp"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              title="Six-digit email verification code"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              className="mb-2"
+            />
+            {otpError && <p className="text-sm text-train">{otpError}</p>}
+            <Button
+              type="button"
+              className="w-full"
+              title="Verify email with the code from your inbox"
+              disabled={otpLoading || otp.length < 6}
+              onClick={() => void verifyOtp()}
+            >
+              {otpLoading ? 'Verifying…' : 'Verify code'}
+            </Button>
+          </div>
         ) : (
           <>
             <Label htmlFor="name" className="mt-4">

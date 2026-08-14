@@ -17,6 +17,7 @@ import SettingsView from './components/SettingsView';
 import LoginPage from './components/LoginPage';
 import SignupPage from './components/SignupPage';
 import ForgotPage from './components/ForgotPage';
+import ResetPasswordPage from './components/ResetPasswordPage';
 import { CookiesRoute, PrivacyRoute, TermsRoute } from './components/LegalRoutes';
 import ThemeToggle from './components/ThemeToggle';
 import SearchBar from './components/SearchBar';
@@ -247,7 +248,7 @@ function AppContent() {
         </div>
 
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="hidden items-center gap-3 border-b border-border px-4 py-2 lg:flex">
+          <div className="flex items-center gap-3 border-b border-border px-4 py-2">
             <SearchBar />
           </div>
           <div className="min-h-0 flex-1 overflow-hidden mobile-nav-pad lg:pb-0">
@@ -409,6 +410,7 @@ function AuthGate() {
       <Routes>
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/forgot" element={<ForgotPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="*" element={<LoginPage />} />
       </Routes>
     );

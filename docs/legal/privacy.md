@@ -11,7 +11,7 @@ Locations (“we”) provides a hosted map journal for **your** Google Timeline 
 - Billing: Stripe customer and subscription ids (card data stays with Stripe)
 - Uploads: Takeout JSON/zip stored briefly on R2 then deleted after parse
 
-We do not sell location data. We do not put coordinates in marketing email.
+We do not sell location data. We do not put coordinates, place names, day routes, or Takeout payloads in email. Mail is transactional only (verify, reset, magic link, OTP, import status, billing status, account deleted). There is no marketing list. See the product [email catalog](../product/email.md).
 
 ## Legal basis (UK GDPR)
 

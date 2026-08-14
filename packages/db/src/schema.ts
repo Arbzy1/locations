@@ -120,6 +120,7 @@ export const importJobs = pgTable(
     parsedCount: integer("parsed_count"),
     merge: boolean("merge").notNull().default(false),
     r2Key: text("r2_key"),
+    notifiedAt: timestamp("notified_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

@@ -9,6 +9,7 @@ import {
   User,
   CreditCard,
   Ruler,
+  Download,
 } from 'lucide-react';
 import type { DataSourceInfo } from '../types';
 import {
@@ -16,7 +17,7 @@ import {
   useInvalidateLocationQueries,
   useSources,
 } from '../hooks/useApi';
-import { useSession } from '../lib/auth';
+import { authClient, useSession } from '../lib/auth';
 import { useUnits } from '../lib/units';
 import type { DistanceUnit } from '../utils/format';
 import { Button } from './ui/button';
@@ -24,9 +25,10 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Switch } from './ui/switch';
 import { Dialog, DialogContent } from './ui/dialog';
+import PasswordInput from './PasswordInput';
 
 export default function SettingsView() {
-  const { data: session } = useSession();
+  const { data: session, refetch: refetchSession } = useSession();
   const { data: sources, isLoading } = useSources();
   const { unit, timezone, entitlements } = useUnits();
   const [poll, setPoll] = useState(false);
@@ -45,15 +47,26 @@ export default function SettingsView() {
   const [tz, setTz] = useState(timezone ?? '');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteSource, setDeleteSource] = useState<DataSourceInfo | null>(null);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountMsg, setAccountMsg] = useState('');
+  const [exportBusy, setExportBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const latest = importStatus?.latestJob;
-  const user = session?.user as { email?: string; name?: string } | undefined;
+  const user = session?.user as { email?: string; name?: string; emailVerified?: boolean } | undefined;
 
   useEffect(() => {
     setDistanceUnit(unit);
     setTz(timezone ?? '');
   }, [unit, timezone]);
+
+  useEffect(() => {
+    if (user?.name) setDisplayName(user.name);
+  }, [user?.name]);
 
   useEffect(() => {
     if (latest?.status === 'ready') {
@@ -203,6 +216,122 @@ export default function SettingsView() {
     window.location.assign('/');
   };
 
+  const changePassword = async () => {
+    setAccountMsg('');
+    setError('');
+    setAccountBusy(true);
+    try {
+      const result = await authClient.changePassword({
+        currentPassword,
+        newPassword,
+        revokeOtherSessions: true,
+      });
+      if (result.error) {
+        setError(result.error.message || 'Could not change password');
+        return;
+      }
+      setCurrentPassword('');
+      setNewPassword('');
+      setAccountMsg('Password updated. Other sessions were signed out.');
+    } catch {
+      setError('Unable to change password.');
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const changeEmail = async () => {
+    setAccountMsg('');
+    setError('');
+    if (!newEmail.trim()) {
+      setError('Enter a new email');
+      return;
+    }
+    setAccountBusy(true);
+    try {
+      const result = await authClient.changeEmail({ newEmail: newEmail.trim() });
+      if (result.error) {
+        setError(result.error.message || 'Could not change email');
+        return;
+      }
+      setAccountMsg('Check the new inbox to confirm the email change.');
+    } catch {
+      setError('Unable to change email.');
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const changeDisplayName = async () => {
+    setAccountMsg('');
+    setError('');
+    const next = displayName.trim();
+    if (!next) {
+      setError('Enter a display name');
+      return;
+    }
+    setAccountBusy(true);
+    try {
+      const result = await authClient.updateUser({ name: next });
+      if (result.error) {
+        setError(result.error.message || 'Could not update name');
+        return;
+      }
+      await refetchSession();
+      setAccountMsg('Display name updated.');
+    } catch {
+      setError('Unable to update display name.');
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const exportData = async () => {
+    setError('');
+    setExportBusy(true);
+    try {
+      const res = await fetch('/api/account/export', { credentials: 'include' });
+      if (!res.ok) {
+        throw new Error('Could not export data');
+      }
+      const blob = await res.blob();
+      const stamp = new Date().toISOString().slice(0, 10);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `locations-export-${stamp}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setAccountMsg('Download started.');
+    } catch {
+      setError('Unable to export data.');
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const resendVerification = async () => {
+    setAccountMsg('');
+    setError('');
+    if (!user?.email) return;
+    setAccountBusy(true);
+    try {
+      const result = await authClient.sendVerificationEmail({
+        email: user.email,
+        callbackURL: `${window.location.origin}/settings`,
+      });
+      if (result.error) {
+        setError(result.error.message || 'Could not resend verification');
+        return;
+      }
+      setAccountMsg('Verification email sent.');
+    } catch {
+      setError('Unable to resend verification.');
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
   const beginReupload = (source: DataSourceInfo) => {
     setReuploadSourceId(source.id);
     setLabel(source.label);
@@ -211,6 +340,21 @@ export default function SettingsView() {
     if (fileRef.current) fileRef.current.value = '';
     fileRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
+
+  const status = entitlements?.status ?? 'none';
+  const graceUntil = entitlements?.graceUntil;
+  const graceActive =
+    Boolean(graceUntil) &&
+    new Date(graceUntil as string) > new Date() &&
+    status !== 'active' &&
+    status !== 'trialing';
+  const graceUntilLabel = graceUntil
+    ? new Date(graceUntil).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      })
+    : '';
 
   return (
     <div className="h-full overflow-y-auto bg-bg">
@@ -232,6 +376,102 @@ export default function SettingsView() {
           </div>
           <div className="text-sm text-text">{user?.name || 'User'}</div>
           <div className="mt-0.5 text-sm text-text-muted">{user?.email}</div>
+          <p className="mt-1 text-xs text-text-muted">
+            {user?.emailVerified ? 'Email verified' : 'Email not verified (required before import)'}
+          </p>
+          {accountMsg && <p className="mt-2 text-sm text-walk">{accountMsg}</p>}
+          <div className="mt-4 border-t border-border pt-4">
+            <Label htmlFor="display-name">Display name</Label>
+            <Input
+              id="display-name"
+              title="Your display name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="mb-2"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              title="Save display name"
+              disabled={accountBusy}
+              onClick={() => void changeDisplayName()}
+            >
+              Save name
+            </Button>
+          </div>
+          {!user?.emailVerified && (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3"
+              title="Resend email verification link and code"
+              disabled={accountBusy}
+              onClick={() => void resendVerification()}
+            >
+              Resend verification
+            </Button>
+          )}
+          <div className="mt-5 border-t border-border pt-4">
+            <Label htmlFor="new-email">Change email</Label>
+            <Input
+              id="new-email"
+              type="email"
+              title="New account email (requires re-verification)"
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              className="mb-2"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              title="Send confirmation to the new email"
+              disabled={accountBusy}
+              onClick={() => void changeEmail()}
+            >
+              Update email
+            </Button>
+          </div>
+          <div className="mt-5 border-t border-border pt-4">
+            <Label htmlFor="current-password">Current password</Label>
+            <PasswordInput
+              id="current-password"
+              autoComplete="current-password"
+              title="Current password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+            />
+            <Label htmlFor="settings-new-password" className="mt-3">
+              New password
+            </Label>
+            <PasswordInput
+              id="settings-new-password"
+              autoComplete="new-password"
+              title="New password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              title="Change password and sign out other sessions"
+              disabled={accountBusy || !currentPassword || !newPassword}
+              onClick={() => void changePassword()}
+            >
+              Change password
+            </Button>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              title="Download a JSON copy of your account summary"
+              disabled={exportBusy}
+              onClick={() => void exportData()}
+            >
+              {exportBusy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+              Export my data
+            </Button>
+          </div>
           <Button
             type="button"
             variant="destructive"
@@ -249,9 +489,14 @@ export default function SettingsView() {
             Billing
           </div>
           <p className="mb-3 text-sm text-text-muted">
-            Status: {entitlements?.status ?? 'none'}
+            Status: {status}
             {entitlements?.entitled ? ' (entitled)' : ''}
           </p>
+          {graceActive && (
+            <p className="mb-3 text-sm text-text">
+              Payment failed. Import is paused. You still have read-only access until {graceUntilLabel}.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button type="button" title="Subscribe monthly" onClick={() => void startCheckout('monthly')}>
               Subscribe monthly

@@ -122,6 +122,7 @@ export interface HeatmapPoint {
   count: number;
   /** Most common visit cluster / place label for this cell */
   label?: string;
+  cluster?: string;
   /** Town / city / village guessed from coordinates (Nominatim) */
   settlement?: string | null;
   totalDurationMinutes?: number;

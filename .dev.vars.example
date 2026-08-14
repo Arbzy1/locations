@@ -4,6 +4,8 @@ DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmo
 BETTER_AUTH_SECRET=dev-secret-change-me-to-a-long-random-string
 BETTER_AUTH_URL=http://localhost:8787
 RESEND_API_KEY=
+# When the API key is set, EMAIL_FROM must be a verified Resend domain.
+EMAIL_FROM=Locations <noreply@example.com>
 DEMO_EMAIL=demo@locations.app
 DEMO_PASSWORD=
 STRIPE_SECRET_KEY=

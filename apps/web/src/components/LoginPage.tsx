@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { signIn } from '../lib/auth';
+import { authClient, signIn } from '../lib/auth';
 import { MapPinned, Lock, Play } from 'lucide-react';
 import PasswordInput from './PasswordInput';
 import ThemeToggle from './ThemeToggle';
@@ -17,6 +17,73 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+
+  const sendMagicLink = async () => {
+    setError('');
+    if (!email) {
+      setError('Enter your email first.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await authClient.signIn.magicLink({
+        email,
+        callbackURL: `${window.location.origin}/hotspots`,
+      });
+      if (result.error) {
+        setError(result.error.message || 'Could not send sign-in link');
+        return;
+      }
+      setLinkSent(true);
+    } catch {
+      setError('Unable to send sign-in link.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendOtp = async () => {
+    setError('');
+    if (!email) {
+      setError('Enter your email first.');
+      return;
+    }
+    setOtpLoading(true);
+    try {
+      const result = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: 'sign-in',
+      });
+      if (result.error) {
+        setError(result.error.message || 'Could not send sign-in code');
+        return;
+      }
+      setOtpSent(true);
+    } catch {
+      setError('Unable to send sign-in code.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    setError('');
+    setOtpLoading(true);
+    try {
+      const result = await authClient.signIn.emailOtp({ email, otp });
+      if (result.error) {
+        setError(result.error.message || 'Invalid code');
+      }
+    } catch {
+      setError('Unable to verify code.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -121,6 +188,50 @@ export default function LoginPage() {
             <Link className="text-accent hover:underline" to="/forgot" title="Reset your password">
               Forgot password
             </Link>
+          </div>
+          <div className="mt-4 border-t border-border pt-4">
+            <p className="mb-2 text-xs text-text-muted">Or sign in without a password</p>
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                title="Email a one-time sign-in link"
+                disabled={loading || demoLoading}
+                onClick={() => void sendMagicLink()}
+              >
+                {linkSent ? 'Link sent' : 'Email me a sign-in link'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                title="Email a six-digit sign-in code"
+                disabled={otpLoading || demoLoading}
+                onClick={() => void sendOtp()}
+              >
+                {otpSent ? 'Code sent' : 'Email me a code'}
+              </Button>
+              {otpSent && (
+                <>
+                  <Label htmlFor="signin-otp">Sign-in code</Label>
+                  <Input
+                    id="signin-otp"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    title="Six-digit sign-in code from email"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    title="Verify sign-in code"
+                    disabled={otpLoading || otp.length < 6}
+                    onClick={() => void verifyOtp()}
+                  >
+                    {otpLoading ? 'Verifying…' : 'Verify code'}
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </form>
         <LegalFooter />

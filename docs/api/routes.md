@@ -22,8 +22,9 @@ All other `/api/*` require a session.
 | POST | `/api/billing/checkout` | `{ interval: monthly\|yearly }` |
 | POST | `/api/billing/portal` | |
 | POST | `/api/account/delete` | GDPR wipe |
-| GET | `/api/account/export` | JSON dump |
+| GET | `/api/account/export` | JSON dump (overview, sources, settings, labels) |
 | PATCH | `/api/account/settings` | units, timezone |
-| PATCH | `/api/places/labels` | user place names |
+| GET | `/api/places/labels` | user place names and hidden flags |
+| PATCH | `/api/places/labels` | user place names (`hidden` optional) |
 
 Cross-tenant ids return 404. Demo writes return 403.

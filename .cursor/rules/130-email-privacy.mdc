@@ -7,7 +7,11 @@ alwaysApply: true
 
 # email-privacy
 
-- Transactional email only (verify, reset, billing). Never put coordinates, place names, or day routes in email.
+- Transactional email only. Never put coordinates, place names, day routes, or Takeout payloads in email.
+- Catalog: `verify_email_link`, `verify_email_otp`, `password_reset_link`, `magic_link`, `signin_otp`, `change_email_verify`, `password_changed`, `email_changed`, `import_ready`, `import_failed`, `subscription_active`, `subscription_past_due`, `subscription_canceled`, `account_deleted`.
+- No marketing, newsletters, activity digests, or "you visited X" mail.
+- Skip send when `RESEND_API_KEY` is unset; do not throw. Demo tenant / `role === "demo"` never send.
+- Log `{ kind, ok }` only, never `to`.
 - Use the provider HTTP API (Resend). No raw SMTP header concatenation.
 - Do not log PII. Error trackers must scrub bodies and query strings.
 - `place_cache` / `route_cache` stay non-PII. User labels are tenant-scoped.

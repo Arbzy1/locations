@@ -31,6 +31,8 @@ vi.mock("./services", () => ({
   ensureDataSource: vi.fn(),
   importSourceData: vi.fn(),
   updateImportJob: vi.fn(),
+  getImportJob: vi.fn(),
+  emailForTenant: vi.fn(async () => null),
   getSubscription: vi.fn(async () => null),
   getUserSettings: vi.fn(async () => ({ distanceUnit: "mi" })),
   searchTenant: vi.fn(async () => ({ places: [], days: [] })),
@@ -41,7 +43,13 @@ vi.mock("./services", () => ({
 }));
 
 import { app } from "./index";
-import { getOverview, getSourceById, renameSource, removeSource } from "./services";
+import {
+  getOverview,
+  getSourceById,
+  listPlaceLabels,
+  renameSource,
+  removeSource,
+} from "./services";
 
 const env = {
   DATABASE_URL: "postgres://test",
@@ -256,5 +264,41 @@ describe("API auth boundaries", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { entitlements: { entitled: boolean } };
     expect(body.entitlements.entitled).toBe(true);
+  });
+
+  it("rejects unauthenticated access to /api/account/export", async () => {
+    getSession.mockResolvedValue(null);
+    const res = await request("/api/account/export");
+    expect(res.status).toBe(401);
+  });
+
+  it("allows the owner to export account JSON", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
+    const res = await request("/api/account/export");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Disposition")).toMatch(/locations-export-.*\.json/);
+    const body = (await res.json()) as { tenant: string };
+    expect(body.tenant).toBe("user-a");
+  });
+
+  it("rejects unauthenticated access to /api/places/labels", async () => {
+    getSession.mockResolvedValue(null);
+    const res = await request("/api/places/labels");
+    expect(res.status).toBe(401);
+  });
+
+  it("allows the owner to list place labels", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
+    vi.mocked(listPlaceLabels).mockResolvedValueOnce([] as never);
+    const res = await request("/api/places/labels");
+    expect(res.status).toBe(200);
+    expect(listPlaceLabels).toHaveBeenCalledWith(expect.anything(), "user-a");
+  });
+
+  it("allows demo users to list place labels", async () => {
+    getSession.mockResolvedValue(sessionUser({ role: "demo", id: "demo-1" }));
+    vi.mocked(listPlaceLabels).mockResolvedValueOnce([] as never);
+    const res = await request("/api/places/labels");
+    expect(res.status).toBe(200);
   });
 });

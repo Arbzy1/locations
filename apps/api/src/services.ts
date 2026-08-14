@@ -509,7 +509,14 @@ export async function getHeatmap(
     }
   }
 
-  return points.map(({ cluster: _cluster, ...rest }) => rest);
+  const hidden = await hiddenPlaceKeySet(db, tenant);
+
+  return points
+    .filter((p) => {
+      const coordKey = `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
+      return !hidden.has(p.cluster) && !hidden.has(coordKey) && !hidden.has(p.label);
+    })
+    .map(({ cluster, ...rest }) => ({ ...rest, cluster: cluster || undefined }));
 }
 
 export async function getAnalytics(
@@ -1126,29 +1133,63 @@ export async function createImportJob(
   });
 }
 
+export async function getImportJob(
+  db: ReturnType<typeof createDb>,
+  jobId: string,
+  tenant: TenantId,
+) {
+  const rows = await db
+    .select()
+    .from(importJobs)
+    .where(and(eq(importJobs.id, jobId), eq(importJobs.tenant, tenant)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function updateImportJob(
   db: ReturnType<typeof createDb>,
   jobId: string,
   patch: {
-    status: ImportJobStatus;
+    status?: ImportJobStatus;
     error?: string | null;
     visitCount?: number;
     activityCount?: number;
     parsedCount?: number;
+    notifiedAt?: Date;
   },
   tenant?: TenantId,
 ) {
   await db
     .update(importJobs)
     .set({
-      status: patch.status,
-      error: patch.error ?? null,
-      visitCount: patch.visitCount,
-      activityCount: patch.activityCount,
-      parsedCount: patch.parsedCount,
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+      ...(patch.status === "ready" || patch.status === "processing"
+        ? { error: patch.error ?? null }
+        : patch.error !== undefined
+          ? { error: patch.error }
+          : {}),
+      ...(patch.visitCount !== undefined ? { visitCount: patch.visitCount } : {}),
+      ...(patch.activityCount !== undefined ? { activityCount: patch.activityCount } : {}),
+      ...(patch.parsedCount !== undefined ? { parsedCount: patch.parsedCount } : {}),
+      ...(patch.notifiedAt !== undefined ? { notifiedAt: patch.notifiedAt } : {}),
       updatedAt: new Date(),
     })
     .where(tenant ? and(eq(importJobs.id, jobId), eq(importJobs.tenant, tenant)) : eq(importJobs.id, jobId));
+}
+
+export async function emailForTenant(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+): Promise<{ email: string; role: string } | null> {
+  if (tenant === "demo") return null;
+  const rows = await db
+    .select({ email: user.email, role: user.role })
+    .from(user)
+    .where(eq(user.id, tenant))
+    .limit(1);
+  const row = rows[0];
+  if (!row?.email) return null;
+  return { email: row.email, role: row.role ?? "user" };
 }
 
 export { ensureDataSource, importSourceData };
@@ -1199,12 +1240,16 @@ export async function searchTenant(
     .from(visits)
     .where(and(eq(visits.tenant, tenant), or(ilike(visits.cluster, like), ilike(visits.semanticType, like))))
     .limit(30);
+  const hidden = await hiddenPlaceKeySet(db, tenant);
+  const visiblePlaces = hidden.size
+    ? places.filter((p) => !p.cluster || !hidden.has(p.cluster))
+    : places;
   const days = await db
     .select()
     .from(dayStats)
     .where(and(eq(dayStats.tenant, tenant), sql`${dayStats.date} like ${`%${term}%`}`))
     .limit(20);
-  return { places, days };
+  return { places: visiblePlaces, days };
 }
 
 export async function upsertPlaceLabel(
@@ -1226,6 +1271,14 @@ export async function upsertPlaceLabel(
 
 export async function listPlaceLabels(db: ReturnType<typeof createDb>, tenant: TenantId) {
   return db.select().from(placeLabels).where(eq(placeLabels.tenant, tenant));
+}
+
+async function hiddenPlaceKeySet(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+): Promise<Set<string>> {
+  const rows = await listPlaceLabels(db, tenant);
+  return new Set(rows.filter((r) => r.hidden).map((r) => r.placeKey));
 }
 
 export async function wipeTenantData(

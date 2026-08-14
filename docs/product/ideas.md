@@ -6,31 +6,19 @@ Privacy default stays: no live tracking, and no sharing maps with strangers unle
 
 Items marked **(API ready)** already have endpoints or schema fields. They need UI, not a new backend.
 
-Highest leverage with the current schema: place page, trip page, mobile search, export + account identity, map overlays for corridors / home-work / areas, real year-in-review.
+Highest leverage with the current schema: place page, trip page, real year-in-review screen.
 
 Do not start with live sharing, family tenancy, or an LLM that sees coordinates.
 
 ## What already ships
 
-Hotspots, Day View, Day Trips, Insights, Settings, login / signup / forgot, legal pages, import, billing, search (desktop), place rename, heatmap, OSRM routes.
+Hotspots (including hide place and home/work pins), Day View (including arrived/departed on timeline rows), Day Trips, Insights (unique places, monthly top places, year-in-review places/modes, area and corridor map), Settings (display name, JSON export, billing grace copy), login / signup / forgot / reset-password, magic link and email OTP, legal pages, import, billing, search (including phones), place rename, heatmap, OSRM routes.
 
 ---
 
-## 0. Quick wins (API or data already exists)
+## 0. Quick wins
 
-- **Settings: export my data** button (`GET /api/account/export`) **(API ready)**
-- **Settings: change display name, email (re-verify), password** (Better Auth already supports the lifecycle) **(API ready)**
-- **Hide a place** (`place_labels.hidden`) from Hotspots, search, and Insights **(API ready)**
-- **Insights: monthly top places** (monthly payload already includes `top_places`) **(API ready)**
-- **Insights: year-in-review places and modes** (endpoint returns them; UI shows totals only) **(API ready)**
-- **Overview: unique places** as a stat card **(API ready)**
-- **Frequent areas on a map** (areas payload already has lat/lon) **(API ready)**
-- **Corridors on the map** (place-to-place lines, not just a list) **(API ready)**
-- **Home / work pins** on Hotspots (guesses already computed) **(API ready)**
-- **Multi-day trips: click through** to Day View / a trip map **(API ready)**
-- **Search on mobile** (header search exists; hidden below `lg`)
-- **Timeline rows: arrived by / departed by** (already on map popups)
-- **Billing: grace period copy** (`graceUntil` on `/api/me`) **(API ready)**
+The catalog items that were API-ready are in the product. See [Features](features.md). Remaining ideas start at new pages below.
 
 ---
 
@@ -200,7 +188,7 @@ Hotspots, Day View, Day Trips, Insights, Settings, login / signup / forgot, lega
 
 ## 9. Account, billing, privacy
 
-- Change name / email / password in Settings
+- Change display name in Settings (email and password change already ship)
 - Sessions list and revoke
 - 2FA
 - Passkeys
@@ -270,16 +258,12 @@ Prefer exports and screenshots over multi-user maps unless you are ready to redo
 
 ## Suggested sequencing (if you build any of this)
 
-1. Quick wins: export, hide place, mobile search, year-in-review fields, identity in Settings
-2. Map overlays: corridors, home/work, frequent areas
-3. Place page + directory
-4. Multi-day trip page
-5. Year / month / on-this-day
-6. Later: GPX import, PWA, sharing, LLM (only with redaction)
+1. Place page + directory
+2. Multi-day trip page
+3. Year / month / on-this-day
+4. Later: GPX import, PWA, sharing, LLM (only with redaction)
 
 ```text
-quick wins --> place page + map overlays
 place page --> trip page --> year/month/on-this-day
-quick wins --> account identity
 year/month --> later (GPX, PWA, sharing, LLM)
 ```

@@ -50,7 +50,10 @@ import {
   upsertPlaceLabel,
   upsertUserSettings,
   wipeTenantData,
+  emailForTenant,
+  getImportJob,
 } from "./services";
+import { billingEmailKind, sendProductEmail } from "./email";
 
 const MAX_UPLOAD_BYTES = 80 * 1024 * 1024;
 
@@ -116,7 +119,18 @@ app.all("/api/auth/*", async (c) => {
     return c.json({ error: "Too many auth requests" }, 429);
   }
   const auth = createAuth(c.env);
-  return auth.handler(c.req.raw);
+  const res = await auth.handler(c.req.raw);
+  if (res.ok && c.req.method === "POST" && c.req.path.endsWith("/change-password")) {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    const email = session?.user?.email;
+    const role = (session?.user as { role?: string } | undefined)?.role;
+    if (email) {
+      c.executionCtx.waitUntil(
+        sendProductEmail(c.env, { kind: "password_changed", to: email, role }),
+      );
+    }
+  }
+  return res;
 });
 
 app.use("/api/*", async (c, next) => {
@@ -531,7 +545,16 @@ app.get("/api/account/export", async (c) => {
     settings: await getUserSettings(tx, tenant),
     labels: await listPlaceLabels(tx, tenant),
   }));
+  const stamp = new Date().toISOString().slice(0, 10);
+  c.header("Content-Disposition", `attachment; filename="locations-export-${stamp}.json"`);
   return c.json({ tenant, exportedAt: new Date().toISOString(), ...data });
+});
+
+app.get("/api/places/labels", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const labels = await withTenant(db, tenant, (tx) => listPlaceLabels(tx, tenant));
+  return c.json(labels);
 });
 
 app.post("/api/account/delete", async (c) => {
@@ -548,6 +571,11 @@ app.post("/api/account/delete", async (c) => {
   if (stripe && sub?.stripeCustomerId) {
     await stripe.customers.del(sub.stripeCustomerId).catch(() => undefined);
   }
+  await sendProductEmail(c.env, {
+    kind: "account_deleted",
+    to: user.email,
+    role: user.role,
+  });
   await wipeTenantData(db, tenant, user.id);
   return c.json({ ok: true });
 });
@@ -638,6 +666,7 @@ app.post("/api/billing/webhook", async (c) => {
   if (event.type.startsWith("customer.subscription") && tenant && obj.id) {
     const sub = await stripe.subscriptions.retrieve(obj.id);
     await withTenant(db, tenant, (tx) => syncSubscriptionFromStripe(tx, c.env, sub, tenant!));
+    await sendBillingNotice(c.env, db, tenant, event.type, sub?.status, event.id);
   }
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as { subscription?: string; client_reference_id?: string };
@@ -645,12 +674,63 @@ app.post("/api/billing/webhook", async (c) => {
     if (tenant && session.subscription) {
       const sub = await stripe.subscriptions.retrieve(String(session.subscription));
       await withTenant(db, tenant, (tx) => syncSubscriptionFromStripe(tx, c.env, sub, tenant!));
+      await sendBillingNotice(c.env, db, tenant, event.type, sub?.status, event.id);
     }
   }
   return c.json({ received: true });
 });
 
 app.get("/api/health", (c) => c.json({ ok: true }));
+
+async function sendBillingNotice(
+  env: Env,
+  db: ReturnType<typeof getDb>,
+  tenant: string,
+  eventType: string,
+  status: string | undefined,
+  eventId: string,
+): Promise<void> {
+  const kind = billingEmailKind(eventType, status);
+  if (!kind) return;
+  const recipient = await emailForTenant(db, tenant);
+  if (!recipient) return;
+  await sendProductEmail(env, {
+    kind,
+    to: recipient.email,
+    role: recipient.role,
+    idempotencyKey: eventId,
+  });
+}
+
+async function notifyImportJob(
+  env: Env,
+  db: ReturnType<typeof getDb>,
+  tenant: string,
+  jobId: string,
+): Promise<void> {
+  const job = await withTenant(db, tenant, (tx) => getImportJob(tx, jobId, tenant));
+  if (!job || job.notifiedAt) return;
+  if (job.status !== "ready" && job.status !== "error") return;
+  const recipient = await emailForTenant(db, tenant);
+  const kind = job.status === "ready" ? "import_ready" : "import_failed";
+  const result = recipient
+    ? await sendProductEmail(env, {
+        kind,
+        to: recipient.email,
+        role: recipient.role,
+        vars:
+          job.status === "ready"
+            ? { visitCount: job.visitCount ?? 0, activityCount: job.activityCount ?? 0 }
+            : {},
+        idempotencyKey: `import:${jobId}`,
+      })
+    : "skipped";
+  if (result !== "failed") {
+    await withTenant(db, tenant, (tx) =>
+      updateImportJob(tx, jobId, { notifiedAt: new Date() }, tenant),
+    );
+  }
+}
 
 async function runImportJob(env: Env, message: ImportQueueMessage): Promise<void> {
   const jobDb = getDb(env);
@@ -688,11 +768,13 @@ async function runImportJob(env: Env, message: ImportQueueMessage): Promise<void
         tenant,
       ),
     );
+    await notifyImportJob(env, jobDb, tenant, jobId);
   } catch (err) {
     const messageText = err instanceof Error ? err.message : String(err);
     await withTenant(jobDb, tenant, (tx) =>
       updateImportJob(tx, jobId, { status: "error", error: messageText }, tenant),
     ).catch(() => undefined);
+    await notifyImportJob(env, jobDb, tenant, jobId).catch(() => undefined);
   } finally {
     await env.UPLOADS.delete(r2Key).catch(() => undefined);
   }

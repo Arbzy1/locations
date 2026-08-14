@@ -5,7 +5,8 @@ export function PrivacyRoute() {
     <LegalPage title="Privacy Policy">
       <p>
         We store your account email, Timeline visits and activities, and billing identifiers. We do
-        not sell location data. Precise coordinates are not sent in email.
+        not sell location data. Email is transactional only (sign-in, import status, billing). It
+        never includes coordinates, place names, or day routes.
       </p>
       <p>
         You can export or delete your account in Settings. Full policy:{' '}

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Transactional email catalog (verify, OTP, magic link, import and billing status) via Resend. See [docs/product/email.md](product/email.md).
+
 Documented a product idea catalog in [docs/product/ideas.md](product/ideas.md). Not a commitment to build.
 
 ## 1.2.0

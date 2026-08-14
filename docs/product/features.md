@@ -7,9 +7,12 @@ What the hosted app does today. Nothing here is a roadmap.
 - **Hotspots:** visit-density heatmap, ranked places, date range, filter by Timeline source
 - Heatmap on/off, opacity, and strength
 - Rename a place (saved for your account only)
+- Hide a place from Hotspots, search, and Insights (Day View still lists the visits)
+- Home and work guess pins on the Hotspots map when those clusters have coordinates
 - **Day View:** one day on a map plus a chronological timeline
 - Calendar of days that have data; previous/next day
 - Visits and journeys on the map; tap a timeline row to zoom
+- Timeline rows show arrived-by / left-by when Google recorded a mode
 - Journeys use cached road geometry when it is available (turn-by-turn steps in the timeline)
 - Basemaps: dark, light, street, satellite
 - Dark / light UI theme
@@ -19,18 +22,17 @@ What the hosted app does today. Nothing here is a roadmap.
 - **Day Trips:** days with more range or more places, listed with distance, stops, and modes
 - Filter by year, mode, minimum range, and place name; sort by date, distance, range, or stops
 - Open a trip to that day in Day View
-- **Insights:** total distance, days tracked, visits, journeys
-- Monthly distance chart and transport-mode breakdown
-- Yearly table and a year-in-review block for the latest year
-- Frequent travel corridors and frequent areas
+- **Insights:** total distance, days tracked, visits, journeys, unique places
+- Monthly distance chart, per-month top places, and transport-mode breakdown
+- Yearly table and a year-in-review block (totals, top places, modes)
+- Frequent travel corridors and frequent areas, with a compact map of area markers and corridor lines
 - Home and work guesses from overnight / weekday visits (not confirmed addresses)
-- Multi-day trip groupings
+- Multi-day trip groupings; tap a row to open that start day in Day View
 - Extra stats: busiest day, longest journey, estimated steps, and similar
 
 ## Search
 
-- Search place names and dates from the desktop header; results open Day View
-- Not shown on small screens (use Day View or Day Trips instead)
+- Search place names and dates from the header (including phones); results open Day View
 
 ## Import
 
@@ -43,10 +45,16 @@ What the hosted app does today. Nothing here is a roadmap.
 ## Account
 
 - Sign up with email and password (unless signup is turned off)
-- Sign in, forgot password, sign out
+- Verify email with a link or a 6-digit code; resend from Settings
+- Sign in with password, a one-time email link, or a 6-digit code
+- Forgot password; choose a new password at `/reset-password`
+- Change display name, email (re-verify), and password from Settings
+- Download a JSON export of overview, sources, settings, and place labels
 - Public demo with sample journeys (read-only)
 - Miles or kilometres, and an IANA timezone
 - Stripe subscribe (monthly or yearly) and customer portal when billing is configured
+- Failed payment: read-only grace copy in Settings until `graceUntil`, with import paused
+- Status email when import finishes or fails, and when billing becomes active, past due, or canceled
 - Delete account: wipes Timeline rows, uploads, sessions, and the Stripe customer
 - Privacy, Terms, and Cookies pages
 
@@ -57,5 +65,4 @@ Possible later work (not a roadmap): [Further features and pages](ideas.md).
 - Live Google Location sharing or a phone tracker
 - Editing individual visits on the map
 - Sharing a map with other people
-- Change email / password / display name from Settings (forgot-password email only)
-- Data export button in Settings (`GET /api/account/export` exists for operators)
+- Full Timeline JSON dump (export is overview, sources, settings, and labels)

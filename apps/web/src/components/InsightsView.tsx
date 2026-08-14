@@ -8,13 +8,18 @@ import {
   useYearInReview,
   useAreas,
   useMultiDayTrips,
+  usePlaceLabels,
+  useHeatmap,
 } from '../hooks/useApi';
 import StatCard from './StatCard';
+import MapView from './Map';
+import { Button } from './ui/button';
 import { MODE_COLORS, MODE_LABELS } from '../types';
 import { formatMilesOrKm } from '../utils/format';
 import { useUnits } from '../lib/units';
 import { useTheme } from '../lib/theme';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   BarChart,
   Bar,
@@ -63,8 +68,76 @@ export default function InsightsView() {
   const { data: yearReview } = useYearInReview();
   const { data: areas } = useAreas();
   const { data: multiDay } = useMultiDayTrips();
+  const { data: labels } = usePlaceLabels();
+  const { data: heatmapPoints } = useHeatmap();
   const { unit } = useUnits();
   const chart = useChartColors();
+  const navigate = useNavigate();
+  const [mapSize, setMapSize] = useState(0);
+
+  const hiddenKeys = useMemo(
+    () => new Set((labels ?? []).filter((l) => l.hidden).map((l) => l.placeKey)),
+    [labels],
+  );
+
+  const visibleAreas = useMemo(
+    () => (areas ?? []).filter((a) => !hiddenKeys.has(a.cluster)),
+    [areas, hiddenKeys],
+  );
+
+  const visibleCorridors = useMemo(
+    () => (corridors ?? []).filter((c) => !hiddenKeys.has(c.from) && !hiddenKeys.has(c.to)),
+    [corridors, hiddenKeys],
+  );
+
+  const coordByName = useMemo(() => {
+    const map = new Map<string, { lat: number; lon: number }>();
+    for (const a of visibleAreas) {
+      if (Number.isFinite(a.lat) && Number.isFinite(a.lon)) {
+        map.set(a.cluster, { lat: a.lat, lon: a.lon });
+      }
+    }
+    for (const p of heatmapPoints ?? []) {
+      const name = p.cluster || p.label;
+      if (name && !map.has(name) && !hiddenKeys.has(name)) {
+        map.set(name, { lat: p.lat, lon: p.lon });
+      }
+    }
+    return map;
+  }, [visibleAreas, heatmapPoints, hiddenKeys]);
+
+  const areaMarkers = useMemo(
+    () =>
+      visibleAreas
+        .filter((a) => Number.isFinite(a.lat) && Number.isFinite(a.lon))
+        .slice(0, 20)
+        .map((a) => ({
+          lat: a.lat,
+          lon: a.lon,
+          label: a.cluster,
+          visits: a.visits,
+        })),
+    [visibleAreas],
+  );
+
+  const corridorLines = useMemo(() => {
+    const lines: { from: [number, number]; to: [number, number]; count: number }[] = [];
+    for (const c of visibleCorridors.slice(0, 12)) {
+      const start = coordByName.get(c.from);
+      const end = coordByName.get(c.to);
+      if (!start || !end) continue;
+      lines.push({
+        from: [start.lat, start.lon],
+        to: [end.lat, end.lon],
+        count: c.count,
+      });
+    }
+    return lines;
+  }, [visibleCorridors, coordByName]);
+
+  useEffect(() => {
+    setMapSize((n) => n + 1);
+  }, [areaMarkers.length, corridorLines.length]);
 
   // Mode breakdown for pie chart
   const modeData = yearly
@@ -125,6 +198,11 @@ export default function InsightsView() {
               value={overview.total_activities.toLocaleString()}
               icon={<Activity size={16} />}
             />
+            <StatCard
+              label="Unique Places"
+              value={overview.unique_places.toLocaleString()}
+              icon={<MapPin size={16} />}
+            />
           </div>
         )}
 
@@ -155,6 +233,28 @@ export default function InsightsView() {
                 <Bar dataKey="distance_miles" fill={chart.accent} radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {[...monthly]
+                .slice(-6)
+                .reverse()
+                .map((m) => {
+                  const places = (m.top_places ?? []).filter(([name]) => !hiddenKeys.has(name)).slice(0, 3);
+                  if (places.length === 0) return null;
+                  return (
+                    <div key={m.month} className="rounded-md border border-border/60 bg-surface/40 p-2">
+                      <div className="mb-1 text-[11px] font-semibold text-text-muted">{m.month}</div>
+                      <ul className="space-y-0.5 text-xs">
+                        {places.map(([name, count]) => (
+                          <li key={name} className="flex justify-between gap-2">
+                            <span className="truncate text-text">{name}</span>
+                            <span className="shrink-0 font-mono text-text-muted">{count}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
         )}
 
@@ -191,14 +291,14 @@ export default function InsightsView() {
           )}
 
           {/* Top corridors */}
-          {corridors && corridors.length > 0 && (
+          {visibleCorridors.length > 0 && (
             <div className="bg-bg border border-border rounded-lg p-4">
               <h3 className="text-sm font-semibold text-text-muted mb-4 flex items-center gap-2">
                 <ArrowLeftRight size={14} />
                 Top Travel Corridors
               </h3>
               <div className="space-y-2">
-                {corridors.slice(0, 10).map((c, i) => (
+                {visibleCorridors.slice(0, 10).map((c, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="text-xs text-text truncate">
@@ -208,7 +308,7 @@ export default function InsightsView() {
                         <div
                           className="h-full rounded-full bg-accent"
                           style={{
-                            width: `${(c.count / corridors[0].count) * 100}%`,
+                            width: `${(c.count / visibleCorridors[0].count) * 100}%`,
                           }}
                         />
                       </div>
@@ -272,6 +372,40 @@ export default function InsightsView() {
               <StatCard label="Journeys" value={yearReview.activities.toLocaleString()} />
               <StatCard label="Days" value={String(yearReview.days_tracked)} />
             </div>
+            {yearReview.top_places?.some(([name]) => !hiddenKeys.has(name)) && (
+              <div className="mt-4">
+                <h4 className="mb-2 text-xs font-semibold text-text-muted">Top places</h4>
+                <ul className="space-y-1 text-sm">
+                  {yearReview.top_places
+                    .filter(([name]) => !hiddenKeys.has(name))
+                    .slice(0, 8)
+                    .map(([name, count]) => (
+                      <li key={name} className="flex justify-between gap-2">
+                        <span className="truncate">{name}</span>
+                        <span className="shrink-0 font-mono text-text-muted">{count}</span>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+            {yearReview.modes && Object.keys(yearReview.modes).length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {Object.entries(yearReview.modes)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([mode, count]) => (
+                    <span
+                      key={mode}
+                      className="rounded-full border border-border px-2.5 py-1 text-xs"
+                      style={{
+                        color: MODE_COLORS[mode] || 'var(--text-muted)',
+                        borderColor: MODE_COLORS[mode] || 'var(--border)',
+                      }}
+                    >
+                      {MODE_LABELS[mode] || mode} · {count}
+                    </span>
+                  ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -289,11 +423,11 @@ export default function InsightsView() {
           </div>
         )}
 
-        {Array.isArray(areas) && areas.length > 0 && (
+        {visibleAreas.length > 0 && (
           <div className="rounded-lg border border-border bg-bg p-4">
             <h3 className="mb-3 text-sm font-semibold text-text-muted">Frequent areas</h3>
             <ul className="space-y-1 text-sm">
-              {areas.slice(0, 12).map((a) => (
+              {visibleAreas.slice(0, 12).map((a) => (
                 <li key={a.cluster} className="flex justify-between">
                   <span>{a.cluster}</span>
                   <span className="font-mono text-text-muted">{a.visits}</span>
@@ -303,13 +437,38 @@ export default function InsightsView() {
           </div>
         )}
 
+        {(areaMarkers.length > 0 || corridorLines.length > 0) && (
+          <div className="rounded-lg border border-border bg-bg p-4">
+            <h3 className="mb-3 text-sm font-semibold text-text-muted">Areas and corridors</h3>
+            <div className="h-64 overflow-hidden rounded-lg border border-border">
+              <MapView
+                compact
+                areaMarkers={areaMarkers}
+                corridorLines={corridorLines}
+                sizeSignal={mapSize}
+              />
+            </div>
+            <p className="mt-2 text-[11px] text-text-muted">
+              Dots are frequent areas. Lines are travel corridors with known endpoints.
+            </p>
+          </div>
+        )}
+
         {Array.isArray(multiDay) && multiDay.length > 0 && (
           <div className="rounded-lg border border-border bg-bg p-4">
             <h3 className="mb-3 text-sm font-semibold text-text-muted">Multi-day trips</h3>
-            <ul className="space-y-2 text-sm">
+            <ul className="space-y-1 text-sm">
               {multiDay.slice(0, 12).map((t) => (
                 <li key={`${t.start}-${t.end}`}>
-                  {t.start} to {t.end} · {formatMilesOrKm(t.total_miles, unit)} · {t.clusters.slice(0, 4).join(', ')}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    title={`Open Day View for ${t.start}`}
+                    className="h-auto min-h-11 w-full justify-start whitespace-normal px-2 py-2 text-left font-normal"
+                    onClick={() => void navigate(`/day/${t.start}`)}
+                  >
+                    {t.start} to {t.end} · {formatMilesOrKm(t.total_miles, unit)} · {t.clusters.slice(0, 4).join(', ')}
+                  </Button>
                 </li>
               ))}
             </ul>

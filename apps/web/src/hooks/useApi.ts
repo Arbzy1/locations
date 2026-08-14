@@ -268,6 +268,15 @@ export function useSearch(q: string) {
   });
 }
 
+export function usePlaceLabels() {
+  const tenantKey = useTenantKey();
+  return useQuery<{ placeKey: string; label: string; hidden: boolean }[]>({
+    queryKey: ['place-labels', tenantKey],
+    queryFn: () => fetchJson('/api/places/labels'),
+    enabled: tenantKey !== 'anon',
+  });
+}
+
 export function useHomeWork() {
   const tenantKey = useTenantKey();
   return useQuery<{
@@ -301,7 +310,7 @@ export function useYearInReview() {
 
 export function useAreas() {
   const tenantKey = useTenantKey();
-  return useQuery<{ cluster: string; visits: number }[]>({
+  return useQuery<{ cluster: string; visits: number; lat: number; lon: number }[]>({
     queryKey: ['areas', tenantKey],
     queryFn: () => fetchJson('/api/analytics/areas'),
     staleTime: Infinity,

@@ -4,6 +4,8 @@
 DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
 BETTER_AUTH_SECRET=generate-a-long-random-string
 RESEND_API_KEY=
+# When the API key is set, EMAIL_FROM must be a verified Resend domain.
+EMAIL_FROM=Locations <noreply@example.com>
 DEMO_EMAIL=demo@locations.app
 DEMO_PASSWORD=
 # Stripe TEST-mode

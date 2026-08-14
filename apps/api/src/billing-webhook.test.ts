@@ -1,12 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "./env";
 
-const { constructEventAsync, recordStripeEvent, syncSubscriptionFromStripe, tenantForStripeCustomer } =
+const { constructEventAsync, recordStripeEvent, syncSubscriptionFromStripe, tenantForStripeCustomer, retrieveSubscription } =
   vi.hoisted(() => ({
     constructEventAsync: vi.fn(),
     recordStripeEvent: vi.fn(),
     syncSubscriptionFromStripe: vi.fn(),
     tenantForStripeCustomer: vi.fn(),
+    retrieveSubscription: vi.fn(async () => ({
+      id: "sub_1",
+      customer: "cus_1",
+      status: "active",
+      items: { data: [{ current_period_end: 1, price: { id: "price_x" } }] },
+    })),
   }));
 
 vi.mock("./auth", () => ({
@@ -35,6 +41,8 @@ vi.mock("./services", () => ({
   ensureDataSource: vi.fn(),
   importSourceData: vi.fn(),
   updateImportJob: vi.fn(),
+  getImportJob: vi.fn(),
+  emailForTenant: vi.fn(async () => ({ email: "a@example.com", role: "user" })),
   getSubscription: vi.fn(),
   getUserSettings: vi.fn(),
   searchTenant: vi.fn(),
@@ -47,7 +55,7 @@ vi.mock("./services", () => ({
 vi.mock("./billing", () => ({
   stripeClient: () => ({
     webhooks: { constructEventAsync },
-    subscriptions: { retrieve: vi.fn() },
+    subscriptions: { retrieve: retrieveSubscription },
   }),
   priceIdForInterval: () => "price_x",
   recordStripeEvent,
@@ -112,5 +120,30 @@ describe("stripe webhook", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ duplicate: true });
     expect(syncSubscriptionFromStripe).not.toHaveBeenCalled();
+  });
+
+  it("still returns 200 when billing mail is skipped without a Resend key", async () => {
+    constructEventAsync.mockResolvedValue({
+      id: "evt_checkout",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          customer: "cus_1",
+          subscription: "sub_1",
+          client_reference_id: "u1",
+          metadata: { tenant: "u1" },
+        },
+      },
+    });
+    recordStripeEvent.mockResolvedValue(true);
+    const res = await app.request(
+      "/api/billing/webhook",
+      { method: "POST", headers: { "stripe-signature": "t=1,v1=x" }, body: "{}" },
+      env,
+      executionCtx,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ received: true });
+    expect(syncSubscriptionFromStripe).toHaveBeenCalled();
   });
 });

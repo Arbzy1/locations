@@ -22,7 +22,7 @@ export default function ForgotPage() {
     try {
       const result = await authClient.forgetPassword({
         email,
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: `${window.location.origin}/reset-password`,
       });
       if (result.error) {
         setError(result.error.message || 'Could not send reset email');

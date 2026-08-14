@@ -303,6 +303,11 @@ interface MapProps {
   heatmapIntensity?: number;
   /** Named tags for top hotspots (Hotspots tab) */
   hotspotLabels?: HotspotLabel[];
+  areaMarkers?: { lat: number; lon: number; label: string; visits: number }[];
+  corridorLines?: { from: [number, number]; to: [number, number]; count: number }[];
+  homeWorkPins?: { kind: 'home' | 'work'; lat: number; lon: number; label: string }[];
+  /** Hide layer picker; keep legends compact (Insights inset maps). */
+  compact?: boolean;
   center?: [number, number];
   zoom?: number;
   focusTarget?: MapFocusTarget | null;
@@ -319,6 +324,10 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
   heatmapOpacity = 0.72,
   heatmapIntensity = 1,
   hotspotLabels = [],
+  areaMarkers = [],
+  corridorLines = [],
+  homeWorkPins = [],
+  compact = false,
   center = [20, 0],
   zoom = 2,
   focusTarget = null,
@@ -387,15 +396,25 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
     if (heatmapPoints && heatmapPoints.length > 0) {
       heatmapPoints.forEach((p) => coords.push([p.lat, p.lon]));
     }
-    if (coords.length < 2) return null;
+    areaMarkers.forEach((p) => coords.push([p.lat, p.lon]));
+    corridorLines.forEach((c) => {
+      coords.push(c.from);
+      coords.push(c.to);
+    });
+    homeWorkPins.forEach((p) => coords.push([p.lat, p.lon]));
+    if (coords.length === 0) return null;
+    if (coords.length === 1) return L.latLngBounds(coords[0], coords[0]).pad(0.12);
     return L.latLngBounds(coords);
-  }, [visits, activities, connectors, heatmapPoints]);
+  }, [visits, activities, connectors, heatmapPoints, areaMarkers, corridorLines, homeWorkPins]);
 
   const sortedActivities = [...activities].sort((a, b) => a.start.localeCompare(b.start));
   const totalJourneys = sortedActivities.length;
 
   return (
-    <MapContainer center={center} zoom={zoom} className="w-full h-full" ref={mapRef} zoomControl={true}>
+    <MapContainer center={center} zoom={zoom} className="w-full h-full" ref={mapRef} zoomControl={!compact} scrollWheelZoom={!compact}>
+      {compact ? (
+        <TileLayer url={theme === 'dark' ? darkUrl : lightUrl} attribution={mapAttr} />
+      ) : (
       <LayersControl key={`${theme}-${isNarrow ? 'n' : 'w'}`} position={isNarrow ? 'bottomleft' : 'topright'}>
         <LayersControl.BaseLayer checked={theme === 'dark'} name="Dark">
           <TileLayer url={darkUrl} attribution={mapAttr} />
@@ -410,6 +429,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
           <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="&copy; Esri" />
         </LayersControl.BaseLayer>
       </LayersControl>
+      )}
 
       <MapSizeInvalidator signal={sizeSignal} />
       <FitBounds bounds={getBounds()} />
@@ -422,6 +442,55 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
           intensity={heatmapIntensity}
         />
       )}
+      {areaMarkers.map((m) => (
+        <CircleMarker
+          key={`area-${m.lat}-${m.lon}-${m.label}`}
+          center={[m.lat, m.lon]}
+          radius={7}
+          pathOptions={{
+            color: 'var(--accent)',
+            fillColor: 'var(--accent)',
+            fillOpacity: 0.85,
+            weight: 2,
+          }}
+        >
+          <Popup>
+            <strong>{m.label}</strong>
+            <br />
+            {m.visits} visits
+          </Popup>
+        </CircleMarker>
+      ))}
+      {corridorLines.map((c) => (
+        <Polyline
+          key={`corr-${c.from.join(',')}-${c.to.join(',')}`}
+          positions={[c.from, c.to]}
+          pathOptions={{ color: 'var(--accent)', weight: 3, opacity: 0.7 }}
+        >
+          <Popup>{c.count} trips</Popup>
+        </Polyline>
+      ))}
+      {homeWorkPins.map((p) => {
+        const color = p.kind === 'home' ? 'var(--visit)' : 'var(--drive)';
+        return (
+          <Marker
+            key={`hw-${p.kind}`}
+            position={[p.lat, p.lon]}
+            icon={L.divIcon({
+              className: 'home-work-pin',
+              html: `<div style="width:16px;height:16px;border-radius:50%;background:${color};border:2px solid var(--surface);box-shadow:0 0 0 2px ${color}"></div>`,
+              iconSize: [16, 16],
+              iconAnchor: [8, 8],
+            })}
+          >
+            <Popup>
+              <strong>{p.kind === 'home' ? 'Home guess' : 'Work guess'}</strong>
+              <br />
+              {p.label}
+            </Popup>
+          </Marker>
+        );
+      })}
 
       {hotspotLabels.length > 0 && (
         <ZoomLayer minZoom={10}>

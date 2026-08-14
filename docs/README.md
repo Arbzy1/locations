@@ -9,6 +9,7 @@ Index of product, architecture, security, legal, and engineering docs. Agent con
 - [Further features and pages](product/ideas.md) (ideas, not a build commitment)
 - [Onboarding](product/onboarding.md)
 - [Takeout import](product/takeout-import.md)
+- [Transactional email](product/email.md)
 
 ## Architecture
 

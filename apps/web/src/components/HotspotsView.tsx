@@ -1,9 +1,10 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useHeatmap, useInvalidateLocationQueries, useSources } from '../hooks/useApi';
+import { useHeatmap, useHomeWork, useAreas, useInvalidateLocationQueries, useSources } from '../hooks/useApi';
 import { useBreakpoint } from '../hooks/useBreakpoint';
+import { useSession } from '../lib/auth';
 import MapView from './Map';
 import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from './MobilePanel';
-import { Flame, MapPin } from 'lucide-react';
+import { Flame, MapPin, EyeOff } from 'lucide-react';
 import { formatDuration } from '../utils/format';
 import type { HeatmapPoint, HotspotLabel, MapFocusTarget } from '../types';
 import { Input } from './ui/input';
@@ -22,7 +23,7 @@ function toArea(p: HeatmapPoint): HotspotArea {
   return {
     ...p,
     label: p.label || `Near ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`,
-    cluster: p.label || `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`,
+    cluster: p.cluster || p.label || `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`,
     totalDurationMinutes: p.totalDurationMinutes ?? 0,
     uniqueDays: p.uniqueDays ?? 0,
     topTypes: p.topTypes ?? [],
@@ -30,10 +31,12 @@ function toArea(p: HeatmapPoint): HotspotArea {
   };
 }
 
-function AreaDetails({ area }: { area: HotspotArea }) {
+function AreaDetails({ area, canHide }: { area: HotspotArea; canHide: boolean }) {
   const [label, setLabel] = useState(area.label);
   const [saving, setSaving] = useState(false);
+  const [hiding, setHiding] = useState(false);
   const invalidate = useInvalidateLocationQueries();
+  const placeKey = area.cluster || `${area.lat.toFixed(5)},${area.lon.toFixed(5)}`;
 
   const saveLabel = async () => {
     const next = label.trim();
@@ -44,11 +47,27 @@ function AreaDetails({ area }: { area: HotspotArea }) {
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        placeKey: area.cluster || `${area.lat.toFixed(5)},${area.lon.toFixed(5)}`,
+        placeKey,
         label: next,
       }),
     });
     setSaving(false);
+    invalidate();
+  };
+
+  const hidePlace = async () => {
+    setHiding(true);
+    await fetch('/api/places/labels', {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        placeKey,
+        label: label.trim() || area.label,
+        hidden: true,
+      }),
+    });
+    setHiding(false);
     invalidate();
   };
 
@@ -95,13 +114,31 @@ function AreaDetails({ area }: { area: HotspotArea }) {
           Save
         </Button>
       </div>
+      {canHide && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          title="Hide this place from Hotspots, search, and Insights"
+          disabled={hiding}
+          onClick={() => void hidePlace()}
+        >
+          <EyeOff size={14} />
+          Hide this place
+        </Button>
+      )}
       <p className="mt-2 text-[10px] text-text-muted">Selected: map zooms to this spot</p>
     </div>
   );
 }
 
 export default function HotspotsView() {
+  const { data: session } = useSession();
+  const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
   const { data: sources } = useSources();
+  const { data: homeWork } = useHomeWork();
+  const { data: areas } = useAreas();
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [sourceIds, setSourceIds] = useState<string[]>([]);
@@ -155,6 +192,31 @@ export default function HotspotsView() {
   );
 
   const areaKey = (a: HotspotArea) => `${a.lat},${a.lon}`;
+
+  const homeWorkPins = useMemo(() => {
+    const pins: { kind: 'home' | 'work'; lat: number; lon: number; label: string }[] = [];
+    const coordFor = (cluster: string | undefined) => {
+      if (!cluster) return null;
+      const fromHeat = (heatmapPoints || []).find(
+        (p) => p.cluster === cluster || p.label === cluster,
+      );
+      if (fromHeat) return { lat: fromHeat.lat, lon: fromHeat.lon };
+      const fromArea = (areas || []).find((a) => a.cluster === cluster);
+      if (fromArea && Number.isFinite(fromArea.lat) && Number.isFinite(fromArea.lon)) {
+        return { lat: fromArea.lat, lon: fromArea.lon };
+      }
+      return null;
+    };
+    const homeAt = coordFor(homeWork?.home?.cluster);
+    if (homeAt) {
+      pins.push({ kind: 'home', ...homeAt, label: homeWork!.home!.cluster });
+    }
+    const workAt = coordFor(homeWork?.work?.cluster);
+    if (workAt) {
+      pins.push({ kind: 'work', ...workAt, label: homeWork!.work!.cluster });
+    }
+    return pins;
+  }, [heatmapPoints, areas, homeWork]);
   const onSelectArea = (area: HotspotArea) => {
     setSelectedKey(areaKey(area));
     setFocusTarget({ lat: area.lat, lon: area.lon, zoom: 15 });
@@ -265,7 +327,7 @@ export default function HotspotsView() {
                 </button>
                 {selected && (
                   <div className="ui-enter px-2 pb-2 pt-1">
-                    <AreaDetails area={area} />
+                    <AreaDetails area={area} canHide={!isDemo} />
                   </div>
                 )}
               </div>
@@ -353,6 +415,7 @@ export default function HotspotsView() {
         heatmapOpacity={heatmapOpacity}
         heatmapIntensity={heatmapIntensity}
         hotspotLabels={hotspotLabels}
+        homeWorkPins={homeWorkPins}
         focusTarget={focusTarget}
         sizeSignal={sizeSignal}
       />
@@ -390,6 +453,7 @@ export default function HotspotsView() {
             heatmapOpacity={heatmapOpacity}
             heatmapIntensity={heatmapIntensity}
             hotspotLabels={hotspotLabels}
+            homeWorkPins={homeWorkPins}
             focusTarget={focusTarget}
             sizeSignal={sizeSignal}
           />
