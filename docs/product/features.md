@@ -50,6 +50,8 @@ What the hosted app does today. Nothing here is a roadmap.
 - Delete account: wipes Timeline rows, uploads, sessions, and the Stripe customer
 - Privacy, Terms, and Cookies pages
 
+Possible later work (not a roadmap): [Further features and pages](ideas.md).
+
 ## Not in the app
 
 - Live Google Location sharing or a phone tracker

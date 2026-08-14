@@ -8,7 +8,7 @@ People who exported Timeline from Google Takeout (or still can) and want a hoste
 
 ## What ships in the app
 
-Full list: [Features](features.md).
+Full list: [Features](features.md). Ideas that are not a commitment to build: [Further features and pages](ideas.md).
 
 - **Hotspots:** visit density heatmap and named places
 - **Day View:** calendar, map, and timeline for one day

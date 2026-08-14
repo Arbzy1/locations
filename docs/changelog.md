@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+Documented a product idea catalog in [docs/product/ideas.md](product/ideas.md). Not a commitment to build.
+
 ## 1.2.0
 
 Named Wrangler environments: `locations-staging` (push to `main`) and `locations` production (manual promote). Isolated R2, import queues, Neon, and Stripe per env.
