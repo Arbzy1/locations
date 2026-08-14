@@ -270,7 +270,14 @@ export function useSearch(q: string) {
 
 export function usePlaceLabels() {
   const tenantKey = useTenantKey();
-  return useQuery<{ placeKey: string; label: string; hidden: boolean }[]>({
+  return useQuery<{
+    placeKey: string;
+    label: string;
+    hidden: boolean;
+    favourite?: boolean;
+    color?: string | null;
+    tags?: string[];
+  }[]>({
     queryKey: ['place-labels', tenantKey],
     queryFn: () => fetchJson('/api/places/labels'),
     enabled: tenantKey !== 'anon',

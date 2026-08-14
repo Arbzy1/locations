@@ -128,6 +128,8 @@ export interface HeatmapPoint {
   totalDurationMinutes?: number;
   uniqueDays?: number;
   topTypes?: string[];
+  /** Heat intensity; defaults to `count` when omitted */
+  weight?: number;
 }
 
 /** Named hotspot markers shown on the Hotspots map */
@@ -137,6 +139,8 @@ export interface HotspotLabel {
   label: string;
   count: number;
   rank: number;
+  badge?: string;
+  color?: string;
 }
 
 export interface FunFact {

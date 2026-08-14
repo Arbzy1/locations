@@ -36,6 +36,7 @@ import {
   type ActivityRow,
   type VisitRow,
   type TenantId,
+  type PlaceColorToken,
   type ImportJobStatus,
   type DistanceUnit,
   landmarkForPlaceId,
@@ -1255,18 +1256,37 @@ export async function searchTenant(
 export async function upsertPlaceLabel(
   db: ReturnType<typeof createDb>,
   tenant: TenantId,
-  placeKey: string,
-  label: string,
-  hidden = false,
+  patch: {
+    placeKey: string;
+    label?: string;
+    hidden?: boolean;
+    favourite?: boolean;
+    color?: PlaceColorToken | null;
+    tags?: string[];
+  },
 ) {
+  const placeKey = patch.placeKey.slice(0, 200);
+  const rows = await db
+    .select()
+    .from(placeLabels)
+    .where(and(eq(placeLabels.tenant, tenant), eq(placeLabels.placeKey, placeKey)))
+    .limit(1);
+  const current = rows[0];
+  const label =
+    (patch.label !== undefined ? patch.label.trim() : current?.label)?.slice(0, 200) || placeKey;
+  const hidden = patch.hidden ?? current?.hidden ?? false;
+  const favourite = patch.favourite ?? current?.favourite ?? false;
+  const color = patch.color !== undefined ? patch.color : (current?.color ?? null);
+  const tags = patch.tags ?? current?.tags ?? [];
+  const now = new Date();
   await db
     .insert(placeLabels)
-    .values({ tenant, placeKey, label, hidden, updatedAt: new Date() })
+    .values({ tenant, placeKey, label, hidden, favourite, color, tags, updatedAt: now })
     .onConflictDoUpdate({
       target: [placeLabels.tenant, placeLabels.placeKey],
-      set: { label, hidden, updatedAt: new Date() },
+      set: { label, hidden, favourite, color, tags, updatedAt: now },
     });
-  return { placeKey, label, hidden };
+  return { placeKey, label, hidden, favourite, color, tags };
 }
 
 export async function listPlaceLabels(db: ReturnType<typeof createDb>, tenant: TenantId) {

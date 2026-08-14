@@ -49,6 +49,7 @@ import {
   listPlaceLabels,
   renameSource,
   removeSource,
+  upsertPlaceLabel,
 } from "./services";
 
 const env = {
@@ -101,6 +102,7 @@ describe("API auth boundaries", () => {
     vi.mocked(renameSource).mockResolvedValue({ error: "Source not found" });
     vi.mocked(removeSource).mockResolvedValue({ error: "Source not found" });
     vi.mocked(getSourceById).mockResolvedValue(null);
+    vi.mocked(upsertPlaceLabel).mockReset();
   });
 
   it("allows unauthenticated access to /api/health", async () => {
@@ -300,5 +302,61 @@ describe("API auth boundaries", () => {
     vi.mocked(listPlaceLabels).mockResolvedValueOnce([] as never);
     const res = await request("/api/places/labels");
     expect(res.status).toBe(200);
+  });
+
+  it("rejects unauthenticated PATCH /api/places/labels", async () => {
+    getSession.mockResolvedValue(null);
+    const res = await request("/api/places/labels", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ placeKey: "Home", favourite: true }),
+    });
+    expect(res.status).toBe(401);
+    expect(upsertPlaceLabel).not.toHaveBeenCalled();
+  });
+
+  it("blocks demo users from PATCH /api/places/labels", async () => {
+    getSession.mockResolvedValue(sessionUser({ role: "demo", id: "demo-1" }));
+    const res = await request("/api/places/labels", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ placeKey: "Home", favourite: true }),
+    });
+    expect(res.status).toBe(403);
+    expect(upsertPlaceLabel).not.toHaveBeenCalled();
+  });
+
+  it("allows the owner to patch a favourite without renaming", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
+    vi.mocked(upsertPlaceLabel).mockResolvedValueOnce({
+      placeKey: "Home",
+      label: "Home",
+      hidden: false,
+      favourite: true,
+      color: null,
+      tags: [],
+    } as never);
+    const res = await request("/api/places/labels", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ placeKey: "Home", favourite: true }),
+    });
+    expect(res.status).toBe(200);
+    expect(upsertPlaceLabel).toHaveBeenCalledWith(
+      expect.anything(),
+      "user-a",
+      expect.objectContaining({ placeKey: "Home", favourite: true }),
+    );
+  });
+
+  it("rejects an unknown place colour", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
+    const res = await request("/api/places/labels", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ placeKey: "Home", color: "#ff00aa" }),
+    });
+    expect(res.status).toBe(400);
+    expect(upsertPlaceLabel).not.toHaveBeenCalled();
   });
 });

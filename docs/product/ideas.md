@@ -12,7 +12,7 @@ Do not start with live sharing, family tenancy, or an LLM that sees coordinates.
 
 ## What already ships
 
-Hotspots (including hide place and home/work pins), Day View (including arrived/departed on timeline rows), Day Trips, Insights (unique places, monthly top places, year-in-review places/modes, area and corridor map), Settings (display name, JSON export, billing grace copy), login / signup / forgot / reset-password, magic link and email OTP, legal pages, import, billing, search (including phones), place rename, heatmap, OSRM routes.
+Hotspots (including type filters, visit vs time ranking, favourites, tags/colours, hide/unhide, home/work pins), Day View (including arrived/departed on timeline rows), Day Trips, Insights (unique places, monthly top places, year-in-review places/modes, area and corridor map), Settings (display name, JSON export, billing grace copy), login / signup / forgot / reset-password, magic link and email OTP, legal pages, import, billing, search (including phones), place rename, heatmap, OSRM routes.
 
 ---
 
@@ -70,14 +70,9 @@ The catalog items that were API-ready are in the product. See [Features](feature
 
 ## 2. Hotspots and places
 
-- Semantic type filters (home, work, restaurant, transit)
 - Merge two clusters that Google split
 - Split a blob that mixed two venues
-- Custom place categories / tags / colours
-- Favourite places
-- "Never show this cluster" (hidden) plus a Hidden places manager
 - Time-of-day heat: mornings vs nights at a place
-- Dwell-time ranking vs visit-count ranking (toggle)
 - Seasonal heatmaps (summer vs winter)
 - Source overlay: which Google account contributed the point
 - "How I got here" from a hotspot: inbound corridors

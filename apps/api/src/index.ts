@@ -8,6 +8,7 @@ import {
   isStaffRole,
   quotaForEntitled,
   type TenantId,
+  type PlaceColorToken,
 } from "@locations/db";
 import type { Env, ImportQueueMessage } from "./env";
 import { createAuth } from "./auth";
@@ -54,6 +55,7 @@ import {
   getImportJob,
 } from "./services";
 import { billingEmailKind, sendProductEmail } from "./email";
+import { parsePlaceColor, sanitizePlaceTags } from "./place-labels";
 
 const MAX_UPLOAD_BYTES = 80 * 1024 * 1024;
 
@@ -587,12 +589,45 @@ app.patch("/api/places/labels", async (c) => {
     placeKey?: string;
     label?: string;
     hidden?: boolean;
+    favourite?: boolean;
+    color?: unknown;
+    tags?: unknown;
   } | null;
-  if (!body?.placeKey || !body.label) return c.json({ error: "placeKey and label required" }, 400);
+  if (!body) return c.json({ error: "placeKey required" }, 400);
+  const placeKey = body.placeKey?.trim();
+  if (!placeKey) return c.json({ error: "placeKey required" }, 400);
+  if (
+    body.label === undefined &&
+    body.hidden === undefined &&
+    body.favourite === undefined &&
+    body.color === undefined &&
+    body.tags === undefined
+  ) {
+    return c.json({ error: "No fields to update" }, 400);
+  }
+  let color: PlaceColorToken | null | undefined;
+  if (body.color !== undefined) {
+    const parsed = parsePlaceColor(body.color);
+    if (!parsed.ok) return c.json({ error: "Invalid color" }, 400);
+    color = parsed.value;
+  }
+  let tags: string[] | undefined;
+  if (body.tags !== undefined) {
+    const parsed = sanitizePlaceTags(body.tags);
+    if (!parsed.ok) return c.json({ error: "Invalid tags" }, 400);
+    tags = parsed.value;
+  }
   const db = getDb(c.env);
   const tenant = c.get("tenant");
   const row = await withTenant(db, tenant, (tx) =>
-    upsertPlaceLabel(tx, tenant, body.placeKey!, body.label!, body.hidden),
+    upsertPlaceLabel(tx, tenant, {
+      placeKey,
+      label: typeof body.label === "string" ? body.label : undefined,
+      hidden: typeof body.hidden === "boolean" ? body.hidden : undefined,
+      favourite: typeof body.favourite === "boolean" ? body.favourite : undefined,
+      color,
+      tags,
+    }),
   );
   return c.json(row);
 });

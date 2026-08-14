@@ -5,9 +5,12 @@ What the hosted app does today. Nothing here is a roadmap.
 ## Maps
 
 - **Hotspots:** visit-density heatmap, ranked places, date range, filter by Timeline source
+- Rank by visit count or time spent
+- Filter by Google place type, favourite, and your tags
 - Heatmap on/off, opacity, and strength
 - Rename a place (saved for your account only)
-- Hide a place from Hotspots, search, and Insights (Day View still lists the visits)
+- Favourite, colour, and tags on a place
+- Hide a place from Hotspots, search, and Insights (Day View still lists the visits); unhide from Hidden places in the Hotspots panel
 - Home and work guess pins on the Hotspots map when those clusters have coordinates
 - **Day View:** one day on a map plus a chronological timeline
 - Calendar of days that have data; previous/next day

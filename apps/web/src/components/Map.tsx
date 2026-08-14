@@ -184,8 +184,8 @@ function HeatmapLayer({ points, enabled, opacity, intensity }: HeatmapLayerProps
     }
 
     let cancelled = false;
-    const maxCount = Math.max(1, ...points.map((p) => p.count));
-    const data = points.map((p) => [p.lat, p.lon, p.count] as [number, number, number]);
+    const maxCount = Math.max(1, ...points.map((p) => p.weight ?? p.count));
+    const data = points.map((p) => [p.lat, p.lon, p.weight ?? p.count] as [number, number, number]);
     const opts = buildHeatmapOptions(maxCount, intensity);
 
     import('leaflet.heat').then(() => {
@@ -497,23 +497,25 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
           {hotspotLabels.map((h) => {
             const short =
               h.label.length > 28 ? `${h.label.slice(0, 26)}…` : h.label;
+            const badge = h.badge ?? String(h.count);
+            const token = h.color && /^[a-z]+$/.test(h.color) ? h.color : 'accent';
             const icon = L.divIcon({
               className: '',
               html: `<div style="
                 display:inline-flex;align-items:center;gap:6px;
                 padding:4px 8px;border-radius:8px;
                 background:color-mix(in srgb, var(--surface) 92%, transparent);
-                border:1px solid var(--border);
+                border:1px solid var(--${token});
                 box-shadow:0 2px 8px rgba(0,0,0,.18);
                 color:var(--text);font:600 11px/1.2 system-ui,sans-serif;
                 white-space:nowrap;pointer-events:none;transform:translateY(-100%);
               "><span style="
                 display:inline-flex;align-items:center;justify-content:center;
                 min-width:18px;height:18px;padding:0 4px;border-radius:6px;
-                background:var(--accent);color:#fff;font-size:10px;
+                background:var(--${token});color:var(--on-accent);font-size:10px;
               ">${h.rank}</span><span>${escapeHtml(short)}</span><span style="
                 color:var(--text-muted);font-weight:500;
-              ">${h.count}</span></div>`,
+              ">${escapeHtml(badge)}</span></div>`,
               iconSize: [0, 0],
               iconAnchor: [0, 8],
             });

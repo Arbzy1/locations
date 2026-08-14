@@ -24,7 +24,7 @@ All other `/api/*` require a session.
 | POST | `/api/account/delete` | GDPR wipe |
 | GET | `/api/account/export` | JSON dump (overview, sources, settings, labels) |
 | PATCH | `/api/account/settings` | units, timezone |
-| GET | `/api/places/labels` | user place names and hidden flags |
-| PATCH | `/api/places/labels` | user place names (`hidden` optional) |
+| GET | `/api/places/labels` | user place names, hidden, favourite, colour, tags |
+| PATCH | `/api/places/labels` | `{ placeKey, label?, hidden?, favourite?, color?, tags? }`; `color` is an allowlisted token; demo 403 |
 
 Cross-tenant ids return 404. Demo writes return 403.

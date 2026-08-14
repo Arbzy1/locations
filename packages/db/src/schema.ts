@@ -26,6 +26,18 @@ export type SubscriptionStatus =
   | "unpaid"
   | "paused";
 
+export const PLACE_COLOR_TOKENS = [
+  "accent",
+  "visit",
+  "walk",
+  "train",
+  "car",
+  "bus",
+  "cycle",
+] as const;
+
+export type PlaceColorToken = (typeof PLACE_COLOR_TOKENS)[number];
+
 export type DistanceUnit = "mi" | "km";
 
 /* ─── Better Auth tables ─── */
@@ -228,6 +240,9 @@ export const placeLabels = pgTable(
     placeKey: text("place_key").notNull(),
     label: text("label").notNull(),
     hidden: boolean("hidden").notNull().default(false),
+    favourite: boolean("favourite").notNull().default(false),
+    color: text("color").$type<PlaceColorToken | null>(),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.tenant, t.placeKey] })],

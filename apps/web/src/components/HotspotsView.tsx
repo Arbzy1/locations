@@ -1,14 +1,33 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useHeatmap, useHomeWork, useAreas, useInvalidateLocationQueries, useSources } from '../hooks/useApi';
+import {
+  useHeatmap,
+  useHomeWork,
+  useAreas,
+  useInvalidateLocationQueries,
+  useSources,
+  usePlaceLabels,
+} from '../hooks/useApi';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import { useSession } from '../lib/auth';
 import MapView from './Map';
 import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from './MobilePanel';
-import { Flame, MapPin, EyeOff } from 'lucide-react';
+import { Flame, MapPin, EyeOff, Eye, Star } from 'lucide-react';
 import { formatDuration } from '../utils/format';
 import type { HeatmapPoint, HotspotLabel, MapFocusTarget } from '../types';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
+import {
+  PLACE_COLOR_TOKENS,
+  filterAndRankPlaces,
+  findPlaceLabel,
+  isPlaceColorToken,
+  placeMetric,
+  toggleChip,
+  uniqueLabelTags,
+  uniqueTopTypes,
+  type PlaceLabelMeta,
+  type PlaceRankBy,
+} from '../lib/hotspots';
 
 type HotspotArea = HeatmapPoint & {
   label: string;
@@ -17,6 +36,16 @@ type HotspotArea = HeatmapPoint & {
   uniqueDays: number;
   topTypes: string[];
   settlement: string | null;
+};
+
+const COLOR_BG: Record<(typeof PLACE_COLOR_TOKENS)[number], string> = {
+  accent: 'bg-accent',
+  visit: 'bg-visit',
+  walk: 'bg-walk',
+  train: 'bg-train',
+  car: 'bg-car',
+  bus: 'bg-bus',
+  cycle: 'bg-cycle',
 };
 
 function toArea(p: HeatmapPoint): HotspotArea {
@@ -31,44 +60,47 @@ function toArea(p: HeatmapPoint): HotspotArea {
   };
 }
 
-function AreaDetails({ area, canHide }: { area: HotspotArea; canHide: boolean }) {
-  const [label, setLabel] = useState(area.label);
-  const [saving, setSaving] = useState(false);
-  const [hiding, setHiding] = useState(false);
-  const invalidate = useInvalidateLocationQueries();
-  const placeKey = area.cluster || `${area.lat.toFixed(5)},${area.lon.toFixed(5)}`;
+async function patchPlace(body: Record<string, unknown>) {
+  const res = await fetch('/api/places/labels', {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return res.ok;
+}
 
-  const saveLabel = async () => {
-    const next = label.trim();
-    if (!next) return;
+function AreaDetails({
+  area,
+  meta,
+  canEdit,
+  onPatched,
+}: {
+  area: HotspotArea;
+  meta: PlaceLabelMeta | undefined;
+  canEdit: boolean;
+  onPatched: () => void;
+}) {
+  const [label, setLabel] = useState(area.label);
+  const [tagDraft, setTagDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const placeKey = area.cluster || `${area.lat.toFixed(5)},${area.lon.toFixed(5)}`;
+  const favourite = Boolean(meta?.favourite);
+  const tags = meta?.tags ?? [];
+  const color = meta?.color ?? null;
+
+  const run = async (body: Record<string, unknown>) => {
     setSaving(true);
-    await fetch('/api/places/labels', {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        placeKey,
-        label: next,
-      }),
-    });
+    await patchPlace({ placeKey, ...body });
     setSaving(false);
-    invalidate();
+    onPatched();
   };
 
-  const hidePlace = async () => {
-    setHiding(true);
-    await fetch('/api/places/labels', {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        placeKey,
-        label: label.trim() || area.label,
-        hidden: true,
-      }),
-    });
-    setHiding(false);
-    invalidate();
+  const addTag = () => {
+    const next = tagDraft.trim();
+    if (!next) return;
+    setTagDraft('');
+    void run({ tags: [...tags, next].slice(0, 5) });
   };
 
   return (
@@ -104,29 +136,117 @@ function AreaDetails({ area, canHide }: { area: HotspotArea; canHide: boolean })
           ))}
         </div>
       )}
-      <div className="mt-3 flex gap-2">
-        <Input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          title="Custom name for this place"
-        />
-        <Button type="button" size="sm" title="Save place name" disabled={saving} onClick={() => void saveLabel()}>
-          Save
-        </Button>
-      </div>
-      {canHide && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-2"
-          title="Hide this place from Hotspots, search, and Insights"
-          disabled={hiding}
-          onClick={() => void hidePlace()}
-        >
-          <EyeOff size={14} />
-          Hide this place
-        </Button>
+      {canEdit && (
+        <>
+          <div className="mt-3 flex gap-2">
+            <Input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              title="Custom name for this place"
+            />
+            <Button
+              type="button"
+              size="sm"
+              title="Save place name"
+              disabled={saving}
+              onClick={() => void run({ label: label.trim() })}
+            >
+              Save
+            </Button>
+          </div>
+          <Button
+            type="button"
+            variant={favourite ? 'default' : 'outline'}
+            size="sm"
+            className="mt-2"
+            title={favourite ? 'Remove from favourites' : 'Mark as favourite'}
+            aria-label={favourite ? 'Remove from favourites' : 'Mark as favourite'}
+            disabled={saving}
+            onClick={() => void run({ favourite: !favourite })}
+          >
+            <Star size={14} className={favourite ? 'fill-current' : ''} />
+            {favourite ? 'Favourited' : 'Favourite'}
+          </Button>
+          <div className="mt-3">
+            <p className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Colour</p>
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                type="button"
+                variant={color ? 'outline' : 'default'}
+                size="sm"
+                className="h-11 px-2"
+                title="Clear place colour"
+                disabled={saving}
+                onClick={() => void run({ color: null })}
+              >
+                None
+              </Button>
+              {PLACE_COLOR_TOKENS.map((token) => (
+                <Button
+                  key={token}
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title={`Set colour ${token}`}
+                  aria-label={`Set colour ${token}`}
+                  disabled={saving}
+                  className={color === token ? 'ring-2 ring-accent' : ''}
+                  onClick={() => void run({ color: token })}
+                >
+                  <span className={`h-5 w-5 rounded ${COLOR_BG[token]}`} />
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-3">
+            <p className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Tags</p>
+            <div className="mb-2 flex flex-wrap gap-1">
+              {tags.map((tag) => (
+                <Button
+                  key={tag}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-11"
+                  title={`Remove tag ${tag}`}
+                  disabled={saving}
+                  onClick={() => void run({ tags: tags.filter((t) => t !== tag) })}
+                >
+                  {tag} ×
+                </Button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={tagDraft}
+                onChange={(e) => setTagDraft(e.target.value)}
+                title="Add a short tag for this place"
+                placeholder="Add tag"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addTag();
+                  }
+                }}
+              />
+              <Button type="button" size="sm" title="Add tag" disabled={saving} onClick={addTag}>
+                Add
+              </Button>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            title="Hide this place from Hotspots, search, and Insights"
+            disabled={saving}
+            onClick={() => void run({ hidden: true, label: label.trim() || area.label })}
+          >
+            <EyeOff size={14} />
+            Hide this place
+          </Button>
+        </>
       )}
       <p className="mt-2 text-[10px] text-text-muted">Selected: map zooms to this spot</p>
     </div>
@@ -139,6 +259,8 @@ export default function HotspotsView() {
   const { data: sources } = useSources();
   const { data: homeWork } = useHomeWork();
   const { data: areas } = useAreas();
+  const { data: labels } = usePlaceLabels();
+  const invalidate = useInvalidateLocationQueries();
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [sourceIds, setSourceIds] = useState<string[]>([]);
@@ -149,17 +271,20 @@ export default function HotspotsView() {
   });
   const { isDesktop, isPhone } = useBreakpoint();
   const [heatmapOn, setHeatmapOn] = useState(true);
-  /** 15-100: how solid the heat is; lower = easier to read town names on the basemap */
   const [opacityPct, setOpacityPct] = useState(72);
-  /** 40-180: 100 = default strength */
   const [intensityPct, setIntensityPct] = useState(100);
   const [focusTarget, setFocusTarget] = useState<MapFocusTarget | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
   const [sheetHeight, setSheetHeight] = useState<MobilePanelHeight>('half');
   const [sizeSignal, setSizeSignal] = useState(0);
+  const [rankBy, setRankBy] = useState<PlaceRankBy>('visits');
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [favouritesOnly, setFavouritesOnly] = useState(false);
 
   const bumpSize = useCallback(() => setSizeSignal((n) => n + 1), []);
+  const labelRows: PlaceLabelMeta[] = labels ?? [];
 
   const heatmapOpacity = opacityPct / 100;
   const heatmapIntensity = useMemo(
@@ -167,28 +292,57 @@ export default function HotspotsView() {
     [intensityPct],
   );
 
-  const topAreas = useMemo(() => {
-    if (!heatmapPoints?.length) return [] as HotspotArea[];
-    return heatmapPoints.slice(0, 20).map((p) => toArea(p));
-  }, [heatmapPoints]);
+  const allAreas = useMemo(
+    () => (heatmapPoints ?? []).map((p) => toArea(p)),
+    [heatmapPoints],
+  );
 
-  const maxAreaCount = topAreas[0]?.count ?? 1;
+  const typeOptions = useMemo(() => uniqueTopTypes(allAreas), [allAreas]);
+  const tagOptions = useMemo(() => uniqueLabelTags(labelRows), [labelRows]);
+  const hiddenLabels = useMemo(() => labelRows.filter((l) => l.hidden), [labelRows]);
+
+  const filteredAreas = useMemo(
+    () =>
+      filterAndRankPlaces(allAreas, {
+        types: selectedTypes,
+        tags: selectedTags,
+        favouritesOnly,
+        rankBy,
+        labels: labelRows,
+      }),
+    [allAreas, selectedTypes, selectedTags, favouritesOnly, rankBy, labelRows],
+  );
+
+  const topAreas = filteredAreas.slice(0, 20);
+  const maxMetric = Math.max(1, ...topAreas.map((a) => placeMetric(a, rankBy)));
+
+  const heatForMap: HeatmapPoint[] = useMemo(
+    () =>
+      filteredAreas.map((a) => ({
+        ...a,
+        weight: placeMetric(a, rankBy),
+      })),
+    [filteredAreas, rankBy],
+  );
 
   const hotspotLabels: HotspotLabel[] = useMemo(
     () =>
       topAreas.slice(0, 12).map((a, i) => {
         const showSettlement =
-          a.settlement &&
-          !a.label.toLowerCase().includes(a.settlement.toLowerCase());
+          a.settlement && !a.label.toLowerCase().includes(a.settlement.toLowerCase());
+        const meta = findPlaceLabel(a, labelRows);
         return {
           lat: a.lat,
           lon: a.lon,
           label: showSettlement ? `${a.label} (${a.settlement})` : a.label,
           count: a.count,
           rank: i + 1,
+          badge:
+            rankBy === 'dwell' ? formatDuration(a.totalDurationMinutes) : String(a.count),
+          color: isPlaceColorToken(meta?.color) ? meta.color : undefined,
         };
       }),
-    [topAreas],
+    [topAreas, labelRows, rankBy],
   );
 
   const areaKey = (a: HotspotArea) => `${a.lat},${a.lon}`;
@@ -217,6 +371,7 @@ export default function HotspotsView() {
     }
     return pins;
   }, [heatmapPoints, areas, homeWork]);
+
   const onSelectArea = (area: HotspotArea) => {
     setSelectedKey(areaKey(area));
     setFocusTarget({ lat: area.lat, lon: area.lon, zoom: 15 });
@@ -233,7 +388,7 @@ export default function HotspotsView() {
         Hotspots
       </h2>
       <p className="mt-1 text-sm text-text-muted">
-        {heatmapPoints ? `${heatmapPoints.length} locations` : 'Loading...'}
+        {heatmapPoints ? `${filteredAreas.length} of ${heatmapPoints.length} locations` : 'Loading...'}
       </p>
       <p className="mt-2 text-xs leading-relaxed text-text-muted">
         Tap a row for details and to zoom the map. Tags mark top spots on the map.
@@ -254,6 +409,78 @@ export default function HotspotsView() {
           className="h-11 rounded-lg border border-border bg-bg px-2 text-xs text-text"
         />
       </div>
+      <div className="mt-3 flex gap-2">
+        <Button
+          type="button"
+          variant={rankBy === 'visits' ? 'default' : 'outline'}
+          size="sm"
+          className="flex-1"
+          title="Rank places by visit count"
+          onClick={() => setRankBy('visits')}
+        >
+          Visits
+        </Button>
+        <Button
+          type="button"
+          variant={rankBy === 'dwell' ? 'default' : 'outline'}
+          size="sm"
+          className="flex-1"
+          title="Rank places by time spent"
+          onClick={() => setRankBy('dwell')}
+        >
+          Time there
+        </Button>
+      </div>
+      <Button
+        type="button"
+        variant={favouritesOnly ? 'default' : 'outline'}
+        size="sm"
+        className="mt-2 w-full"
+        title="Show favourite places only"
+        aria-pressed={favouritesOnly}
+        onClick={() => setFavouritesOnly((v) => !v)}
+      >
+        <Star size={14} className={favouritesOnly ? 'fill-current' : ''} />
+        Favourites
+      </Button>
+      {typeOptions.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1">
+          {typeOptions.map((t) => {
+            const on = selectedTypes.includes(t);
+            return (
+              <Button
+                key={t}
+                type="button"
+                variant={on ? 'default' : 'outline'}
+                size="sm"
+                title={on ? `Remove ${t} filter` : `Filter to ${t}`}
+                onClick={() => setSelectedTypes((cur) => toggleChip(cur, t))}
+              >
+                {t}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+      {tagOptions.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {tagOptions.map((t) => {
+            const on = selectedTags.includes(t);
+            return (
+              <Button
+                key={t}
+                type="button"
+                variant={on ? 'default' : 'outline'}
+                size="sm"
+                title={on ? `Remove tag ${t}` : `Filter to tag ${t}`}
+                onClick={() => setSelectedTags((cur) => toggleChip(cur, t))}
+              >
+                {t}
+              </Button>
+            );
+          })}
+        </div>
+      )}
       {sources && sources.length > 1 && (
         <div className="mt-2 flex flex-wrap gap-1">
           {sources.map((s) => {
@@ -278,6 +505,32 @@ export default function HotspotsView() {
           })}
         </div>
       )}
+      {hiddenLabels.length > 0 && (
+        <div className="mt-4 rounded-lg border border-border bg-bg/40 p-2">
+          <p className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Hidden places</p>
+          {hiddenLabels.map((row) => (
+            <div key={row.placeKey} className="flex items-center gap-2 py-1">
+              <span className="min-w-0 flex-1 truncate text-xs text-text">{row.label}</span>
+              {isDemo ? (
+                <span className="text-[10px] text-text-muted">Hidden</span>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  title={`Show ${row.label} on Hotspots again`}
+                  onClick={() =>
+                    void patchPlace({ placeKey: row.placeKey, hidden: false }).then(() => invalidate())
+                  }
+                >
+                  <Eye size={14} />
+                  Unhide
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 
@@ -290,7 +543,11 @@ export default function HotspotsView() {
           {topAreas.map((area, i) => {
             const key = areaKey(area);
             const selected = selectedKey === key;
-            const tipTitle = `${area.label}: ${area.count} visits`;
+            const metric = placeMetric(area, rankBy);
+            const tipTitle = `${area.label}: ${
+              rankBy === 'dwell' ? formatDuration(area.totalDurationMinutes) : `${area.count} visits`
+            }`;
+            const meta = findPlaceLabel(area, labelRows);
             return (
               <div key={key} className="mb-1">
                 <button
@@ -305,7 +562,12 @@ export default function HotspotsView() {
                     {i + 1}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="mb-0.5 truncate text-sm">{area.label}</div>
+                    <div className="mb-0.5 flex items-center gap-1 truncate text-sm">
+                      {meta?.favourite && (
+                        <Star size={12} className="shrink-0 fill-current text-accent" />
+                      )}
+                      <span className="truncate">{area.label}</span>
+                    </div>
                     {area.settlement &&
                       !area.label.toLowerCase().includes(area.settlement.toLowerCase()) && (
                         <div className="mb-1 truncate text-[11px] text-text-muted">
@@ -316,18 +578,26 @@ export default function HotspotsView() {
                       <div
                         className="h-full rounded-full transition-[width] duration-ui-emphasis ease-ui"
                         style={{
-                          width: `${(area.count / maxAreaCount) * 100}%`,
-                          background:
-                            'linear-gradient(90deg, var(--accent), var(--train))',
+                          width: `${(metric / maxMetric) * 100}%`,
+                          background: isPlaceColorToken(meta?.color)
+                            ? `var(--${meta.color})`
+                            : 'linear-gradient(90deg, var(--accent), var(--train))',
                         }}
                       />
                     </div>
                   </div>
-                  <div className="shrink-0 font-mono text-sm text-text-muted">{area.count}</div>
+                  <div className="shrink-0 font-mono text-sm text-text-muted">
+                    {rankBy === 'dwell' ? formatDuration(area.totalDurationMinutes) : area.count}
+                  </div>
                 </button>
                 {selected && (
                   <div className="ui-enter px-2 pb-2 pt-1">
-                    <AreaDetails area={area} canHide={!isDemo} />
+                    <AreaDetails
+                      area={area}
+                      meta={meta}
+                      canEdit={!isDemo}
+                      onPatched={invalidate}
+                    />
                   </div>
                 )}
               </div>
@@ -410,7 +680,7 @@ export default function HotspotsView() {
   const mapPane = (
     <div className="relative min-h-0 flex-1">
       <MapView
-        heatmapPoints={heatmapPoints || []}
+        heatmapPoints={heatForMap}
         heatmapEnabled={heatmapOn}
         heatmapOpacity={heatmapOpacity}
         heatmapIntensity={heatmapIntensity}
@@ -448,7 +718,7 @@ export default function HotspotsView() {
         </div>
         <div className="relative min-h-0 flex-1">
           <MapView
-            heatmapPoints={heatmapPoints || []}
+            heatmapPoints={heatForMap}
             heatmapEnabled={heatmapOn}
             heatmapOpacity={heatmapOpacity}
             heatmapIntensity={heatmapIntensity}
