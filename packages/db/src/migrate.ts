@@ -4,24 +4,10 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { createHttpDb } from "./index.js";
+import { splitSql } from "./split-sql.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const envName = loadEnvFiles();
-
-function splitSql(body: string): string[] {
-  const withoutLineComments = body
-    .split("\n")
-    .map((line) => {
-      const idx = line.indexOf("--");
-      return idx >= 0 ? line.slice(0, idx) : line;
-    })
-    .join("\n");
-
-  return withoutLineComments
-    .split(";")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
 
 async function main() {
   const url = process.env.DATABASE_URL;
