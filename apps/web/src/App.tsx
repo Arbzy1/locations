@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { TabId } from './types';
 import {
   useImportStatus,
@@ -7,13 +8,20 @@ import {
   useRouteProgress,
 } from './hooks/useApi';
 import { useSession, signOut } from './lib/auth';
+import { UnitsProvider } from './lib/units';
 import HotspotsView from './components/HotspotsView';
 import DayView from './components/DayView';
 import DayTripsView from './components/DayTripsView';
 import InsightsView from './components/InsightsView';
 import SettingsView from './components/SettingsView';
 import LoginPage from './components/LoginPage';
+import SignupPage from './components/SignupPage';
+import ForgotPage from './components/ForgotPage';
+import { CookiesRoute, PrivacyRoute, TermsRoute } from './components/LegalRoutes';
 import ThemeToggle from './components/ThemeToggle';
+import SearchBar from './components/SearchBar';
+import { Button } from './components/ui/button';
+import { Toaster } from './components/ui/sonner';
 import {
   Flame,
   Calendar,
@@ -52,6 +60,19 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'insights', label: TAB_LABELS.insights, icon: <TrendingUp size={18} /> },
 ];
 
+function tabFromPath(pathname: string): TabId {
+  if (pathname.startsWith('/day')) return 'day';
+  if (pathname.startsWith('/trips')) return 'trips';
+  if (pathname.startsWith('/insights')) return 'insights';
+  if (pathname.startsWith('/settings')) return 'settings';
+  return 'hotspots';
+}
+
+function pathForTab(id: TabId, date?: string) {
+  if (id === 'day') return date ? `/day/${date}` : '/day';
+  return `/${id}`;
+}
+
 function useDocumentTitle(title: string) {
   useEffect(() => {
     document.title = title;
@@ -67,18 +88,13 @@ function EmptyDataState({ onOpenSettings }: { onOpenSettings: () => void }) {
       <div className="max-w-sm">
         <h2 className="font-display text-lg font-semibold text-text">Import your Timeline</h2>
         <p className="mt-2 text-sm text-text-muted">
-          Upload a Google Timeline JSON export in Settings. You can replace it anytime with a newer
-          export.
+          Upload a Google Timeline JSON or Takeout zip in Settings. You can replace it anytime with a
+          newer export.
         </p>
       </div>
-      <button
-        type="button"
-        title="Open Settings to upload your Timeline JSON"
-        onClick={onOpenSettings}
-        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-colors duration-ui-hover ease-ui hover:bg-accent/90"
-      >
+      <Button type="button" title="Open Settings to upload Timeline data" onClick={onOpenSettings}>
         Open Settings
-      </button>
+      </Button>
     </div>
   );
 }
@@ -98,14 +114,10 @@ function NavTabButton({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex items-center justify-center rounded-lg transition-colors duration-ui-emphasis ease-ui ${
-        compact
-          ? 'h-11 min-w-0 flex-1 flex-col gap-0.5 px-1 text-[10px]'
-          : 'h-11 w-11'
+      className={`flex items-center justify-center rounded-lg transition-colors duration-300 ease-ui ${
+        compact ? 'h-11 min-w-0 flex-1 flex-col gap-0.5 px-1 text-[10px]' : 'h-11 w-11'
       } ${
-        active
-          ? 'bg-accent/20 text-accent'
-          : 'text-text-muted hover:bg-bg/50 hover:text-text'
+        active ? 'bg-accent/20 text-accent' : 'text-text-muted hover:bg-bg/50 hover:text-text'
       }`}
       title={tab.label}
       aria-label={tab.label}
@@ -118,8 +130,11 @@ function NavTabButton({
 }
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState<TabId>('hotspots');
-  const [dayViewDate, setDayViewDate] = useState('');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const params = useParams();
+  const activeTab = tabFromPath(location.pathname);
+  const dayViewDate = params.date ?? '';
   const [moreOpen, setMoreOpen] = useState(false);
   const { data: routeProgress } = useRouteProgress();
   const { data: overview, isLoading: overviewLoading } = useOverview();
@@ -131,9 +146,9 @@ function AppContent() {
 
   useDocumentTitle(`${TAB_LABELS[activeTab]} · Locations`);
 
-  const selectTab = (id: TabId) => {
+  const selectTab = (id: TabId, date?: string) => {
     setMoreOpen(false);
-    setActiveTab(id);
+    void navigate(pathForTab(id, date ?? dayViewDate));
   };
 
   const importing =
@@ -146,23 +161,23 @@ function AppContent() {
     (overview?.total_activities ?? 0) > 0;
 
   const handleSelectDate = (date: string) => {
-    setDayViewDate(date);
-    setActiveTab('day');
+    selectTab('day', date);
   };
 
   const signOutButton = (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="icon"
       onClick={() => {
         queryClient.clear();
         void signOut();
       }}
-      className="flex h-11 w-11 items-center justify-center rounded-lg text-text-muted transition-colors duration-ui-emphasis ease-ui hover:bg-bg/50 hover:text-text"
       title={session?.user?.email ? `Sign out (${session.user.email})` : 'Sign out'}
       aria-label="Sign out"
     >
       <LogOut size={16} />
-    </button>
+    </Button>
   );
 
   return (
@@ -173,28 +188,30 @@ function AppContent() {
             You&apos;re viewing the <strong className="font-semibold">public demo</strong> with
             sample places - not real personal history.
           </span>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             title="Exit demo and return to the sign-in screen"
             onClick={() => {
               queryClient.clear();
               void signOut();
             }}
-            className="shrink-0 self-start rounded-md border border-accent/40 px-2 py-1.5 transition-colors duration-ui-hover ease-ui hover:bg-accent/20 sm:self-auto"
+            className="shrink-0 self-start sm:self-auto"
           >
             Exit demo
-          </button>
+          </Button>
         </div>
       )}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Desktop left rail */}
         <div className="hidden w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-surface py-4 lg:flex">
-          <div
+          <Link
+            to="/hotspots"
             className="mb-4 font-display text-lg font-bold tracking-tight text-accent"
             title="Locations"
           >
             L
-          </div>
+          </Link>
 
           {TABS.map((tab) => (
             <NavTabButton
@@ -208,19 +225,17 @@ function AppContent() {
           <div className="mt-auto flex flex-col items-center gap-2">
             <ThemeToggle className="h-11 w-11" />
             {!isDemo && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => selectTab('settings')}
-                className={`flex h-11 w-11 items-center justify-center rounded-lg transition-colors duration-ui-emphasis ease-ui ${
-                  activeTab === 'settings'
-                    ? 'bg-accent/20 text-accent'
-                    : 'text-text-muted hover:bg-bg/50 hover:text-text'
-                }`}
+                className={activeTab === 'settings' ? 'bg-accent/20 text-accent' : ''}
                 title="Settings"
                 aria-label="Settings"
               >
                 <Settings size={16} />
-              </button>
+              </Button>
             )}
             {routeProgress && routeProgress.percent < 100 && (
               <div title={`Routes cached: ${routeProgress.percent}%`}>
@@ -232,6 +247,9 @@ function AppContent() {
         </div>
 
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="hidden items-center gap-3 border-b border-border px-4 py-2 lg:flex">
+            <SearchBar />
+          </div>
           <div className="min-h-0 flex-1 overflow-hidden mobile-nav-pad lg:pb-0">
             {activeTab === 'settings' && !isDemo ? (
               <div key="settings" className="ui-enter h-full">
@@ -245,7 +263,12 @@ function AppContent() {
               importing ? (
                 <div className="ui-enter flex h-full flex-col items-center justify-center gap-3 bg-bg text-text-muted">
                   <Loader2 className="animate-spin text-accent" size={24} />
-                  <p className="text-sm">Importing Timeline data…</p>
+                  <p className="text-sm">
+                    Importing Timeline data…
+                    {importStatus?.latestJob?.parsedCount
+                      ? ` ${importStatus.latestJob.parsedCount} records`
+                      : ''}
+                  </p>
                 </div>
               ) : (
                 <div key="empty" className="ui-enter h-full">
@@ -262,7 +285,6 @@ function AppContent() {
             )}
           </div>
 
-          {/* Mobile / tablet bottom nav */}
           <nav
             className="absolute inset-x-0 bottom-0 z-[1200] flex items-stretch gap-0.5 border-t border-border bg-surface/95 px-1 pt-1 backdrop-blur-sm safe-pb lg:hidden"
             aria-label="Main"
@@ -283,7 +305,7 @@ function AppContent() {
                 aria-label="More options"
                 aria-expanded={moreOpen}
                 onClick={() => setMoreOpen((v) => !v)}
-                className={`flex h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[10px] transition-colors duration-ui-emphasis ease-ui ${
+                className={`flex h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[10px] transition-colors duration-300 ease-ui ${
                   moreOpen || activeTab === 'settings'
                     ? 'bg-accent/20 text-accent'
                     : 'text-text-muted hover:bg-bg/50 hover:text-text'
@@ -299,20 +321,17 @@ function AppContent() {
                     <ThemeToggle className="h-11 w-11" />
                   </div>
                   {!isDemo && (
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
                       title="Settings"
                       aria-label="Settings"
                       onClick={() => selectTab('settings')}
-                      className={`flex h-11 items-center gap-2 rounded-lg px-3 text-sm transition-colors duration-ui-hover ease-ui ${
-                        activeTab === 'settings'
-                          ? 'bg-accent/20 text-accent'
-                          : 'text-text-muted hover:bg-bg/50 hover:text-text'
-                      }`}
+                      className="h-11 justify-start"
                     >
                       <Settings size={16} />
                       Settings
-                    </button>
+                    </Button>
                   )}
                   {routeProgress && routeProgress.percent < 100 && (
                     <div
@@ -323,14 +342,15 @@ function AppContent() {
                       Routes {routeProgress.percent}%
                     </div>
                   )}
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
                     onClick={() => {
                       setMoreOpen(false);
                       queryClient.clear();
                       void signOut();
                     }}
-                    className="flex h-11 items-center gap-2 rounded-lg px-3 text-sm text-text-muted transition-colors duration-ui-hover ease-ui hover:bg-bg/50 hover:text-text"
+                    className="h-11 justify-start"
                     title={
                       session?.user?.email ? `Sign out (${session.user.email})` : 'Sign out'
                     }
@@ -338,7 +358,7 @@ function AppContent() {
                   >
                     <LogOut size={16} />
                     Sign out
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -346,6 +366,22 @@ function AppContent() {
         </div>
       </div>
     </div>
+  );
+}
+
+function AuthedShell() {
+  return (
+    <UnitsProvider>
+      <Routes>
+        <Route path="/" element={<Navigate to="/hotspots" replace />} />
+        <Route path="/hotspots" element={<AppContent />} />
+        <Route path="/day/:date?" element={<AppContent />} />
+        <Route path="/trips" element={<AppContent />} />
+        <Route path="/insights" element={<AppContent />} />
+        <Route path="/settings" element={<AppContent />} />
+        <Route path="*" element={<Navigate to="/hotspots" replace />} />
+      </Routes>
+    </UnitsProvider>
   );
 }
 
@@ -369,16 +405,30 @@ function AuthGate() {
   }
 
   if (!session?.user) {
-    return <LoginPage />;
+    return (
+      <Routes>
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/forgot" element={<ForgotPage />} />
+        <Route path="*" element={<LoginPage />} />
+      </Routes>
+    );
   }
 
-  return <AppContent />;
+  return <AuthedShell />;
 }
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthGate />
+      <BrowserRouter>
+        <Toaster />
+        <Routes>
+          <Route path="/privacy" element={<PrivacyRoute />} />
+          <Route path="/terms" element={<TermsRoute />} />
+          <Route path="/cookies" element={<CookiesRoute />} />
+          <Route path="/*" element={<AuthGate />} />
+        </Routes>
+      </BrowserRouter>
     </QueryClientProvider>
   );
 }

@@ -1,4 +1,3 @@
-import { and, eq, sql, desc } from "drizzle-orm";
 import {
   createDb,
   activities,
@@ -9,6 +8,12 @@ import {
   visits,
   routeCache,
   placeCache,
+  placeLabels,
+  userSettings,
+  subscriptions,
+  user,
+  session,
+  account,
   makeRouteCacheKey,
   makeCoordPlaceKey,
   makeRailArc,
@@ -18,17 +23,35 @@ import {
   deleteSourceData,
   ensureDataSource,
   importSourceData,
+  and,
+  eq,
+  sql,
+  desc,
+  or,
+  ilike,
+  inArray,
+  gte,
+  lte,
   type RouteStep,
   type ActivityRow,
   type VisitRow,
   type TenantId,
   type ImportJobStatus,
+  type DistanceUnit,
   landmarkForPlaceId,
 } from "@locations/db";
 import type { Env } from "./env";
 
-const OSRM_BASE = "https://router.project-osrm.org/route/v1";
-const NOMINATIM = "https://nominatim.openstreetmap.org/reverse";
+const OSRM_BASE_DEFAULT = "https://router.project-osrm.org/route/v1";
+const NOMINATIM_DEFAULT = "https://nominatim.openstreetmap.org/reverse";
+
+let OSRM_BASE = OSRM_BASE_DEFAULT;
+let NOMINATIM = NOMINATIM_DEFAULT;
+
+export function configureGeoEndpoints(env: { OSRM_BASE?: string; GEOCODE_BASE?: string }) {
+  OSRM_BASE = env.OSRM_BASE || OSRM_BASE_DEFAULT;
+  NOMINATIM = env.GEOCODE_BASE || NOMINATIM_DEFAULT;
+}
 
 const MODE_TO_PROFILE: Record<string, string> = {
   walking: "foot",
@@ -384,7 +407,16 @@ export async function getDays(db: ReturnType<typeof createDb>, tenant: TenantId)
   }));
 }
 
-export async function getHeatmap(db: ReturnType<typeof createDb>, tenant: TenantId) {
+export async function getHeatmap(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  opts?: { sourceIds?: string[]; from?: string; to?: string },
+) {
+  const filters = [eq(visits.tenant, tenant)];
+  if (opts?.sourceIds?.length) filters.push(inArray(visits.sourceId, opts.sourceIds));
+  if (opts?.from) filters.push(gte(visits.date, opts.from));
+  if (opts?.to) filters.push(lte(visits.date, opts.to));
+
   const rows = await db
     .select({
       lat: visits.lat,
@@ -395,7 +427,7 @@ export async function getHeatmap(db: ReturnType<typeof createDb>, tenant: Tenant
       date: visits.date,
     })
     .from(visits)
-    .where(eq(visits.tenant, tenant));
+    .where(and(...filters));
 
   type Cell = {
     lat: number;
@@ -627,18 +659,20 @@ export async function getDay(
     let snapStartLat = a.startLat;
     let snapStartLon = a.startLon;
     for (let j = idx - 1; j >= 0; j--) {
-      if (events[j].type === "visit") {
-        snapStartLat = events[j].lat;
-        snapStartLon = events[j].lon;
+      const prev = events[j];
+      if (prev.type === "visit") {
+        snapStartLat = prev.lat;
+        snapStartLon = prev.lon;
         break;
       }
     }
     let snapEndLat = a.endLat;
     let snapEndLon = a.endLon;
     for (let j = idx + 1; j < events.length; j++) {
-      if (events[j].type === "visit") {
-        snapEndLat = events[j].lat;
-        snapEndLon = events[j].lon;
+      const next = events[j];
+      if (next.type === "visit") {
+        snapEndLat = next.lat;
+        snapEndLon = next.lon;
         break;
       }
     }
@@ -663,15 +697,17 @@ export async function getDay(
 
     let fromPlace: string | null = null;
     for (let j = idx - 1; j >= 0; j--) {
-      if (events[j].type === "visit") {
-        fromPlace = events[j].data.cluster;
+      const prev = events[j];
+      if (prev.type === "visit") {
+        fromPlace = prev.data.cluster;
         break;
       }
     }
     let toPlace: string | null = null;
     for (let j = idx + 1; j < events.length; j++) {
-      if (events[j].type === "visit") {
-        toPlace = events[j].data.cluster;
+      const next = events[j];
+      if (next.type === "visit") {
+        toPlace = next.data.cluster;
         break;
       }
     }
@@ -843,8 +879,9 @@ export async function getDay(
 
     let prevMode: string | null = null;
     for (let j = idx - 1; j >= 0; j--) {
-      if (events[j].type === "activity") {
-        prevMode = events[j].data.mode;
+      const prev = events[j];
+      if (prev.type === "activity") {
+        prevMode = prev.data.mode;
         break;
       }
     }
@@ -852,8 +889,9 @@ export async function getDay(
 
     let nextMode: string | null = null;
     for (let j = idx + 1; j < events.length; j++) {
-      if (events[j].type === "activity") {
-        nextMode = events[j].data.mode;
+      const next = events[j];
+      if (next.type === "activity") {
+        nextMode = next.data.mode;
         break;
       }
     }
@@ -1045,6 +1083,7 @@ export async function getImportStatus(
           error: jobs[0].error,
           visitCount: jobs[0].visitCount,
           activityCount: jobs[0].activityCount,
+          parsedCount: jobs[0].parsedCount,
           createdAt: jobs[0].createdAt,
           updatedAt: jobs[0].updatedAt,
         }
@@ -1056,6 +1095,7 @@ export async function getImportStatus(
       error: j.error,
       visitCount: j.visitCount,
       activityCount: j.activityCount,
+      parsedCount: j.parsedCount,
       createdAt: j.createdAt,
       updatedAt: j.updatedAt,
     })),
@@ -1094,7 +1134,9 @@ export async function updateImportJob(
     error?: string | null;
     visitCount?: number;
     activityCount?: number;
+    parsedCount?: number;
   },
+  tenant?: TenantId,
 ) {
   await db
     .update(importJobs)
@@ -1103,11 +1145,106 @@ export async function updateImportJob(
       error: patch.error ?? null,
       visitCount: patch.visitCount,
       activityCount: patch.activityCount,
+      parsedCount: patch.parsedCount,
       updatedAt: new Date(),
     })
-    .where(eq(importJobs.id, jobId));
+    .where(tenant ? and(eq(importJobs.id, jobId), eq(importJobs.tenant, tenant)) : eq(importJobs.id, jobId));
 }
 
 export { ensureDataSource, importSourceData };
+
+export async function getSubscription(db: ReturnType<typeof createDb>, tenant: TenantId) {
+  const rows = await db.select().from(subscriptions).where(eq(subscriptions.tenant, tenant)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getUserSettings(db: ReturnType<typeof createDb>, tenant: TenantId) {
+  const rows = await db.select().from(userSettings).where(eq(userSettings.tenant, tenant)).limit(1);
+  return rows[0] ?? { tenant, distanceUnit: "mi" as DistanceUnit, timezone: null, updatedAt: new Date() };
+}
+
+export async function upsertUserSettings(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  patch: { distanceUnit?: DistanceUnit; timezone?: string | null },
+) {
+  const current = await getUserSettings(db, tenant);
+  const distanceUnit = patch.distanceUnit ?? current.distanceUnit ?? "mi";
+  const timezone = patch.timezone === undefined ? current.timezone : patch.timezone;
+  await db
+    .insert(userSettings)
+    .values({ tenant, distanceUnit, timezone, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: userSettings.tenant,
+      set: { distanceUnit, timezone, updatedAt: new Date() },
+    });
+  return { tenant, distanceUnit, timezone };
+}
+
+export async function searchTenant(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  q: string,
+) {
+  const term = q.trim().slice(0, 80);
+  if (term.length < 2) return { places: [], days: [] };
+  const like = `%${term}%`;
+  const places = await db
+    .select({
+      cluster: visits.cluster,
+      lat: visits.lat,
+      lon: visits.lon,
+      date: visits.date,
+    })
+    .from(visits)
+    .where(and(eq(visits.tenant, tenant), or(ilike(visits.cluster, like), ilike(visits.semanticType, like))))
+    .limit(30);
+  const days = await db
+    .select()
+    .from(dayStats)
+    .where(and(eq(dayStats.tenant, tenant), sql`${dayStats.date} like ${`%${term}%`}`))
+    .limit(20);
+  return { places, days };
+}
+
+export async function upsertPlaceLabel(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  placeKey: string,
+  label: string,
+  hidden = false,
+) {
+  await db
+    .insert(placeLabels)
+    .values({ tenant, placeKey, label, hidden, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: [placeLabels.tenant, placeLabels.placeKey],
+      set: { label, hidden, updatedAt: new Date() },
+    });
+  return { placeKey, label, hidden };
+}
+
+export async function listPlaceLabels(db: ReturnType<typeof createDb>, tenant: TenantId) {
+  return db.select().from(placeLabels).where(eq(placeLabels.tenant, tenant));
+}
+
+export async function wipeTenantData(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  userId: string,
+) {
+  await db.delete(visits).where(eq(visits.tenant, tenant));
+  await db.delete(activities).where(eq(activities.tenant, tenant));
+  await db.delete(dayStats).where(eq(dayStats.tenant, tenant));
+  await db.delete(analyticsCache).where(eq(analyticsCache.tenant, tenant));
+  await db.delete(importJobs).where(eq(importJobs.tenant, tenant));
+  await db.delete(dataSources).where(eq(dataSources.tenant, tenant));
+  await db.delete(placeLabels).where(eq(placeLabels.tenant, tenant));
+  await db.delete(userSettings).where(eq(userSettings.tenant, tenant));
+  await db.delete(subscriptions).where(eq(subscriptions.tenant, tenant));
+  await db.delete(session).where(eq(session.userId, userId));
+  await db.delete(account).where(eq(account.userId, userId));
+  await db.delete(user).where(eq(user.id, userId));
+}
 
 void METERS_TO_MILES;

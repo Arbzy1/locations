@@ -19,5 +19,19 @@
     "when": 1753632200000,
     "tag": "0002_sources",
     "breakpoints": true
+  },
+  {
+    "idx": 3,
+    "version": "7",
+    "when": 1753632300000,
+    "tag": "0003_saas",
+    "breakpoints": true
+  },
+  {
+    "idx": 4,
+    "version": "7",
+    "when": 1753632400000,
+    "tag": "0004_rls",
+    "breakpoints": true
   }
 ]

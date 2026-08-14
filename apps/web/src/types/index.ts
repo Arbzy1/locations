@@ -170,6 +170,7 @@ export interface ImportJobInfo {
   error: string | null;
   visitCount: number | null;
   activityCount: number | null;
+  parsedCount?: number | null;
   createdAt: string;
   updatedAt: string;
 }

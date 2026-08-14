@@ -15,6 +15,13 @@
   --color-cycle: var(--cycle);
   --color-fly: var(--fly);
   --color-visit: var(--visit);
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--on-accent);
+  --color-card: var(--surface);
+  --color-muted: var(--text-muted);
+  --color-ring: var(--accent);
 
   /* Semantic UI durations: use as duration-ui-fast, etc. */
   --duration-ui-fast: 150ms;
@@ -45,6 +52,13 @@
   --cycle: #56d364;
   --fly: #79c0ff;
   --visit: #bc8cff;
+  --background: var(--bg);
+  --foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: var(--on-accent);
+  --card: var(--surface);
+  --muted-foreground: var(--text-muted);
+  --ring: var(--accent);
   --surface-hover: #21262d;
   --scrollbar-thumb: #30363d;
   --scrollbar-thumb-hover: #484f58;
@@ -66,6 +80,13 @@
   --cycle: #1a7f37;
   --fly: #0969da;
   --visit: #8250df;
+  --background: var(--bg);
+  --foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: var(--on-accent);
+  --card: var(--surface);
+  --muted-foreground: var(--text-muted);
+  --ring: var(--accent);
   --surface-hover: #eaeef2;
   --scrollbar-thumb: #d0d7de;
   --scrollbar-thumb-hover: #afb8c1;

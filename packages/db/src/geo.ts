@@ -13,34 +13,17 @@ export const TRANSPORT_MODE_MAP: Record<string, string> = {
   unknown: "unknown",
 };
 
-export const CLUSTERS: Array<[number, number, number, string]> = [
-  // Personal / real geography
-  [51.363, -0.272, 5, "SW London (Kingston)"],
-  [51.476, -0.2, 4, "South London"],
-  [51.51, -0.13, 4, "Central London"],
-  [51.36, -0.25, 8, "Surrey/South London"],
-  [51.445, -0.354, 5, "Epsom/Sutton"],
-  [51.48, 0.01, 5, "SE London/Greenwich"],
-  [51.482, -3.179, 8, "Cardiff"],
-  [51.66, -3.45, 15, "South Wales"],
-  [51.75, -1.26, 10, "Oxford"],
-  [52.48, -1.9, 10, "Birmingham"],
-  [53.48, -2.24, 10, "Manchester"],
-  [55.95, -3.19, 10, "Edinburgh"],
-  [43.65, -79.38, 20, "Toronto"],
-  [28.96, -13.63, 20, "Lanzarote"],
-  [37.39, -5.99, 20, "Seville"],
-  [30.42, -9.6, 30, "Morocco (Agadir)"],
-  // Demo-only geography (NYC / Boston) — keep separate from personal UK clusters
-  [40.708, -73.957, 4, "Williamsburg, Brooklyn"],
-  [40.75, -73.98, 3, "Midtown Manhattan"],
-  [40.761, -73.978, 2, "Midtown East"],
-  [40.758, -73.986, 1.5, "Times Square"],
-  [40.779, -73.963, 2, "Central Park"],
-  [40.706, -74.009, 2, "Lower Manhattan"],
-  [42.355, -71.066, 3, "Boston Common"],
-  [42.36, -71.055, 2, "Downtown Boston"],
-];
+/** Kept for tests; clustering is grid-based, not a hardcoded gazetteer. */
+export const CLUSTERS: Array<[number, number, number, string]> = [];
+
+/** Grid cell (~0.5°) so labels are data-driven, not UK-hardcoded. */
+export function classifyLocation(lat: number, lon: number): string {
+  const glat = Math.round(lat * 2) / 2;
+  const glon = Math.round(lon * 2) / 2;
+  const latHem = glat >= 0 ? "N" : "S";
+  const lonHem = glon >= 0 ? "E" : "W";
+  return `${Math.abs(glat).toFixed(1)}°${latHem} ${Math.abs(glon).toFixed(1)}°${lonHem}`;
+}
 
 export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
@@ -56,19 +39,6 @@ export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: numb
 
 export function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   return haversineKm(lat1, lon1, lat2, lon2) * 1000;
-}
-
-export function classifyLocation(lat: number, lon: number): string {
-  let bestName = "Other";
-  let bestDist = Infinity;
-  for (const [clat, clon, radius, name] of CLUSTERS) {
-    const dist = haversineKm(lat, lon, clat, clon);
-    if (dist <= radius && dist < bestDist) {
-      bestDist = dist;
-      bestName = name;
-    }
-  }
-  return bestName;
 }
 
 export function parseGeo(geoStr: string | undefined | null): [number, number] | null {

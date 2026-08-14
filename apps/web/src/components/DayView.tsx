@@ -6,7 +6,8 @@ import MapView from './Map';
 import Timeline from './Timeline';
 import DayCalendar from './DayCalendar';
 import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from './MobilePanel';
-import { formatDate, formatMiles } from '../utils/format';
+import { formatDate, formatMilesOrKm } from '../utils/format';
+import { useUnits } from '../lib/units';
 import { MODE_COLORS, MODE_LABELS } from '../types';
 import type { Visit, Activity, MapFocusTarget } from '../types';
 import {
@@ -43,6 +44,7 @@ interface Props {
 export default function DayView({ initialDate }: Props) {
   const { data: allDays } = useDays();
   const { isDesktop } = useBreakpoint();
+  const { unit } = useUnits();
   const [selectedDate, setSelectedDate] = useState(initialDate || '');
   const [mapFocus, setMapFocus] = useState<MapFocusTarget | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(() => {
@@ -177,7 +179,7 @@ export default function DayView({ initialDate }: Props) {
           <div className="grid grid-cols-3 gap-3 text-center">
             <div>
               <div className="text-lg font-semibold text-accent">
-                {formatMiles(dayData.total_distance_miles)}
+                {formatMilesOrKm(dayData.total_distance_miles, unit)}
               </div>
               <div className="text-xs text-text-muted">Total</div>
             </div>

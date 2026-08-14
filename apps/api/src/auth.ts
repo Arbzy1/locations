@@ -1,12 +1,14 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { createDb } from "@locations/db";
+import { createHttpDb } from "@locations/db";
 import type { Env } from "./env";
 import { allowedOrigins } from "./cors";
+import { sendEmail } from "./email";
 
 export function createAuth(env: Env) {
-  const db = createDb(env.DATABASE_URL);
+  const db = createHttpDb(env.DATABASE_URL);
   const secure = env.BETTER_AUTH_URL.startsWith("https://");
+  const disableSignUp = env.DISABLE_SIGNUP === "true";
 
   return betterAuth({
     database: drizzleAdapter(db, { provider: "pg" }),
@@ -14,7 +16,24 @@ export function createAuth(env: Env) {
     secret: env.BETTER_AUTH_SECRET,
     emailAndPassword: {
       enabled: true,
-      disableSignUp: true,
+      disableSignUp,
+      requireEmailVerification: !disableSignUp,
+      sendResetPassword: async ({ user, url }) => {
+        await sendEmail(env, {
+          to: user.email,
+          subject: "Reset your Locations password",
+          text: `Reset your password: ${url}`,
+        });
+      },
+    },
+    emailVerification: {
+      sendVerificationEmail: async ({ user, url }) => {
+        await sendEmail(env, {
+          to: user.email,
+          subject: "Verify your Locations email",
+          text: `Confirm your email: ${url}`,
+        });
+      },
     },
     user: {
       additionalFields: {
@@ -24,6 +43,9 @@ export function createAuth(env: Env) {
           defaultValue: "user",
           input: false,
         },
+      },
+      changeEmail: {
+        enabled: true,
       },
     },
     trustedOrigins: allowedOrigins(env),

@@ -1,0 +1,14 @@
+{
+  "semanticSegments": [
+    {
+      "startTime": "2024-06-02T08:00:00Z",
+      "endTime": "2024-06-02T09:00:00Z",
+      "visit": {
+        "topCandidate": {
+          "placeLocation": { "latLng": "40.7128°, -74.0060°" },
+          "semanticType": "WORK"
+        }
+      }
+    }
+  ]
+}

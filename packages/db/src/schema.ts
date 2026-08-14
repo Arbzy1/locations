@@ -17,6 +17,17 @@ export type TenantId = string;
 
 export type ImportJobStatus = "pending" | "processing" | "ready" | "error";
 
+export type SubscriptionStatus =
+  | "none"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "unpaid"
+  | "paused";
+
+export type DistanceUnit = "mi" | "km";
+
 /* ─── Better Auth tables ─── */
 
 export const user = pgTable("user", {
@@ -106,6 +117,8 @@ export const importJobs = pgTable(
     error: text("error"),
     visitCount: integer("visit_count"),
     activityCount: integer("activity_count"),
+    parsedCount: integer("parsed_count"),
+    merge: boolean("merge").notNull().default(false),
     r2Key: text("r2_key"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -207,6 +220,42 @@ export const placeCache = pgTable(
   (t) => [uniqueIndex("place_cache_place_id_uidx").on(t.placeId)],
 );
 
+export const placeLabels = pgTable(
+  "place_labels",
+  {
+    tenant: text("tenant").notNull(),
+    placeKey: text("place_key").notNull(),
+    label: text("label").notNull(),
+    hidden: boolean("hidden").notNull().default(false),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tenant, t.placeKey] })],
+);
+
+export const userSettings = pgTable("user_settings", {
+  tenant: text("tenant").primaryKey(),
+  distanceUnit: text("distance_unit").notNull().$type<DistanceUnit>().default("mi"),
+  timezone: text("timezone"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const subscriptions = pgTable("subscriptions", {
+  tenant: text("tenant").primaryKey(),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  status: text("status").notNull().$type<SubscriptionStatus>().default("none"),
+  priceId: text("price_id"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  graceUntil: timestamp("grace_until"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const stripeEvents = pgTable("stripe_events", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  processedAt: timestamp("processed_at").notNull().defaultNow(),
+});
+
 export type RouteStep = {
   name: string;
   distance_meters: number;
@@ -220,6 +269,8 @@ export type ActivityRow = typeof activities.$inferSelect;
 export type DayStatsRow = typeof dayStats.$inferSelect;
 export type DataSourceRow = typeof dataSources.$inferSelect;
 export type ImportJobRow = typeof importJobs.$inferSelect;
+export type SubscriptionRow = typeof subscriptions.$inferSelect;
+export type UserSettingsRow = typeof userSettings.$inferSelect;
 
 /** Resolve the data tenant for an authenticated app user. */
 export function tenantForUser(user: {
@@ -227,4 +278,8 @@ export function tenantForUser(user: {
   role?: string | null;
 }): TenantId {
   return user.role === "demo" ? "demo" : user.id;
+}
+
+export function canWriteAsRole(role: string | null | undefined): boolean {
+  return role !== "demo";
 }

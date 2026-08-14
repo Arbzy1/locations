@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
+import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 import * as schema from "./schema.js";
 import {
   activities,
@@ -18,7 +19,7 @@ import {
 } from "./geo.js";
 import { buildStore, computeAllAnalytics } from "./analytics.js";
 
-type Db = NeonHttpDatabase<typeof schema>;
+type Db = NeonHttpDatabase<typeof schema> | NeonDatabase<typeof schema>;
 
 export type RawTimelineRecord = {
   startTime?: string;
@@ -283,9 +284,45 @@ export function normalizeTimelineInput(raw: unknown): RawTimelineRecord[] {
     return fromTimelineEdits(obj.timelineEdits as TimelineEdit[]);
   }
 
+  if (Array.isArray(obj.locations)) {
+    return fromRecordsJson(obj.locations as Array<Record<string, unknown>>);
+  }
+
   throw new Error(
-    "Timeline JSON must be a visit/activity array, a semanticSegments Timeline.json, or a Timeline Edits export",
+    "Timeline JSON must be a visit/activity array, a semanticSegments Timeline.json, a Timeline Edits export, or Records.json",
   );
+}
+
+function fromRecordsJson(locations: Array<Record<string, unknown>>): RawTimelineRecord[] {
+  const records: RawTimelineRecord[] = [];
+  for (const loc of locations) {
+    const latE7 = Number(loc.latitudeE7 ?? loc.latE7);
+    const lngE7 = Number(loc.longitudeE7 ?? loc.lngE7);
+    if (!Number.isFinite(latE7) || !Number.isFinite(lngE7)) continue;
+    const ts =
+      (typeof loc.timestamp === "string" && loc.timestamp) ||
+      (typeof loc.timestampMs === "string" && loc.timestampMs) ||
+      (typeof loc.timestampMs === "number" && String(loc.timestampMs)) ||
+      "";
+    if (!ts) continue;
+    const startIso = ts.length < 13 && /^\d+$/.test(ts) ? new Date(Number(ts)).toISOString() : ts.includes("T") ? ts : new Date(Number(ts)).toISOString();
+    const endDt = new Date(startIso);
+    if (Number.isNaN(endDt.getTime())) continue;
+    endDt.setMinutes(endDt.getMinutes() + 2);
+    const lat = latE7 / 1e7;
+    const lon = lngE7 / 1e7;
+    records.push({
+      startTime: startIso,
+      endTime: endDt.toISOString(),
+      visit: {
+        topCandidate: {
+          placeLocation: toGeo(lat, lon),
+          semanticType: "Unknown",
+        },
+      },
+    });
+  }
+  return records;
 }
 
 function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
@@ -450,17 +487,19 @@ export async function rebuildTenantAggregates(
  */
 export async function importSourceData(
   db: Db,
-  opts: { tenant: TenantId; sourceId: string; records: unknown },
+  opts: { tenant: TenantId; sourceId: string; records: unknown; merge?: boolean },
 ): Promise<{ visitCount: number; activityCount: number; days: number }> {
   const { tenant, sourceId } = opts;
   const parsed = parseTimelineJson(opts.records);
 
-  await db
-    .delete(visits)
-    .where(and(eq(visits.tenant, tenant), eq(visits.sourceId, sourceId)));
-  await db
-    .delete(activities)
-    .where(and(eq(activities.tenant, tenant), eq(activities.sourceId, sourceId)));
+  if (!opts.merge) {
+    await db
+      .delete(visits)
+      .where(and(eq(visits.tenant, tenant), eq(visits.sourceId, sourceId)));
+    await db
+      .delete(activities)
+      .where(and(eq(activities.tenant, tenant), eq(activities.sourceId, sourceId)));
+  }
 
   const visitRows = parsed.visits.map((v) => ({
     ...v,

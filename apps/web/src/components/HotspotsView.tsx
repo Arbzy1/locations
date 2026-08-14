@@ -1,14 +1,17 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useHeatmap } from '../hooks/useApi';
+import { useHeatmap, useInvalidateLocationQueries, useSources } from '../hooks/useApi';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import MapView from './Map';
 import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from './MobilePanel';
 import { Flame, MapPin } from 'lucide-react';
 import { formatDuration } from '../utils/format';
 import type { HeatmapPoint, HotspotLabel, MapFocusTarget } from '../types';
+import { Input } from './ui/input';
+import { Button } from './ui/button';
 
 type HotspotArea = HeatmapPoint & {
   label: string;
+  cluster: string;
   totalDurationMinutes: number;
   uniqueDays: number;
   topTypes: string[];
@@ -19,6 +22,7 @@ function toArea(p: HeatmapPoint): HotspotArea {
   return {
     ...p,
     label: p.label || `Near ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`,
+    cluster: p.label || `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`,
     totalDurationMinutes: p.totalDurationMinutes ?? 0,
     uniqueDays: p.uniqueDays ?? 0,
     topTypes: p.topTypes ?? [],
@@ -27,6 +31,27 @@ function toArea(p: HeatmapPoint): HotspotArea {
 }
 
 function AreaDetails({ area }: { area: HotspotArea }) {
+  const [label, setLabel] = useState(area.label);
+  const [saving, setSaving] = useState(false);
+  const invalidate = useInvalidateLocationQueries();
+
+  const saveLabel = async () => {
+    const next = label.trim();
+    if (!next) return;
+    setSaving(true);
+    await fetch('/api/places/labels', {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        placeKey: area.cluster || `${area.lat.toFixed(5)},${area.lon.toFixed(5)}`,
+        label: next,
+      }),
+    });
+    setSaving(false);
+    invalidate();
+  };
+
   return (
     <div className="rounded-lg border border-border bg-bg/50 p-3">
       <div className="mb-2 text-sm font-semibold leading-snug text-text">{area.label}</div>
@@ -60,13 +85,31 @@ function AreaDetails({ area }: { area: HotspotArea }) {
           ))}
         </div>
       )}
+      <div className="mt-3 flex gap-2">
+        <Input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          title="Custom name for this place"
+        />
+        <Button type="button" size="sm" title="Save place name" disabled={saving} onClick={() => void saveLabel()}>
+          Save
+        </Button>
+      </div>
       <p className="mt-2 text-[10px] text-text-muted">Selected: map zooms to this spot</p>
     </div>
   );
 }
 
 export default function HotspotsView() {
-  const { data: heatmapPoints, isLoading } = useHeatmap();
+  const { data: sources } = useSources();
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [sourceIds, setSourceIds] = useState<string[]>([]);
+  const { data: heatmapPoints, isLoading } = useHeatmap({
+    from: from || undefined,
+    to: to || undefined,
+    sources: sourceIds.length ? sourceIds : undefined,
+  });
   const { isDesktop, isPhone } = useBreakpoint();
   const [heatmapOn, setHeatmapOn] = useState(true);
   /** 15-100: how solid the heat is; lower = easier to read town names on the basemap */
@@ -133,6 +176,46 @@ export default function HotspotsView() {
       <p className="mt-2 text-xs leading-relaxed text-text-muted">
         Tap a row for details and to zoom the map. Tags mark top spots on the map.
       </p>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <input
+          type="date"
+          title="Heatmap start date"
+          value={from}
+          onChange={(e) => setFrom(e.target.value)}
+          className="h-11 rounded-lg border border-border bg-bg px-2 text-xs text-text"
+        />
+        <input
+          type="date"
+          title="Heatmap end date"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          className="h-11 rounded-lg border border-border bg-bg px-2 text-xs text-text"
+        />
+      </div>
+      {sources && sources.length > 1 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {sources.map((s) => {
+            const on = sourceIds.includes(s.id) || sourceIds.length === 0;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                title={`Filter to ${s.label}`}
+                onClick={() =>
+                  setSourceIds((cur) =>
+                    cur.includes(s.id) ? cur.filter((id) => id !== s.id) : [...cur, s.id],
+                  )
+                }
+                className={`h-11 rounded-lg border px-3 text-xs transition duration-300 ${
+                  on ? 'border-accent bg-accent/15 text-accent' : 'border-border text-text-muted'
+                }`}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 

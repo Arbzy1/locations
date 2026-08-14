@@ -1,35 +1,34 @@
 # Locations
 
-Explore **your** Google Timeline as a private map journal — heatmaps, day views, trips, and insights.
+Explore **your** Google Timeline as a private map journal: heatmaps, day views, trips, and insights.
 
-Built on **Cloudflare Workers**, **Neon**, and **Better Auth**.
+Hosted SaaS on **Cloudflare Workers**, **Neon**, **Better Auth**, and **Stripe**.
 
 ![Locations](docs/screenshot.png)
 
-## Live site: demo + private
+## Live site
 
-[locations.aden.website](https://locations.aden.website) hosts **both**:
+[locations.aden.website](https://locations.aden.website):
 
-1. **Public demo** — click “Try the demo” for sample journeys (no invite needed)
-2. **Personal data** — invite-only accounts see the owner’s real timeline
+1. **Public demo** - click “Try the demo” for sample journeys (password stays on the server)
+2. **Your account** - sign up, verify email, import Timeline JSON or a Takeout zip, subscribe if billing is enabled
 
-Datasets are isolated by tenant in Neon (`demo` vs `personal`).
+Tenants are isolated in the app layer and with FORCE RLS (`app.tenant`). Demo users map to tenant `demo`.
 
-## Use your own data (recommended)
+## Self-host
 
 ### What you need
 
 - Node 20+
-- Free [Neon](https://neon.tech) Postgres database
-- (Optional) Cloudflare account to deploy
-- Your Google Takeout **Location History** JSON, **or** the bundled sample
+- [Neon](https://neon.tech) Postgres
+- (Optional) Cloudflare account, Stripe, Resend, commercial map tiles
 
-### Export from Google (optional)
+### Export from Google
 
 1. Open [Google Takeout](https://takeout.google.com/)
 2. Select **Location History** / Timeline only
-3. Download and unzip until you find a JSON array of records with `visit` / `activity` (often named like `location-history.json`)
-4. Keep that file **outside** git
+3. Upload the zip in Settings, or extract Timeline.json / Records.json
+4. Keep real exports **outside** git
 
 ### One-command setup
 
@@ -40,55 +39,32 @@ npm install
 npm run setup:project
 ```
 
-The wizard will:
-
-1. Ask for your `DATABASE_URL`
-2. Let you choose the **bundled sample** or a path to **your Takeout JSON**
-3. Run migrate + import
-4. Create your admin login (signup stays disabled)
-
-Then locally:
+Then:
 
 ```bash
 npm run build:web
-npm run dev:api    # open http://localhost:8787 and sign in
+npm run dev:api    # open http://localhost:8787
 ```
 
-### Deploy your own copy
+Set `DISABLE_SIGNUP=true` if you want invite-only again (`npm run auth:create-user`).
+
+### Deploy
 
 ```bash
-# In wrangler.toml: change worker name, BETTER_AUTH_URL, and custom domain
 npx wrangler login
 npx wrangler secret put DATABASE_URL
 npx wrangler secret put BETTER_AUTH_SECRET
+# optional: RESEND_API_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, DEMO_EMAIL, DEMO_PASSWORD
 npm run deploy:prod
-```
-
-You get your own `*.workers.dev` URL (or attach your domain). That is separate from `locations.aden.website`.
-
-### Swap in real Takeout later
-
-```bash
-# .env
-DATA_PATH=../my-location-history.json
-
-npm run db:import   # replaces visits/activities/analytics in your Neon DB
-```
-
-Optional: `npm run db:warm-routes` to pre-cache road geometries (slow; otherwise routes fill on demand).
-
-Invite another person to **your** instance:
-
-```bash
-npm run auth:create-user -- friend@email.com 'password' Friend user
 ```
 
 ## What it does
 
-- **Hotspots** — visit density heatmap  
-- **Day View** — map + timeline with OSRM-snapped journeys  
-- **Day Trips** — multi-cluster / long-range days  
-- **Insights** — distance, corridors, yearly/monthly stats  
+- **Hotspots** - visit density heatmap (date and source filters)
+- **Day View** - map + timeline with snapped journeys
+- **Day Trips** - multi-cluster / long-range days, plus multi-day grouping
+- **Insights** - distance, corridors, home/work guess, year in review
+- **Settings** - zip/JSON import, merge, billing, units, delete account
 
 ## Stack
 
@@ -96,16 +72,10 @@ npm run auth:create-user -- friend@email.com 'password' Friend user
 |-------|------|
 | Edge | Cloudflare Workers + Static Assets |
 | API | Hono |
-| Auth | Better Auth (email/password, invite-only) |
-| DB | Neon Postgres + Drizzle ORM |
-| UI | React 19, Vite, Tailwind 4, Leaflet, Recharts |
-
-```
-Browser ──► Your Worker (assets + /api/*)
-                │
-                ├── Better Auth session
-                └── Your Neon DB (imported from your JSON)
-```
+| Auth | Better Auth (email/password, public signup unless disabled) |
+| Billing | Stripe Checkout + Customer Portal |
+| DB | Neon Postgres + Drizzle ORM + FORCE RLS |
+| UI | React 19, Vite, Tailwind 4, shadcn/ui, Motion, Leaflet, Recharts |
 
 ## Scripts
 
@@ -114,36 +84,34 @@ Browser ──► Your Worker (assets + /api/*)
 | `npm run setup:project` | Interactive first-time Neon + import + admin user |
 | `npm run deploy:prod` | Build web + `wrangler deploy` |
 | `npm run db:migrate` | Apply schema |
-| `npm run db:import` | Load JSON → Neon (full replace of location tables) |
-| `npm run db:warm-routes` | Optional OSRM backfill |
-| `npm run auth:create-user` | Invite a user |
+| `npm run db:import` | CLI JSON import |
+| `npm run test:unit` | Vitest unit project |
+| `npm run test:integration` | Vitest integration project |
+| `npm run test:rls` | RLS leak tests (skips without `DATABASE_URL`) |
+| `npm run test:e2e` | Playwright (requires API at `:8787`) |
 | `npm run rules:sync` | Regenerate AI tool rule files from `AGENTS.md` |
-| `npm run test:unit` | Vitest unit/integration tests |
-| `npm run test:e2e` | Playwright smoke (requires API at `:8787`) |
-| `npm run deps:audit` | `npm audit` (fails on high/critical) |
 
 ## Testing
 
-- **Unit:** `npm run test:unit` (Vitest; no external services). Covers `tenantForUser`, demo write-blocks, and cross-tenant source denial. There is no Postgres RLS - isolation is app-level.
-- **E2E:** start the stack, then run Playwright:
-
 ```bash
+npm run test:unit
+npm run test:integration
+npm run test:rls
+
 npm run build:web
 npm run dev:api
 # other terminal:
 npm run test:e2e
 ```
 
-Optional: `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8787` (default).
-
-Security checklist: [docs/SECURITY.md](docs/SECURITY.md). Agent conventions: `AGENTS.md` (`npm run rules:sync` after edits).
+Security: [docs/security/README.md](docs/security/README.md). Agent conventions: `AGENTS.md`.
 
 ## Privacy
 
-- Real Takeout JSON is **gitignored** - only `data/sample-location-history.json` ships in the repo
-- The public live site is invite-only and is **not** a multi-tenant host for other people's timelines
-- Do not commit `.env`, `.dev.vars`, or Neon credentials
+- Real Takeout JSON is gitignored. Only sample data ships in the repo.
+- Do not commit `.env`, `.dev.vars`, or database credentials.
+- Delete account in Settings wipes Neon rows, R2 uploads, and the Stripe customer.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

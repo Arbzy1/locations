@@ -309,12 +309,130 @@ export function computeFunFacts(store: Store): FunFact[] {
   return facts;
 }
 
-export function computeAllAnalytics(store: Store) {
+function dayPlusOne(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+export type MultiDayTrip = {
+  start: string;
+  end: string;
+  dates: string[];
+  total_miles: number;
+  clusters: string[];
+};
+
+/** Consecutive day-trips become one multi-day journey. */
+export function groupMultiDayTrips(trips: DayTrip[]): MultiDayTrip[] {
+  const sorted = [...trips].sort((a, b) => a.date.localeCompare(b.date));
+  const groups: MultiDayTrip[] = [];
+  let cur: MultiDayTrip | null = null;
+  for (const t of sorted) {
+    if (cur && dayPlusOne(cur.end) === t.date) {
+      cur.end = t.date;
+      cur.dates.push(t.date);
+      cur.total_miles += t.total_miles;
+      for (const c of t.clusters) {
+        if (!cur.clusters.includes(c)) cur.clusters.push(c);
+      }
+    } else {
+      if (cur) groups.push(cur);
+      cur = {
+        start: t.date,
+        end: t.date,
+        dates: [t.date],
+        total_miles: t.total_miles,
+        clusters: [...t.clusters],
+      };
+    }
+  }
+  if (cur) groups.push(cur);
+  return groups.filter((g) => g.dates.length > 1);
+}
+
+export type HomeWorkGuess = {
+  home: { cluster: string; visits: number } | null;
+  work: { cluster: string; visits: number } | null;
+};
+
+function hourUtc(iso: string): number {
+  const h = new Date(iso).getUTCHours();
+  return Number.isNaN(h) ? 12 : h;
+}
+
+export function inferHomeWork(store: Store): HomeWorkGuess {
+  const homeCounts = new Map<string, number>();
+  const workCounts = new Map<string, number>();
+  for (const v of store.visits) {
+    const hour = hourUtc(v.start);
+    const day = new Date(`${v.date}T00:00:00Z`).getUTCDay();
+    const weekday = day >= 1 && day <= 5;
+    if (hour >= 22 || hour < 6) {
+      homeCounts.set(v.cluster, (homeCounts.get(v.cluster) ?? 0) + 1);
+    }
+    if (weekday && hour >= 9 && hour < 17) {
+      workCounts.set(v.cluster, (workCounts.get(v.cluster) ?? 0) + 1);
+    }
+  }
+  const top = (m: Map<string, number>) => {
+    const [cluster, visits] = [...m.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
+    return cluster ? { cluster, visits } : null;
+  };
+  return { home: top(homeCounts), work: top(workCounts) };
+}
+
+export type AreaStat = { cluster: string; visits: number; lat: number; lon: number };
+
+export function computeAreas(store: Store): AreaStat[] {
+  const map = new Map<string, { visits: number; lat: number; lon: number }>();
+  for (const v of store.visits) {
+    const cur = map.get(v.cluster) ?? { visits: 0, lat: v.lat, lon: v.lon };
+    cur.visits += 1;
+    map.set(v.cluster, cur);
+  }
+  return [...map.entries()]
+    .map(([cluster, v]) => ({ cluster, ...v }))
+    .sort((a, b) => b.visits - a.visits)
+    .slice(0, 40);
+}
+
+export type YearInReview = {
+  year: number;
+  distance_miles: number;
+  visits: number;
+  activities: number;
+  days_tracked: number;
+  top_places: [string, number][];
+  modes: Record<string, number>;
+} | null;
+
+export function computeYearInReview(store: Store): YearInReview {
+  const yearly = computeYearlyStats(store);
+  if (!yearly.length) return null;
+  const latest = yearly[yearly.length - 1];
+  const monthly = computeMonthlyStats(store).filter((m) => m.month.startsWith(String(latest.year)));
+  const places = new Map<string, number>();
+  for (const m of monthly) {
+    for (const [name, n] of m.top_places) places.set(name, (places.get(name) ?? 0) + n);
+  }
   return {
-    "day-trips": detectDayTrips(store),
+    ...latest,
+    top_places: [...places.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5) as [string, number][],
+  };
+}
+
+export function computeAllAnalytics(store: Store) {
+  const trips = detectDayTrips(store);
+  return {
+    "day-trips": trips,
     monthly: computeMonthlyStats(store),
     yearly: computeYearlyStats(store),
     corridors: computeCorridors(store),
     facts: computeFunFacts(store),
+    "multi-day": groupMultiDayTrips(trips),
+    "home-work": inferHomeWork(store),
+    areas: computeAreas(store),
+    "year-in-review": computeYearInReview(store),
   };
 }

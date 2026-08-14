@@ -14,6 +14,7 @@ vi.mock("./auth", () => ({
 
 vi.mock("./services", () => ({
   getDb: vi.fn(() => ({})),
+  configureGeoEndpoints: vi.fn(),
   getOverview: vi.fn(async () => ({ ok: true })),
   getDays: vi.fn(async () => []),
   getDay: vi.fn(),
@@ -30,6 +31,13 @@ vi.mock("./services", () => ({
   ensureDataSource: vi.fn(),
   importSourceData: vi.fn(),
   updateImportJob: vi.fn(),
+  getSubscription: vi.fn(async () => null),
+  getUserSettings: vi.fn(async () => ({ distanceUnit: "mi" })),
+  searchTenant: vi.fn(async () => ({ places: [], days: [] })),
+  upsertUserSettings: vi.fn(),
+  upsertPlaceLabel: vi.fn(),
+  listPlaceLabels: vi.fn(async () => []),
+  wipeTenantData: vi.fn(),
 }));
 
 import { app } from "./index";

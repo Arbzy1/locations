@@ -16,10 +16,30 @@ run_worker_first = ["/api/*"]
 
 [vars]
 BETTER_AUTH_URL = "https://locations.aden.website"
+DISABLE_SIGNUP = "false"
+CSP_ENFORCE = "false"
+# MAP_TILE_DARK_URL = "https://..."
+# MAP_TILE_LIGHT_URL = "https://..."
+# MAP_TILE_ATTR = "&copy; OSM &copy; your tile vendor"
+# OSRM_BASE = "https://your-osrm.example"
+# GEOCODE_BASE = "https://your-geocoder.example"
 
 # Secrets (set via wrangler secret put):
 #   DATABASE_URL
 #   BETTER_AUTH_SECRET
+#   RESEND_API_KEY
+#   STRIPE_SECRET_KEY
+#   STRIPE_WEBHOOK_SECRET
+#   DEMO_EMAIL
+#   DEMO_PASSWORD
+
+# Optional queue (create with: wrangler queues create locations-imports)
+# [[queues.producers]]
+# binding = "IMPORT_QUEUE"
+# queue = "locations-imports"
+# [[queues.consumers]]
+# queue = "locations-imports"
+# max_batch_size = 1
 
 [[r2_buckets]]
 binding = "UPLOADS"

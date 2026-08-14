@@ -4,10 +4,15 @@ import {
   useYearlyStats,
   useFunFacts,
   useCorridors,
+  useHomeWork,
+  useYearInReview,
+  useAreas,
+  useMultiDayTrips,
 } from '../hooks/useApi';
 import StatCard from './StatCard';
 import { MODE_COLORS, MODE_LABELS } from '../types';
-import { formatMiles } from '../utils/format';
+import { formatMilesOrKm } from '../utils/format';
+import { useUnits } from '../lib/units';
 import { useTheme } from '../lib/theme';
 import { useMemo } from 'react';
 import {
@@ -54,6 +59,11 @@ export default function InsightsView() {
   const { data: yearly } = useYearlyStats();
   const { data: facts } = useFunFacts();
   const { data: corridors } = useCorridors();
+  const { data: homeWork } = useHomeWork();
+  const { data: yearReview } = useYearInReview();
+  const { data: areas } = useAreas();
+  const { data: multiDay } = useMultiDayTrips();
+  const { unit } = useUnits();
   const chart = useChartColors();
 
   // Mode breakdown for pie chart
@@ -97,7 +107,7 @@ export default function InsightsView() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard
               label="Total Distance"
-              value={formatMiles(overview.total_distance_miles)}
+              value={formatMilesOrKm(overview.total_distance_miles, unit)}
               icon={<Globe size={16} />}
             />
             <StatCard
@@ -122,7 +132,7 @@ export default function InsightsView() {
         {monthly && monthly.length > 0 && (
           <div className="bg-bg border border-border rounded-lg p-4">
             <h3 className="text-sm font-semibold text-text-muted mb-4">
-              Monthly Distance (miles)
+              Monthly Distance
             </h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={monthly}>
@@ -238,7 +248,7 @@ export default function InsightsView() {
                     >
                       <td className="p-2 font-semibold">{y.year}</td>
                       <td className="p-2 text-right text-accent">
-                        {formatMiles(y.distance_miles)}
+                        {formatMilesOrKm(y.distance_miles, unit)}
                       </td>
                       <td className="p-2 text-right">{y.visits.toLocaleString()}</td>
                       <td className="p-2 text-right">
@@ -250,6 +260,59 @@ export default function InsightsView() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {yearReview && yearReview.year && (
+          <div className="rounded-lg border border-border bg-bg p-4">
+            <h3 className="mb-3 text-sm font-semibold text-text-muted">Year in review · {yearReview.year}</h3>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <StatCard label="Distance" value={formatMilesOrKm(yearReview.distance_miles, unit)} />
+              <StatCard label="Visits" value={yearReview.visits.toLocaleString()} />
+              <StatCard label="Journeys" value={yearReview.activities.toLocaleString()} />
+              <StatCard label="Days" value={String(yearReview.days_tracked)} />
+            </div>
+          </div>
+        )}
+
+        {homeWork && (homeWork.home || homeWork.work) && (
+          <div className="rounded-lg border border-border bg-bg p-4">
+            <h3 className="mb-3 text-sm font-semibold text-text-muted">Home and work (guessed)</h3>
+            <p className="text-sm text-text">
+              Home: {homeWork.home?.cluster ?? 'unknown'}
+              {homeWork.home ? ` (${homeWork.home.visits} overnight visits)` : ''}
+            </p>
+            <p className="mt-1 text-sm text-text">
+              Work: {homeWork.work?.cluster ?? 'unknown'}
+              {homeWork.work ? ` (${homeWork.work.visits} weekday visits)` : ''}
+            </p>
+          </div>
+        )}
+
+        {Array.isArray(areas) && areas.length > 0 && (
+          <div className="rounded-lg border border-border bg-bg p-4">
+            <h3 className="mb-3 text-sm font-semibold text-text-muted">Frequent areas</h3>
+            <ul className="space-y-1 text-sm">
+              {areas.slice(0, 12).map((a) => (
+                <li key={a.cluster} className="flex justify-between">
+                  <span>{a.cluster}</span>
+                  <span className="font-mono text-text-muted">{a.visits}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {Array.isArray(multiDay) && multiDay.length > 0 && (
+          <div className="rounded-lg border border-border bg-bg p-4">
+            <h3 className="mb-3 text-sm font-semibold text-text-muted">Multi-day trips</h3>
+            <ul className="space-y-2 text-sm">
+              {multiDay.slice(0, 12).map((t) => (
+                <li key={`${t.start}-${t.end}`}>
+                  {t.start} to {t.end} · {formatMilesOrKm(t.total_miles, unit)} · {t.clusters.slice(0, 4).join(', ')}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

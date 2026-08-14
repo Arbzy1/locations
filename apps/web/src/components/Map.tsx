@@ -16,6 +16,8 @@ import type { Visit, Activity, HeatmapPoint, Connector, MapFocusTarget, HotspotL
 import { MODE_LABELS } from '../types';
 import { formatTime, formatDistance, formatDuration } from '../utils/format';
 import { useTheme } from '../lib/theme';
+import { useQuery } from '@tanstack/react-query';
+import { useUnits } from '../lib/units';
 
 // Fix default marker icon
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -317,13 +319,30 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
   heatmapOpacity = 0.72,
   heatmapIntensity = 1,
   hotspotLabels = [],
-  center = [51.45, -0.2],
-  zoom = 10,
+  center = [20, 0],
+  zoom = 2,
   focusTarget = null,
   sizeSignal = 0,
 }, ref) {
   const mapRef = useRef<L.Map | null>(null);
   const { theme } = useTheme();
+  const { unit } = useUnits();
+  const { data: mapConfig } = useQuery({
+    queryKey: ['map-config'],
+    queryFn: async () => {
+      const res = await fetch('/api/config');
+      if (!res.ok) return null;
+      return res.json() as Promise<{
+        mapTileDark: string;
+        mapTileLight: string;
+        mapAttr: string;
+      }>;
+    },
+    staleTime: Infinity,
+  });
+  const darkUrl = mapConfig?.mapTileDark || 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  const lightUrl = mapConfig?.mapTileLight || 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  const mapAttr = mapConfig?.mapAttr || '&copy; OSM &copy; CARTO';
   const [isNarrow, setIsNarrow] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches,
   );
@@ -366,8 +385,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
       if (c.route_geometry) c.route_geometry.forEach((p) => coords.push([p[0], p[1]]));
     });
     if (heatmapPoints && heatmapPoints.length > 0) {
-      const ukPoints = heatmapPoints.filter((p) => p.lat > 49 && p.lat < 57 && p.lon > -6 && p.lon < 2);
-      (ukPoints.length > 0 ? ukPoints : heatmapPoints.slice(0, 20)).forEach((p) => coords.push([p.lat, p.lon]));
+      heatmapPoints.forEach((p) => coords.push([p.lat, p.lon]));
     }
     if (coords.length < 2) return null;
     return L.latLngBounds(coords);
@@ -380,10 +398,10 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
     <MapContainer center={center} zoom={zoom} className="w-full h-full" ref={mapRef} zoomControl={true}>
       <LayersControl key={`${theme}-${isNarrow ? 'n' : 'w'}`} position={isNarrow ? 'bottomleft' : 'topright'}>
         <LayersControl.BaseLayer checked={theme === 'dark'} name="Dark">
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution='&copy; OSM &copy; CARTO' />
+          <TileLayer url={darkUrl} attribution={mapAttr} />
         </LayersControl.BaseLayer>
         <LayersControl.BaseLayer checked={theme === 'light'} name="Light">
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution='&copy; OSM &copy; CARTO' />
+          <TileLayer url={lightUrl} attribution={mapAttr} />
         </LayersControl.BaseLayer>
         <LayersControl.BaseLayer name="Street">
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OSM' />
@@ -460,7 +478,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
                   {c.from_label || 'Previous event'} &rarr; {c.to_label || 'Next event'}
                 </div>
                 <div>{formatTime(c.from_time)} &rarr; {formatTime(c.to_time)}</div>
-                <div>{formatDistance(c.distance_meters)}</div>
+                <div>{formatDistance(c.distance_meters, unit)}</div>
                 <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 6, color: 'var(--text-muted)', fontSize: '0.8em' }}>
                   {isStraight
                     ? <><strong>Straight line</strong> â€” Gap under 300m, direct connection between GPS coordinates.</>
@@ -502,7 +520,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView({
                   <div style={{ marginBottom: 4 }}>{a.from_place || 'Start'} &rarr; {a.to_place || 'End'}</div>
                 )}
                 <div>{formatTime(a.start)} &rarr; {formatTime(a.end)}</div>
-                <div style={{ fontWeight: 600 }}>{formatDistance(a.distance_meters)} &middot; {formatDuration(a.duration_minutes)}</div>
+                <div style={{ fontWeight: 600 }}>{formatDistance(a.distance_meters, unit)} &middot; {formatDuration(a.duration_minutes)}</div>
                 {roadSummary && <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: '0.8em' }}>via {roadSummary}</div>}
                 <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 6, color: 'var(--text-muted)', fontSize: '0.8em' }}>
                   {a.is_rail
@@ -686,6 +704,7 @@ function JourneyLegend({
   const map = useMap();
   const legendRef = useRef<L.Control | null>(null);
   const { theme } = useTheme();
+  const { unit } = useUnits();
 
   useEffect(() => {
     const legend = new L.Control({ position: 'bottomright' });
@@ -717,7 +736,7 @@ function JourneyLegend({
         items.push({
           time: a.start,
           type: 'journey',
-          label: `${escapeHtml(mode)} - ${escapeHtml(formatDistance(a.distance_meters))}`,
+          label: `${escapeHtml(mode)} - ${escapeHtml(formatDistance(a.distance_meters, unit))}`,
           color,
           sub: escapeHtml(formatTime(a.start)),
         });
@@ -764,7 +783,7 @@ function JourneyLegend({
       legend.remove();
       legendRef.current = null;
     };
-  }, [map, activities, totalJourneys, visits, theme, compact]);
+  }, [map, activities, totalJourneys, visits, theme, compact, unit]);
 
   return null;
 }

@@ -2,9 +2,8 @@ import { config } from "dotenv";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
 import { sql } from "drizzle-orm";
+import { createHttpDb } from "./index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, "../../../.env") });
@@ -34,7 +33,7 @@ async function main() {
     .filter((f) => f.endsWith(".sql"))
     .sort();
 
-  const db = drizzle(neon(url));
+  const db = createHttpDb(url);
   for (const file of files) {
     // Only apply incremental migrations after init on existing DBs.
     // 0000 is idempotent (IF NOT EXISTS). 0001 adds tenant columns.

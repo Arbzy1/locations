@@ -76,4 +76,11 @@ describe("applySecurityHeaders", () => {
     expect(headers.get("Strict-Transport-Security")).toContain("max-age=");
     expect(headers.get("Cache-Control")).toBe("no-store, private");
   });
+
+  it("enforces CSP when requested", () => {
+    const headers = new Headers();
+    applySecurityHeaders(headers, { isProductionHttps: false, noStore: false, enforceCsp: true });
+    expect(headers.get("Content-Security-Policy")).toContain("frame-ancestors 'none'");
+    expect(headers.get("Content-Security-Policy-Report-Only")).toBeNull();
+  });
 });

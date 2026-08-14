@@ -29,7 +29,7 @@ export function sniffTimelineJson(buffer: ArrayBuffer): JsonSniffResult {
 
   let text: string;
   try {
-    text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    text = new TextDecoder("utf-8").decode(bytes);
   } catch {
     return { ok: false, error: "File is not valid UTF-8 text" };
   }

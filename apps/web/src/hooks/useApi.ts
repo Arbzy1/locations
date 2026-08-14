@@ -156,11 +156,16 @@ export function useDayData(date: string) {
   return { ...query, progress };
 }
 
-export function useHeatmap() {
+export function useHeatmap(opts?: { sources?: string[]; from?: string; to?: string }) {
   const tenantKey = useTenantKey();
+  const params = new URLSearchParams();
+  if (opts?.sources?.length) params.set('sources', opts.sources.join(','));
+  if (opts?.from) params.set('from', opts.from);
+  if (opts?.to) params.set('to', opts.to);
+  const qs = params.toString();
   return useQuery<HeatmapPoint[]>({
-    queryKey: ['heatmap', tenantKey],
-    queryFn: () => fetchJson('/api/heatmap'),
+    queryKey: ['heatmap', tenantKey, qs],
+    queryFn: () => fetchJson(`/api/heatmap${qs ? `?${qs}` : ''}`),
     staleTime: Infinity,
     enabled: tenantKey !== 'anon',
   });
@@ -247,6 +252,72 @@ export function useImportStatus(opts?: { poll?: boolean }) {
       if (opts?.poll || busy) return busy ? 1500 : false;
       return false;
     },
+  });
+}
+
+export function useSearch(q: string) {
+  const tenantKey = useTenantKey();
+  return useQuery<{
+    places: { cluster: string; lat: number; lon: number; date: string }[];
+    days: { date: string }[];
+  }>({
+    queryKey: ['search', tenantKey, q],
+    queryFn: () => fetchJson(`/api/search?q=${encodeURIComponent(q)}`),
+    enabled: tenantKey !== 'anon' && q.trim().length >= 2,
+    staleTime: 30_000,
+  });
+}
+
+export function useHomeWork() {
+  const tenantKey = useTenantKey();
+  return useQuery<{
+    home: { cluster: string; visits: number } | null;
+    work: { cluster: string; visits: number } | null;
+  }>({
+    queryKey: ['home-work', tenantKey],
+    queryFn: () => fetchJson('/api/analytics/home-work'),
+    staleTime: Infinity,
+    enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useYearInReview() {
+  const tenantKey = useTenantKey();
+  return useQuery<{
+    year: number;
+    distance_miles: number;
+    visits: number;
+    activities: number;
+    days_tracked: number;
+    top_places: [string, number][];
+    modes: Record<string, number>;
+  } | null>({
+    queryKey: ['year-in-review', tenantKey],
+    queryFn: () => fetchJson('/api/analytics/year-in-review'),
+    staleTime: Infinity,
+    enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useAreas() {
+  const tenantKey = useTenantKey();
+  return useQuery<{ cluster: string; visits: number }[]>({
+    queryKey: ['areas', tenantKey],
+    queryFn: () => fetchJson('/api/analytics/areas'),
+    staleTime: Infinity,
+    enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useMultiDayTrips() {
+  const tenantKey = useTenantKey();
+  return useQuery<
+    { start: string; end: string; dates: string[]; total_miles: number; clusters: string[] }[]
+  >({
+    queryKey: ['multi-day', tenantKey],
+    queryFn: () => fetchJson('/api/analytics/multi-day'),
+    staleTime: Infinity,
+    enabled: tenantKey !== 'anon',
   });
 }
 

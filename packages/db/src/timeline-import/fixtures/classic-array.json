@@ -1,0 +1,22 @@
+[
+  {
+    "startTime": "2024-06-01T10:00:00Z",
+    "endTime": "2024-06-01T11:00:00Z",
+    "visit": {
+      "topCandidate": {
+        "placeLocation": "geo:40.7128,-74.0060",
+        "semanticType": "Home"
+      }
+    }
+  },
+  {
+    "startTime": "2024-06-01T11:00:00Z",
+    "endTime": "2024-06-01T12:00:00Z",
+    "activity": {
+      "start": "geo:40.7128,-74.0060",
+      "end": "geo:40.7580,-73.9855",
+      "distanceMeters": 5000,
+      "topCandidate": { "type": "walking" }
+    }
+  }
+]

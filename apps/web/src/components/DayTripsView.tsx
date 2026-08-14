@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from 'react';
 import { useDayTrips } from '../hooks/useApi';
-import { formatDate, formatMiles } from '../utils/format';
+import { formatDate, formatMilesOrKm } from '../utils/format';
+import { useUnits } from '../lib/units';
 import { MODE_COLORS, MODE_LABELS } from '../types';
 import type { DayTrip } from '../types';
 import {
@@ -293,6 +294,7 @@ function TripCard({ trip, modeFilter, onSelect }: {
   modeFilter: Set<string>;
   onSelect: () => void;
 }) {
+  const { unit } = useUnits();
   const highlightedModes = modeFilter.size > 0
     ? trip.modes.filter((m) => modeFilter.has(m))
     : [];
@@ -309,7 +311,7 @@ function TripCard({ trip, modeFilter, onSelect }: {
           {formatDate(trip.date)}
         </span>
         <span className="text-accent text-sm font-mono font-semibold">
-          {formatMiles(trip.total_miles)}
+          {formatMilesOrKm(trip.total_miles, unit)}
         </span>
       </div>
 
@@ -327,7 +329,7 @@ function TripCard({ trip, modeFilter, onSelect }: {
           <Route size={11} />
           {trip.journeys} legs
         </span>
-        <span>Range: {formatMiles(trip.max_range)}</span>
+        <span>Range: {formatMilesOrKm(trip.max_range, unit)}</span>
       </div>
 
       {/* Mode badges: highlighted if matching filter */}

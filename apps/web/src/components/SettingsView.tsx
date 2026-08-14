@@ -7,6 +7,8 @@ import {
   RefreshCw,
   Settings,
   User,
+  CreditCard,
+  Ruler,
 } from 'lucide-react';
 import type { DataSourceInfo } from '../types';
 import {
@@ -15,25 +17,43 @@ import {
   useSources,
 } from '../hooks/useApi';
 import { useSession } from '../lib/auth';
+import { useUnits } from '../lib/units';
+import type { DistanceUnit } from '../utils/format';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Switch } from './ui/switch';
+import { Dialog, DialogContent } from './ui/dialog';
 
 export default function SettingsView() {
   const { data: session } = useSession();
   const { data: sources, isLoading } = useSources();
+  const { unit, timezone, entitlements } = useUnits();
   const [poll, setPoll] = useState(false);
   const { data: importStatus } = useImportStatus({ poll });
   const invalidate = useInvalidateLocationQueries();
 
   const [label, setLabel] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [merge, setMerge] = useState(false);
   const [reuploadSourceId, setReuploadSourceId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(unit);
+  const [tz, setTz] = useState(timezone ?? '');
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteSource, setDeleteSource] = useState<DataSourceInfo | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const latest = importStatus?.latestJob;
   const user = session?.user as { email?: string; name?: string } | undefined;
+
+  useEffect(() => {
+    setDistanceUnit(unit);
+    setTz(timezone ?? '');
+  }, [unit, timezone]);
 
   useEffect(() => {
     if (latest?.status === 'ready') {
@@ -55,13 +75,14 @@ export default function SettingsView() {
     e.preventDefault();
     setError('');
     if (!file) {
-      setError('Choose a Timeline JSON file');
+      setError('Choose a Timeline JSON or Takeout zip');
       return;
     }
     setBusy(true);
     try {
       const form = new FormData();
       form.append('file', file);
+      if (merge) form.append('merge', '1');
       if (reuploadSourceId) {
         form.append('sourceId', reuploadSourceId);
       } else if (label.trim()) {
@@ -110,13 +131,6 @@ export default function SettingsView() {
   };
 
   const onDelete = async (source: DataSourceInfo) => {
-    if (
-      !confirm(
-        `Remove “${source.label}” and all visits/activities from that Google account? Other sources stay.`,
-      )
-    ) {
-      return;
-    }
     setError('');
     const res = await fetch(`/api/sources/${source.id}`, {
       method: 'DELETE',
@@ -127,7 +141,66 @@ export default function SettingsView() {
       setError(body.error || 'Delete failed');
       return;
     }
+    setDeleteSource(null);
     invalidate();
+  };
+
+  const savePrefs = async () => {
+    setError('');
+    const res = await fetch('/api/account/settings', {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ distanceUnit, timezone: tz || null }),
+    });
+    if (!res.ok) {
+      setError('Could not save preferences');
+      return;
+    }
+    invalidate();
+  };
+
+  const startCheckout = async (interval: 'monthly' | 'yearly') => {
+    setError('');
+    const res = await fetch('/api/billing/checkout', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interval }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (!res.ok || !body.url) {
+      setError(body.error || 'Billing is not available');
+      return;
+    }
+    window.location.assign(body.url);
+  };
+
+  const openPortal = async () => {
+    setError('');
+    const res = await fetch('/api/billing/portal', {
+      method: 'POST',
+      credentials: 'include',
+    });
+    const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (!res.ok || !body.url) {
+      setError(body.error || 'No billing account');
+      return;
+    }
+    window.location.assign(body.url);
+  };
+
+  const deleteAccount = async () => {
+    setError('');
+    const res = await fetch('/api/account/delete', {
+      method: 'POST',
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      setError('Could not delete account');
+      return;
+    }
+    window.location.assign('/');
   };
 
   const beginReupload = (source: DataSourceInfo) => {
@@ -148,7 +221,7 @@ export default function SettingsView() {
           </div>
           <div>
             <h1 className="font-display text-xl font-semibold text-text">Settings</h1>
-            <p className="text-sm text-text-muted">Account and Timeline data</p>
+            <p className="text-sm text-text-muted">Account, billing, and Timeline data</p>
           </div>
         </div>
 
@@ -159,6 +232,72 @@ export default function SettingsView() {
           </div>
           <div className="text-sm text-text">{user?.name || 'User'}</div>
           <div className="mt-0.5 text-sm text-text-muted">{user?.email}</div>
+          <Button
+            type="button"
+            variant="destructive"
+            className="mt-4"
+            title="Delete account and all Timeline data"
+            onClick={() => setDeleteOpen(true)}
+          >
+            Delete account
+          </Button>
+        </section>
+
+        <section className="mb-8 rounded-xl border border-border bg-surface p-5">
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+            <CreditCard size={12} />
+            Billing
+          </div>
+          <p className="mb-3 text-sm text-text-muted">
+            Status: {entitlements?.status ?? 'none'}
+            {entitlements?.entitled ? ' (entitled)' : ''}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" title="Subscribe monthly" onClick={() => void startCheckout('monthly')}>
+              Subscribe monthly
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              title="Subscribe yearly"
+              onClick={() => void startCheckout('yearly')}
+            >
+              Subscribe yearly
+            </Button>
+            <Button type="button" variant="outline" title="Open Stripe customer portal" onClick={() => void openPortal()}>
+              Manage billing
+            </Button>
+          </div>
+        </section>
+
+        <section className="mb-8 rounded-xl border border-border bg-surface p-5">
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+            <Ruler size={12} />
+            Display
+          </div>
+          <Label htmlFor="unit">Distance unit</Label>
+          <select
+            id="unit"
+            title="Miles or kilometres"
+            value={distanceUnit}
+            onChange={(e) => setDistanceUnit(e.target.value as DistanceUnit)}
+            className="mb-3 h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
+          >
+            <option value="mi">Miles</option>
+            <option value="km">Kilometres</option>
+          </select>
+          <Label htmlFor="tz">Timezone (IANA)</Label>
+          <Input
+            id="tz"
+            title="IANA timezone such as Europe/London"
+            value={tz}
+            onChange={(e) => setTz(e.target.value)}
+            placeholder="Europe/London"
+            className="mb-3"
+          />
+          <Button type="button" title="Save display preferences" onClick={() => void savePrefs()}>
+            Save preferences
+          </Button>
         </section>
 
         <section className="rounded-xl border border-border bg-surface p-5">
@@ -167,8 +306,8 @@ export default function SettingsView() {
             Timeline data
           </div>
           <p className="mb-5 text-sm leading-relaxed text-text-muted">
-            Upload a Google Timeline JSON export (visit/activity array, Timeline Edits, or
-            semanticSegments). Replacing a source updates only that Google account’s data.
+            Upload Google Timeline JSON or a Takeout zip (Timeline.json / Records.json). In Takeout,
+            select Location History only, then download. Merge keeps existing rows for this source.
           </p>
 
           {error && (
@@ -180,7 +319,12 @@ export default function SettingsView() {
           {(busy || latest?.status === 'pending' || latest?.status === 'processing') && (
             <div className="mb-4 flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
               <Loader2 size={16} className="animate-spin" />
-              Importing… {latest?.status === 'processing' ? 'parsing file' : 'queued'}
+              Importing…{' '}
+              {latest?.parsedCount
+                ? `${latest.parsedCount} records parsed`
+                : latest?.status === 'processing'
+                  ? 'parsing file'
+                  : 'queued'}
             </div>
           )}
 
@@ -200,47 +344,57 @@ export default function SettingsView() {
             </div>
             {!reuploadSourceId && (
               <div>
-                <label className="mb-1 block text-xs text-text-muted">
-                  Label (Google account name)
-                </label>
-                <input
-                  type="text"
+                <Label htmlFor="src-label">Label (Google account name)</Label>
+                <Input
+                  id="src-label"
                   value={label}
                   onChange={(e) => setLabel(e.target.value)}
                   placeholder="e.g. personal@gmail.com"
                   title="Label for this Google account / Timeline source"
-                  className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-text-muted focus:border-accent focus:outline-none"
                 />
               </div>
             )}
             <div>
-              <label className="mb-1 block text-xs text-text-muted">Timeline JSON file</label>
+              <Label htmlFor="timeline-file">Timeline JSON or zip</Label>
               <input
+                id="timeline-file"
                 ref={fileRef}
                 type="file"
-                accept=".json,application/json"
-                title="Choose a Google Timeline JSON export to upload"
+                accept=".json,.zip,application/json,application/zip"
+                title="Choose a Google Timeline JSON or Takeout zip"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 className="w-full text-sm text-text-muted file:mr-3 file:rounded-md file:border-0 file:bg-accent/20 file:px-3 file:py-1.5 file:text-sm file:text-accent"
               />
             </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                id="merge"
+                title="Merge into existing source instead of replacing"
+                checked={merge}
+                onCheckedChange={setMerge}
+              />
+              <Label htmlFor="merge" className="mb-0">
+                Merge (keep existing rows)
+              </Label>
+            </div>
             <div className="flex gap-2 pt-1">
-              <button
+              <Button
                 type="submit"
                 disabled={busy || !file}
                 title={
                   reuploadSourceId
-                    ? 'Replace this source with the selected Timeline JSON'
-                    : 'Upload Timeline JSON as a new or updated source'
+                    ? 'Replace this source with the selected file'
+                    : 'Upload Timeline JSON or zip'
                 }
-                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-on-accent transition-colors duration-ui-hover ease-ui hover:brightness-110 disabled:opacity-50"
+                className="flex-1"
               >
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                 {reuploadSourceId ? 'Replace Timeline data' : 'Upload Timeline data'}
-              </button>
+              </Button>
               {reuploadSourceId && (
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   title="Cancel re-upload and keep existing source data"
                   onClick={() => {
                     setReuploadSourceId(null);
@@ -248,10 +402,9 @@ export default function SettingsView() {
                     setFile(null);
                     if (fileRef.current) fileRef.current.value = '';
                   }}
-                  className="rounded-md border border-border px-4 py-2.5 text-sm text-text-muted transition-colors duration-ui-hover ease-ui hover:text-text"
                 >
                   Cancel
-                </button>
+                </Button>
               )}
             </div>
           </form>
@@ -268,16 +421,13 @@ export default function SettingsView() {
 
           {!isLoading && (!sources || sources.length === 0) && (
             <p className="py-4 text-center text-sm text-text-muted">
-              No Timeline data yet. Upload a JSON export above.
+              No Timeline data yet. Upload a JSON or zip export above.
             </p>
           )}
 
           <ul className="space-y-2">
             {sources?.map((source) => (
-              <li
-                key={source.id}
-                className="rounded-lg border border-border bg-bg/40 px-4 py-3"
-              >
+              <li key={source.id} className="rounded-lg border border-border bg-bg/40 px-4 py-3">
                 {renameId === source.id ? (
                   <form
                     className="flex gap-2"
@@ -286,20 +436,15 @@ export default function SettingsView() {
                       void onRename(source);
                     }}
                   >
-                    <input
+                    <Input
                       autoFocus
                       value={renameValue}
                       onChange={(e) => setRenameValue(e.target.value)}
                       title="New label for this Timeline source"
-                      className="flex-1 rounded-md border border-border bg-bg px-2 py-1.5 text-sm"
                     />
-                    <button
-                      type="submit"
-                      title="Save the new source label"
-                      className="text-sm text-accent"
-                    >
+                    <Button type="submit" title="Save the new source label">
                       Save
-                    </button>
+                    </Button>
                   </form>
                 ) : (
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -310,36 +455,39 @@ export default function SettingsView() {
                       </div>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-1">
-                      <button
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
                         title="Re-upload Timeline JSON to replace this source"
                         onClick={() => beginReupload(source)}
-                        className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-medium text-accent transition-colors duration-ui-hover ease-ui hover:bg-accent/20"
                       >
                         <RefreshCw size={12} />
                         Re-upload
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="icon"
                         title="Rename this Timeline source"
                         aria-label="Rename"
                         onClick={() => {
                           setRenameId(source.id);
                           setRenameValue(source.label);
                         }}
-                        className="flex h-11 w-11 items-center justify-center rounded text-text-muted transition-colors duration-ui-fast ease-ui hover:bg-bg hover:text-text"
                       >
                         <Pencil size={14} />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="icon"
                         title="Delete this Timeline source and its data"
                         aria-label="Delete"
-                        onClick={() => void onDelete(source)}
-                        className="flex h-11 w-11 items-center justify-center rounded text-text-muted transition-colors duration-ui-fast ease-ui hover:bg-bg hover:text-red-400"
+                        onClick={() => setDeleteSource(source)}
                       >
                         <Trash2 size={14} />
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -348,6 +496,45 @@ export default function SettingsView() {
           </ul>
         </section>
       </div>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent title="Delete account">
+          <h2 className="text-lg font-semibold">Delete account?</h2>
+          <p className="mt-2 text-sm text-text-muted">
+            This wipes Timeline data, uploads, and billing. This cannot be undone.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button type="button" variant="outline" title="Cancel" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" title="Confirm delete account" onClick={() => void deleteAccount()}>
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteSource)} onOpenChange={(o) => !o && setDeleteSource(null)}>
+        <DialogContent title="Delete source">
+          <h2 className="text-lg font-semibold">Remove source?</h2>
+          <p className="mt-2 text-sm text-text-muted">
+            Remove “{deleteSource?.label}” and all visits from that Google account? Other sources stay.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button type="button" variant="outline" title="Cancel" onClick={() => setDeleteSource(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              title="Confirm delete source"
+              onClick={() => deleteSource && void onDelete(deleteSource)}
+            >
+              Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

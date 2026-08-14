@@ -3,14 +3,16 @@ export type SecurityHeaderOpts = {
   isProductionHttps: boolean;
   /** Authenticated API responses must not be shared-cached. */
   noStore: boolean;
+  /** Enforce CSP instead of Report-Only. */
+  enforceCsp?: boolean;
 };
 
-const CSP_REPORT_ONLY = [
+const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://server.arcgisonline.com",
-  "connect-src 'self'",
+  "img-src 'self' data: blob: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://server.arcgisonline.com https://*.maptiler.com https://*.mapbox.com",
+  "connect-src 'self' https://*.maptiler.com https://*.mapbox.com https://router.project-osrm.org https://nominatim.openstreetmap.org",
   "font-src 'self' data:",
   "worker-src 'self' blob:",
   "object-src 'none'",
@@ -29,7 +31,11 @@ export function applySecurityHeaders(headers: Headers, opts: SecurityHeaderOpts)
   );
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
   headers.set("X-Frame-Options", "DENY");
-  headers.set("Content-Security-Policy-Report-Only", CSP_REPORT_ONLY);
+  if (opts.enforceCsp) {
+    headers.set("Content-Security-Policy", CSP);
+  } else {
+    headers.set("Content-Security-Policy-Report-Only", CSP);
+  }
 
   if (opts.isProductionHttps) {
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
