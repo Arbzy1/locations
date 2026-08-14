@@ -66,11 +66,14 @@ npm run deploy:prod
 
 ## What it does
 
-- **Hotspots** - visit density heatmap (date and source filters)
-- **Day View** - map + timeline with snapped journeys
-- **Day Trips** - multi-cluster / long-range days, plus multi-day grouping
-- **Insights** - distance, corridors, home/work guess, year in review
-- **Settings** - zip/JSON import, merge, billing, units, delete account
+Full list: [docs/product/features.md](docs/product/features.md).
+
+- **Hotspots** - visit density heatmap, ranked places, date and source filters
+- **Day View** - one day on a map with a timeline (road geometry when cached)
+- **Day Trips** - days with more range or more places; filter and open in Day View
+- **Insights** - totals, monthly/yearly charts, corridors, home/work guess
+- **Settings** - Timeline JSON or zip import, sources, billing, units, delete account
+- **Account** - signup, login, forgot password, demo, dark/light theme
 
 ## Stack
 

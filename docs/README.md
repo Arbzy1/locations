@@ -5,6 +5,7 @@ Index of product, architecture, security, legal, and engineering docs. Agent con
 ## Product
 
 - [Overview](product/overview.md)
+- [Features](product/features.md)
 - [Onboarding](product/onboarding.md)
 - [Takeout import](product/takeout-import.md)
 

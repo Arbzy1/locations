@@ -8,11 +8,13 @@ People who exported Timeline from Google Takeout (or still can) and want a hoste
 
 ## What ships in the app
 
-- **Hotspots:** visit density heatmap and named areas
+Full list: [Features](features.md).
+
+- **Hotspots:** visit density heatmap and named places
 - **Day View:** calendar, map, and timeline for one day
-- **Day Trips:** long-range / multi-cluster days
-- **Insights:** distance, modes, corridors, yearly/monthly stats
-- **Settings:** sources (one Google account export each), account, billing, units
+- **Day Trips:** days with more range or more places
+- **Insights:** totals, charts, corridors, yearly stats
+- **Settings:** Timeline sources, account, billing, units
 
 ## What we store
 
