@@ -4,59 +4,43 @@ import { defineConfig } from "vitest/config";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 
+const alias = {
+  "@locations/db": path.resolve(root, "packages/db/src/index.ts"),
+  "@locations/api": path.resolve(root, "apps/api/src"),
+  "@locations/web": path.resolve(root, "apps/web/src"),
+  "@tests": path.resolve(root, "tests"),
+};
+
 export default defineConfig({
-  resolve: {
-    alias: {
-      "@locations/db": path.resolve(root, "packages/db/src/index.ts"),
-    },
-  },
+  resolve: { alias },
   test: {
     environment: "node",
-    exclude: ["**/node_modules/**", "**/e2e/**", "**/legacy/**", "**/dist/**"],
+    exclude: ["**/node_modules/**", "**/legacy/**", "**/dist/**"],
     projects: [
       {
-        resolve: {
-          alias: {
-            "@locations/db": path.resolve(root, "packages/db/src/index.ts"),
-          },
-        },
+        resolve: { alias },
         test: {
           name: "unit",
           environment: "node",
-          include: ["**/*.{test,spec}.ts"],
-          exclude: [
-            "**/node_modules/**",
-            "**/e2e/**",
-            "**/legacy/**",
-            "**/dist/**",
-            "**/*.integration.test.ts",
-            "**/*.rls.test.ts",
-          ],
-        },
-      },
-      {
-        resolve: {
-          alias: {
-            "@locations/db": path.resolve(root, "packages/db/src/index.ts"),
-          },
-        },
-        test: {
-          name: "integration",
-          environment: "node",
-          include: ["**/*.integration.test.ts"],
+          include: ["tests/unit/**/*.test.ts"],
           exclude: ["**/node_modules/**", "**/dist/**"],
         },
       },
       {
-        resolve: {
-          alias: {
-            "@locations/db": path.resolve(root, "packages/db/src/index.ts"),
-          },
+        resolve: { alias },
+        test: {
+          name: "integration",
+          environment: "node",
+          include: ["tests/integration/**/*.test.ts"],
+          exclude: ["**/node_modules/**", "**/dist/**"],
         },
+      },
+      {
+        resolve: { alias },
         test: {
           name: "rls",
           environment: "node",
-          include: ["**/*.rls.test.ts", "**/rls.test.ts", "**/*rls*.integration.test.ts"],
+          include: ["tests/rls/**/*.test.ts"],
           exclude: ["**/node_modules/**", "**/dist/**"],
         },
       },

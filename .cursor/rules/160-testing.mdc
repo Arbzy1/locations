@@ -7,10 +7,22 @@ alwaysApply: true
 
 # testing
 
+All tests live under [`tests/`](tests/README.md). Do not colocate `*.test.ts` / `*.spec.ts` next to source.
+
+Placement (directory is the classifier):
+
+1. Playwright against a running app -> `tests/e2e/*.spec.ts`
+2. Live Postgres FORCE RLS -> `tests/rls/{isolation,with-check,empty-guc}/`
+3. `app.request()` or webhook HTTP (mocked Stripe/R2/auth) -> `tests/integration/{layer}/{domain}/`
+4. Pure helpers / mocked Drizzle, no HTTP app -> `tests/unit/{api,db,web,scripts}/{domain}/`
+
+Invent a new leaf under the matching kind/layer. Never next to source. Shared harness: `tests/helpers/` (no test files). Synthetic Timeline JSON: `tests/fixtures/timeline/` (never real Takeout; never name a file `Records.json`).
+
+- `npm run test:placement` fails if a test file is outside this tree or in the wrong kind folder. Run it before adding tests.
 - `npm run test:unit` is the default (no network, no DB).
 - `test:integration` covers `app.request()` routes (401, owner 200, cross-tenant 404, demo 403).
 - `test:rls` needs `DATABASE_URL` and asserts FORCE RLS even without Drizzle filters. Skip locally if unset; CI must run it.
-- Every new API route needs positive + unauthenticated + cross-tenant + demo-denied tests.
-- Schema changes that add tenant tables need an RLS leak test.
-- Stripe webhook tests cover invalid signature, replay, and entitlement grant/revoke.
-- Never commit real Takeout JSON. Use tiny synthetic fixtures under `packages/db/src/timeline-import/fixtures/`.
+- Every new API route needs positive + unauthenticated + cross-tenant + demo-denied tests under `tests/integration/api/{domain}/`.
+- Schema changes that add tenant tables need an RLS leak test under `tests/rls/isolation/`.
+- Stripe webhook tests cover invalid signature, replay, and entitlement grant/revoke (`tests/integration/api/billing/`).
+- `vi.mock` must use Vitest aliases (`@locations/api/auth`), not `./auth` relative to the test file.

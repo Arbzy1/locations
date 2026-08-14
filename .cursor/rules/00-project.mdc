@@ -314,13 +314,25 @@ Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_s
 
 ### Testing
 
+All tests live under [`tests/`](tests/README.md). Do not colocate `*.test.ts` / `*.spec.ts` next to source.
+
+Placement (directory is the classifier):
+
+1. Playwright against a running app -> `tests/e2e/*.spec.ts`
+2. Live Postgres FORCE RLS -> `tests/rls/{isolation,with-check,empty-guc}/`
+3. `app.request()` or webhook HTTP (mocked Stripe/R2/auth) -> `tests/integration/{layer}/{domain}/`
+4. Pure helpers / mocked Drizzle, no HTTP app -> `tests/unit/{api,db,web,scripts}/{domain}/`
+
+Invent a new leaf under the matching kind/layer. Never next to source. Shared harness: `tests/helpers/` (no test files). Synthetic Timeline JSON: `tests/fixtures/timeline/` (never real Takeout; never name a file `Records.json`).
+
+- `npm run test:placement` fails if a test file is outside this tree or in the wrong kind folder. Run it before adding tests.
 - `npm run test:unit` is the default (no network, no DB).
 - `test:integration` covers `app.request()` routes (401, owner 200, cross-tenant 404, demo 403).
 - `test:rls` needs `DATABASE_URL` and asserts FORCE RLS even without Drizzle filters. Skip locally if unset; CI must run it.
-- Every new API route needs positive + unauthenticated + cross-tenant + demo-denied tests.
-- Schema changes that add tenant tables need an RLS leak test.
-- Stripe webhook tests cover invalid signature, replay, and entitlement grant/revoke.
-- Never commit real Takeout JSON. Use tiny synthetic fixtures under `packages/db/src/timeline-import/fixtures/`.
+- Every new API route needs positive + unauthenticated + cross-tenant + demo-denied tests under `tests/integration/api/{domain}/`.
+- Schema changes that add tenant tables need an RLS leak test under `tests/rls/isolation/`.
+- Stripe webhook tests cover invalid signature, replay, and entitlement grant/revoke (`tests/integration/api/billing/`).
+- `vi.mock` must use Vitest aliases (`@locations/api/auth`), not `./auth` relative to the test file.
 
 ### Documentation
 
@@ -361,7 +373,7 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 | `setup:project` | Interactive first-time setup |
 | `typecheck:all` / `lint:web` | Quality gates |
 | `rules:sync` | Regenerate tool-specific rule files from `AGENTS.md` |
-| `test:unit` / `test:integration` / `test:rls` / `test:watch` / `test:e2e` / `test:all` / `test:report` | Vitest / Playwright / markdown report |
+| `test:placement` / `test:unit` / `test:integration` / `test:rls` / `test:watch` / `test:e2e` / `test:all` / `test:report` | Placement lint, Vitest, Playwright, markdown report |
 | `loc` / `loc:report` | Lines-of-code summary / write `reports/loc.md` |
 | `kill:servers` | Free ports 5173 and 8787 |
 | `deps:audit` | `npm audit` (high/critical) |
@@ -383,12 +395,13 @@ Non-negotiables:
 
 ## Testing
 
-- **Unit:** `npm run test:unit` (Vitest; no external services).
-- **Integration:** `npm run test:integration` (`app.request()`, mocked Stripe/R2).
-- **RLS:** `npm run test:rls` (real Postgres). Isolation is app-level **and** FORCE RLS.
-- **E2E:** Playwright (`npm run test:e2e`) against `PLAYWRIGHT_BASE_URL` (default `http://127.0.0.1:8787`).
+- **Home:** [`tests/`](tests/README.md) is the only legal location. `npm run test:placement` enforces it.
+- **Unit:** `npm run test:unit` (`tests/unit/**/*.test.ts`; no external services).
+- **Integration:** `npm run test:integration` (`tests/integration/**/*.test.ts`; `app.request()`, mocked Stripe/R2).
+- **RLS:** `npm run test:rls` (`tests/rls/**/*.test.ts`; real Postgres). Isolation is app-level **and** FORCE RLS.
+- **E2E:** Playwright (`npm run test:e2e`) against `PLAYWRIGHT_BASE_URL` (default `http://127.0.0.1:8787`); files in `tests/e2e/`.
 - Prioritize auth/tenant boundaries, billing webhooks, imports, and data-mutating routes.
-- CI runs unit, integration, RLS, e2e, and `deps:audit`.
+- CI runs placement, unit, integration, RLS, e2e, and `deps:audit`.
 
 ## Things not to do
 
@@ -404,4 +417,5 @@ Non-negotiables:
 - Do not reintroduce desktop-only side-by-side map layouts without a `<lg` mobile path (sheet/drawer).
 - Do not gate essential UI on hover only; touch must reach the same content.
 - Do not ship interactive chrome without hover/active/release Motion springs.
+- Do not colocate `*.test.ts` / `*.spec.ts` next to source; do not put Playwright under `tests/unit/` or Vitest under `tests/e2e/`. See [`tests/README.md`](tests/README.md).
 - Do not put user-edited place names in global `place_cache`.

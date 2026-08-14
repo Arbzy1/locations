@@ -98,6 +98,7 @@ Full list: [docs/product/features.md](docs/product/features.md).
 | `npm run db:migrate:staging` / `db:migrate:prod` | Apply schema to staging / production |
 | `npm run db:migrate:all` | Migrate local, staging, then production |
 | `npm run db:import` | CLI JSON import |
+| `npm run test:placement` | Fail if tests live outside `tests/` |
 | `npm run test:unit` | Vitest unit project |
 | `npm run test:integration` | Vitest integration project |
 | `npm run test:rls` | RLS leak tests (skips without `DATABASE_URL`) |
@@ -107,6 +108,7 @@ Full list: [docs/product/features.md](docs/product/features.md).
 ## Testing
 
 ```bash
+npm run test:placement
 npm run test:unit
 npm run test:integration
 npm run test:rls

@@ -129,6 +129,7 @@ function areaFor(relPath) {
   if (relPath.startsWith("apps/api/")) return "apps/api";
   if (relPath.startsWith("packages/db/")) return "packages/db";
   if (relPath.startsWith("scripts/")) return "scripts";
+  if (relPath.startsWith("tests/")) return "tests";
   if (relPath.startsWith("docs/")) return "docs";
   return "other";
 }
