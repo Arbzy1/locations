@@ -1,6 +1,7 @@
-# Forkers: change `name`, BETTER_AUTH_URL, and the custom domain route below
-# so you deploy YOUR worker — not locations.aden.website.
-name = "locations"
+# Top-level config is for `wrangler dev` only. Name is locations-dev so a
+# bare `wrangler deploy` cannot overwrite the production Worker (`locations`).
+# Deploy with: npm run deploy:staging | npm run deploy:prod
+name = "locations-dev"
 main = "apps/api/src/index.ts"
 compatibility_date = "2025-03-01"
 compatibility_flags = ["nodejs_compat"]
@@ -14,39 +15,81 @@ binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
 
+[observability]
+enabled = true
+
+[secrets]
+required = ["DATABASE_URL", "BETTER_AUTH_SECRET"]
+
 [vars]
-BETTER_AUTH_URL = "https://locations.aden.website"
+BETTER_AUTH_URL = "http://localhost:8787"
 DISABLE_SIGNUP = "false"
 CSP_ENFORCE = "false"
-# MAP_TILE_DARK_URL = "https://..."
-# MAP_TILE_LIGHT_URL = "https://..."
-# MAP_TILE_ATTR = "&copy; OSM &copy; your tile vendor"
-# OSRM_BASE = "https://your-osrm.example"
-# GEOCODE_BASE = "https://your-geocoder.example"
 
-# Secrets (set via wrangler secret put):
-#   DATABASE_URL
-#   BETTER_AUTH_SECRET
-#   RESEND_API_KEY
-#   STRIPE_SECRET_KEY
-#   STRIPE_WEBHOOK_SECRET
-#   DEMO_EMAIL
-#   DEMO_PASSWORD
-
-# Optional queue (create with: wrangler queues create locations-imports)
-# [[queues.producers]]
-# binding = "IMPORT_QUEUE"
-# queue = "locations-imports"
-# [[queues.consumers]]
-# queue = "locations-imports"
-# max_batch_size = 1
-
+# Local / preview R2. Staging and production override this binding.
 [[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "locations-uploads-preview"
+preview_bucket_name = "locations-uploads-preview"
+
+# ----- staging -----
+[env.staging]
+name = "locations-staging"
+workers_dev = true
+preview_urls = true
+
+[env.staging.secrets]
+required = ["DATABASE_URL", "BETTER_AUTH_SECRET"]
+
+[env.staging.vars]
+BETTER_AUTH_URL = "https://locations-staging.aden.website"
+DISABLE_SIGNUP = "false"
+CSP_ENFORCE = "false"
+
+[[env.staging.r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "locations-uploads-staging"
+preview_bucket_name = "locations-uploads-preview"
+
+[[env.staging.routes]]
+pattern = "locations-staging.aden.website"
+custom_domain = true
+
+[[env.staging.queues.producers]]
+binding = "IMPORT_QUEUE"
+queue = "locations-imports-staging"
+
+[[env.staging.queues.consumers]]
+queue = "locations-imports-staging"
+max_batch_size = 1
+
+# ----- production -----
+[env.production]
+name = "locations"
+workers_dev = true
+preview_urls = true
+
+[env.production.secrets]
+required = ["DATABASE_URL", "BETTER_AUTH_SECRET"]
+
+[env.production.vars]
+BETTER_AUTH_URL = "https://locations.aden.website"
+DISABLE_SIGNUP = "false"
+CSP_ENFORCE = "true"
+
+[[env.production.r2_buckets]]
 binding = "UPLOADS"
 bucket_name = "locations-uploads"
 preview_bucket_name = "locations-uploads-preview"
 
-# Owner demo domain — remove or replace when deploying your own fork
-[[routes]]
+[[env.production.routes]]
 pattern = "locations.aden.website"
 custom_domain = true
+
+[[env.production.queues.producers]]
+binding = "IMPORT_QUEUE"
+queue = "locations-imports"
+
+[[env.production.queues.consumers]]
+queue = "locations-imports"
+max_batch_size = 1

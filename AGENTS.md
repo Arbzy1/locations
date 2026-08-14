@@ -379,7 +379,7 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 | `dev:all` | Build web, then run web + API concurrently |
 | `dev:web` / `dev:api` | Single workspace dev server |
 | `build:all` / `build:web` | Production builds |
-| `deploy:prod` / `deploy:preview` | Wrangler deploy / version upload |
+| `deploy:staging` / `deploy:prod` / `deploy:preview` | Wrangler `--env staging` / `--env production` / staging version upload |
 | `db:*` | generate, migrate, import, import-demo, warm-routes |
 | `auth:create-user` / `auth:create-demo` | Invite / seed users |
 | `setup:project` | Interactive first-time setup |

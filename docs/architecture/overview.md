@@ -2,6 +2,8 @@
 
 ```
 Browser ──► Cloudflare Worker (static assets + /api/*)
+                │   staging: locations-staging
+                │   production: locations
                 │
                 ├── Better Auth session cookie
                 ├── Stripe webhooks (signed)

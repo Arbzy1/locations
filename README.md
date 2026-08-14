@@ -50,11 +50,18 @@ Set `DISABLE_SIGNUP=true` if you want invite-only again (`npm run auth:create-us
 
 ### Deploy
 
+See [docs/engineering/deploy.md](docs/engineering/deploy.md). Staging and production are named Wrangler environments. Never run a bare `wrangler deploy`.
+
 ```bash
 npx wrangler login
-npx wrangler secret put DATABASE_URL
-npx wrangler secret put BETTER_AUTH_SECRET
-# optional: RESEND_API_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, DEMO_EMAIL, DEMO_PASSWORD
+npx wrangler secret put DATABASE_URL --env staging
+npx wrangler secret put BETTER_AUTH_SECRET --env staging
+# optional: RESEND_API_KEY, STRIPE_*, DEMO_* with --env staging
+npm run deploy:staging
+# GET https://locations-staging.aden.website/api/health
+
+npx wrangler secret put DATABASE_URL --env production
+npx wrangler secret put BETTER_AUTH_SECRET --env production
 npm run deploy:prod
 ```
 
@@ -82,7 +89,8 @@ npm run deploy:prod
 | Script | Purpose |
 |--------|---------|
 | `npm run setup:project` | Interactive first-time Neon + import + admin user |
-| `npm run deploy:prod` | Build web + `wrangler deploy` |
+| `npm run deploy:staging` | Build web + `wrangler deploy --env staging` |
+| `npm run deploy:prod` | Build web + `wrangler deploy --env production` |
 | `npm run db:migrate` | Apply schema |
 | `npm run db:import` | CLI JSON import |
 | `npm run test:unit` | Vitest unit project |
