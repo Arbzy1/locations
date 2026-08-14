@@ -11,6 +11,7 @@ import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expandEnvNames, filesFor, takeEnvFlag } from "./env-paths.mjs";
+import { collapseDuplicateKeysInFile } from "./env-file.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -126,24 +127,37 @@ function mergeEnvContent(exampleContent, destContent) {
  * @param {Record<string, string | undefined>} values
  */
 function applyEnvValues(content, values) {
-  const lines = content.split("\n");
+  const nl = content.includes("\r\n") ? "\r\n" : "\n";
+  const lines = content.length ? content.split(/\r?\n/) : [];
+  if (lines.length && lines[lines.length - 1] === "") lines.pop();
   const seen = new Set();
 
-  const updated = lines.map((line) => {
+  const updated = [];
+  for (const line of lines) {
     const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-    if (!m) return line;
+    if (!m) {
+      updated.push(line);
+      continue;
+    }
     const [, key] = m;
-    const next = values[key];
-    if (next === undefined || next === "") return line;
+    if (seen.has(key)) continue;
     seen.add(key);
-    return `${key}=${quoteEnvValue(next)}`;
-  });
-
-  for (const [key, value] of Object.entries(values)) {
-    if (value && !seen.has(key)) updated.push(`${key}=${quoteEnvValue(value)}`);
+    const next = values[key];
+    if (next === undefined || next === "") {
+      updated.push(line);
+      continue;
+    }
+    updated.push(`${key}=${quoteEnvValue(next)}`);
   }
 
-  return `${updated.join("\n").trimEnd()}\n`;
+  for (const [key, value] of Object.entries(values)) {
+    if (value && !seen.has(key)) {
+      updated.push(`${key}=${quoteEnvValue(value)}`);
+      seen.add(key);
+    }
+  }
+
+  return updated.length ? `${updated.join(nl)}${nl}` : "";
 }
 
 /**
@@ -202,6 +216,7 @@ function syncEnv(name) {
 
   const destContent = existsSync(destPath) ? readFileSync(destPath, "utf8") : "";
   writeFileSync(destPath, applyEnvValues(destContent, values), "utf8");
+  collapseDuplicateKeysInFile(destPath);
   const synced = Object.entries(values)
     .filter(([, v]) => v)
     .map(([k]) => k);

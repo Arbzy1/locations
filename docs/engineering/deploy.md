@@ -30,20 +30,13 @@ Push to `main` deploys staging. Production is a manual promote (`npm run deploy:
 4. Put Worker secrets per env. Worker secrets stay on Cloudflare. Do not put `DATABASE_URL` in GitHub Actions.
 
    ```bash
-   npx wrangler secret put DATABASE_URL --env staging
-   npx wrangler secret put BETTER_AUTH_SECRET --env staging
-   npx wrangler secret put RESEND_API_KEY --env staging
-   npx wrangler secret put DEMO_EMAIL --env staging
-   npx wrangler secret put DEMO_PASSWORD --env staging
-   npx wrangler secret put STRIPE_SECRET_KEY --env staging
-   npx wrangler secret put STRIPE_WEBHOOK_SECRET --env staging
-   npx wrangler secret put STRIPE_PRICE_MONTHLY --env staging
-   npx wrangler secret put STRIPE_PRICE_YEARLY --env staging
-
-   npx wrangler secret put DATABASE_URL --env production
-   npx wrangler secret put BETTER_AUTH_SECRET --env production
-   # same list for production, using live Stripe keys
+   npm run secrets:generate -- --env staging
+   npm run cf:sync:staging
+   npm run secrets:generate -- --env production
+   npm run cf:sync:prod
    ```
+
+   Or `node scripts/cf-sync.mjs --dry-run` / `npm run cf:sync:dry` to list keys without uploading. Blank and example placeholders are skipped.
 
    Staging Stripe: test-mode keys. Add a Stripe test webhook to `https://locations-staging.aden.website/api/billing/webhook`. Production keeps live keys and the existing live webhook.
 
@@ -85,7 +78,7 @@ CI (`.github/workflows/ci.yml`) stays on pull requests and pushes: unit, integra
 | `deploy-staging.yml` | push to `main` | `deploy --env staging` |
 | `deploy-production.yml` | `workflow_dispatch` only | `deploy --env production` |
 
-Both workflows run `npm ci`, unit + integration tests, typecheck, `build:all`, then `cloudflare/wrangler-action`. They must **not** receive `DATABASE_URL` or other Worker secrets. Those are already on the Worker from `wrangler secret put`.
+Both workflows run `npm ci`, unit + integration tests, typecheck, `build:all`, then `cloudflare/wrangler-action`. They must **not** receive `DATABASE_URL` or other Worker secrets. Those are already on the Worker from `npm run cf:sync`.
 
 Required GitHub secrets:
 

@@ -122,8 +122,8 @@ Local:
 Deploy your own site (not aden.website):
   1. Edit wrangler.toml  → change env names, BETTER_AUTH_URL, and custom domains
   2. npx wrangler login
-  3. npx wrangler secret put DATABASE_URL --env staging
-  4. npx wrangler secret put BETTER_AUTH_SECRET --env staging
+  3. npm run secrets:generate -- --env staging
+  4. npm run cf:sync:staging
   5. npm run deploy:staging
      (production: same secrets with --env production, then npm run deploy:prod)
   See docs/engineering/deploy.md

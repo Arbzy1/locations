@@ -24,6 +24,7 @@ npm run env:merge                         # create/fill all three pairs from exa
 npm run env:merge -- --env staging        # staging only
 npm run env:sync -- --env staging         # copy secrets .env.staging → .dev.vars.staging
 npm run secrets:generate -- --env staging
+npm run cf:sync:staging                   # upload .env.staging secrets to the Worker
 npm run kill:servers                      # free Vite :5173 and Wrangler :8787
 npm run auth:promote-admin -- you@email.com --env staging
 npm run db:migrate:dev

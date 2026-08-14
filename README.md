@@ -54,14 +54,13 @@ See [docs/engineering/deploy.md](docs/engineering/deploy.md). Staging and produc
 
 ```bash
 npx wrangler login
-npx wrangler secret put DATABASE_URL --env staging
-npx wrangler secret put BETTER_AUTH_SECRET --env staging
-# optional: RESEND_API_KEY, STRIPE_*, DEMO_* with --env staging
+npm run secrets:generate -- --env staging
+npm run cf:sync:staging
 npm run deploy:staging
 # GET https://locations-staging.aden.website/api/health
 
-npx wrangler secret put DATABASE_URL --env production
-npx wrangler secret put BETTER_AUTH_SECRET --env production
+npm run secrets:generate -- --env production
+npm run cf:sync:prod
 npm run deploy:prod
 ```
 

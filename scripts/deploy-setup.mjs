@@ -21,16 +21,11 @@ are named Wrangler environments. Top-level config is wrangler dev only.
      npx wrangler queues create locations-imports-staging
      npx wrangler queues create locations-imports
 4. Secrets, staging first (test-mode Stripe), then production (live Stripe):
-     npx wrangler secret put DATABASE_URL --env staging
-     npx wrangler secret put BETTER_AUTH_SECRET --env staging
-     npx wrangler secret put RESEND_API_KEY --env staging
-     npx wrangler secret put DEMO_EMAIL --env staging
-     npx wrangler secret put DEMO_PASSWORD --env staging
-     npx wrangler secret put STRIPE_SECRET_KEY --env staging
-     npx wrangler secret put STRIPE_WEBHOOK_SECRET --env staging
-     npx wrangler secret put STRIPE_PRICE_MONTHLY --env staging
-     npx wrangler secret put STRIPE_PRICE_YEARLY --env staging
-     # repeat with --env production
+     npm run secrets:generate -- --env staging
+     npm run cf:sync:staging
+     npm run secrets:generate -- --env production
+     npm run cf:sync:prod
+     # or: npm run cf:sync   (staging + production from .env files)
    Staging Stripe webhook: https://locations-staging.aden.website/api/billing/webhook
 5. npx wrangler login (if needed)
 6. npm run deploy:staging
