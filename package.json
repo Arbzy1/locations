@@ -15,6 +15,7 @@
     "build:web": "npm run build -w @locations/web",
     "deploy:staging": "npm run build:all && wrangler deploy --env staging",
     "deploy:prod": "npm run build:all && wrangler deploy --env production",
+    "deploy:both": "npm run build:all && wrangler deploy --env staging && wrangler deploy --env production",
     "deploy:preview": "npm run build:all && wrangler versions upload --env staging",
     "db:generate": "npm run generate -w @locations/db",
     "db:migrate:dev": "npm run migrate -w @locations/db -- --env local",

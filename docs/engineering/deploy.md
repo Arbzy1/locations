@@ -65,6 +65,7 @@ Local CLI secrets: `.env` / `.dev.vars`. Staging: `.env.staging` / `.dev.vars.st
 |--------|---------|
 | `deploy:staging` | `npm run build:all && wrangler deploy --env staging` |
 | `deploy:prod` | `npm run build:all && wrangler deploy --env production` |
+| `deploy:both` | Build once, then staging, then production |
 | `deploy:preview` | `npm run build:all && wrangler versions upload --env staging` |
 
 `deploy:prod` requires `--env production`. A deploy without `--env` targets the local-only Worker name `locations-dev`, not production.

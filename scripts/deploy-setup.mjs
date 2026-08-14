@@ -32,6 +32,7 @@ are named Wrangler environments. Top-level config is wrangler dev only.
    Confirm https://locations-staging.aden.website/api/health
 7. npm run deploy:prod
    Confirm https://locations.aden.website/api/health
+   (or npm run deploy:both to build once and deploy staging then production)
 8. GitHub repository secrets (not Worker secrets):
      CLOUDFLARE_API_TOKEN
      CLOUDFLARE_ACCOUNT_ID

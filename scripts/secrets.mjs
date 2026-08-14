@@ -3,12 +3,11 @@
  * Generate or rotate BETTER_AUTH_SECRET in per-environment .env files,
  * then push staging/production secrets to Cloudflare.
  *
- *   npm run secrets:generate
+ *   npm run secrets:generate              All env pairs (skip files that already have a real secret)
  *   npm run secrets:generate -- --env staging
  *   npm run secrets:generate -- --force
- *   npm run secrets:rotate
+ *   npm run secrets:rotate                All env pairs
  *   npm run secrets:rotate -- --env staging
- *   npm run secrets:rotate -- --env all
  */
 import { randomBytes } from "node:crypto";
 import { expandEnvNames, takeEnvFlag } from "./env-paths.mjs";
@@ -28,19 +27,19 @@ function parseArgs(argv) {
     else if (a === "--help" || a === "-h") opts.help = true;
     else rest.push(a);
   }
+  const hasExplicit = rest.includes("--env") || Boolean(process.env.LOCATIONS_ENV);
   const { name } = takeEnvFlag(rest);
-  return { ...opts, env: name };
+  return { ...opts, env: hasExplicit ? name : "all" };
 }
 
 function usage() {
   console.log(`Usage:
-  npm run secrets:generate                         Fill blank/placeholder ${SECRET_KEY} (local)
-  npm run secrets:generate -- --env staging        Staging .env + .dev.vars, then cf:sync
+  npm run secrets:generate                         Fill blank/placeholder ${SECRET_KEY} in all .env / .dev.vars pairs
+  npm run secrets:generate -- --env staging        Staging files only, then cf:sync
+  npm run secrets:generate -- --env local          Local .env / .dev.vars only
   npm run secrets:generate -- --force              Replace even if a real secret exists
-  npm run secrets:rotate                           Always replace local files
-  npm run secrets:rotate -- --env staging|production
-                                                   Replace files and wrangler secret bulk
-  npm run secrets:rotate -- --env all              Staging and production (not local)
+  npm run secrets:rotate                           Replace every env pair; cf:sync staging + production
+  npm run secrets:rotate -- --env staging|production|local
 `);
 }
 
@@ -55,12 +54,7 @@ function main() {
     return;
   }
 
-  const selected =
-    opts.env === "all"
-      ? opts.rotate
-        ? ["staging", "production"]
-        : expandEnvNames("all")
-      : [opts.env];
+  const selected = expandEnvNames(opts.env);
 
   for (const name of selected) {
     console.log(`\n[${name}]`);
