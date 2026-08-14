@@ -20,8 +20,8 @@ Push to `main` deploys staging. Production is a manual promote (`npm run deploy:
 2. Migrate each database:
 
    ```bash
-   npm run db:migrate -- --env staging
-   npm run db:migrate -- --env production
+   npm run db:migrate:staging
+   npm run db:migrate:prod
    ```
 
    Fill `.env.staging` / `.env.production` first (`npm run env:merge`). Each file needs its own `DATABASE_URL`.

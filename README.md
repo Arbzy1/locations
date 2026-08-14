@@ -91,7 +91,9 @@ npm run deploy:prod
 | `npm run setup:project` | Interactive first-time Neon + import + admin user |
 | `npm run deploy:staging` | Build web + `wrangler deploy --env staging` |
 | `npm run deploy:prod` | Build web + `wrangler deploy --env production` |
-| `npm run db:migrate` | Apply schema |
+| `npm run db:migrate:dev` | Apply schema (local `.env`) |
+| `npm run db:migrate:staging` / `db:migrate:prod` | Apply schema to staging / production |
+| `npm run db:migrate:all` | Migrate local, staging, then production |
 | `npm run db:import` | CLI JSON import |
 | `npm run test:unit` | Vitest unit project |
 | `npm run test:integration` | Vitest integration project |

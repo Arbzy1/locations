@@ -26,7 +26,8 @@ npm run env:sync -- --env staging         # copy secrets .env.staging → .dev.v
 npm run secrets:generate -- --env staging
 npm run kill:servers                      # free Vite :5173 and Wrangler :8787
 npm run auth:promote-admin -- you@email.com --env staging
-npm run db:migrate -- --env staging       # or LOCATIONS_ENV=staging npm run db:migrate
+npm run db:migrate:dev
+npm run db:migrate:staging
 ```
 
 See the root [README](../../README.md).

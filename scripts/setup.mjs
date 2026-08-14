@@ -107,7 +107,7 @@ Your data stays in YOUR Neon project after this setup.
     /* already installed */
   }
 
-  run("npm run db:migrate");
+  run("npm run db:migrate:dev");
   run("npm run db:import");
   run(`npm run auth:create-user -- "${email}" "${password}" "${name}" admin`);
 

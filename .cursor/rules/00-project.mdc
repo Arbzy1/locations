@@ -340,7 +340,7 @@ Disabled controls do not bounce. Focus rings stay visible in addition to hover. 
 
 ## npm scripts (`<domain>:<action>`)
 
-Public scripts live on the **root** `package.json`. Name every new script `domain:action` (e.g. `db:migrate`, `test:unit`, `rules:sync`).
+Public scripts live on the **root** `package.json`. Name every new script `domain:action` (e.g. `db:migrate:dev`, `test:unit`, `rules:sync`).
 
 | Script | Purpose |
 |--------|---------|
@@ -348,7 +348,7 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 | `dev:web` / `dev:api` | Single workspace dev server |
 | `build:all` / `build:web` | Production builds |
 | `deploy:staging` / `deploy:prod` / `deploy:preview` | Wrangler `--env staging` / `--env production` / staging version upload |
-| `db:*` | generate, migrate, import, import-demo, warm-routes |
+| `db:*` | generate, migrate:dev/staging/prod/all, import, import-demo, warm-routes |
 | `env:merge` / `env:sync` | Fill missing keys from per-env examples / copy secrets `.env*` → `.dev.vars*` |
 | `secrets:generate` / `secrets:rotate` | Fill or rotate `BETTER_AUTH_SECRET` (optional `--env` push) |
 | `auth:create-user` / `auth:create-demo` | Invite / seed users |

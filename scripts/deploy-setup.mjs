@@ -13,8 +13,8 @@ are named Wrangler environments. Top-level config is wrangler dev only.
 
 1. Neon: create a staging database (or branch). Do not reuse prod DATABASE_URL.
 2. Migrate both:
-     npm run db:migrate -- --env staging
-     npm run db:migrate -- --env production
+     npm run db:migrate:staging
+     npm run db:migrate:prod
    (fill `.env.staging` / `.env.production` first)
 3. Cloudflare (if not already created):
      npx wrangler r2 bucket create locations-uploads-staging
