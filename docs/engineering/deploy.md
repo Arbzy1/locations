@@ -63,12 +63,14 @@ Local CLI secrets: `.env` / `.dev.vars`. Staging: `.env.staging` / `.dev.vars.st
 
 | Script | Command |
 |--------|---------|
-| `deploy:staging` | `npm run build:all && wrangler deploy --env staging` |
-| `deploy:prod` | `npm run build:all && wrangler deploy --env production` |
+| `deploy:staging` | Build, then `wrangler deploy --env staging --secrets-file` from local env files |
+| `deploy:prod` | Same for `--env production` |
 | `deploy:both` | Build once, then staging, then production |
-| `deploy:preview` | `npm run build:all && wrangler versions upload --env staging` |
+| `deploy:preview` | `wrangler versions upload --env staging --secrets-file` |
 
-`deploy:prod` requires `--env production`. A deploy without `--env` targets the local-only Worker name `locations-dev`, not production.
+`deploy:prod` always uses `--env production`. A deploy without `--env` targets the local-only Worker name `locations-dev`, not production.
+
+Local `deploy:*` scripts pass `--secrets-file` from `.env.<env>` / `.dev.vars.<env>`. That is required on first deploy: `wrangler secret bulk` can store secrets on a version that `secrets.required` does not count until they are attached to a code deploy.
 
 ## GitHub Actions
 

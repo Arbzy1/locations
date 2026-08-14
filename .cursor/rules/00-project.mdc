@@ -347,7 +347,7 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 | `dev:all` | Build web, then run web + API concurrently |
 | `dev:web` / `dev:api` | Single workspace dev server |
 | `build:all` / `build:web` | Production builds |
-| `deploy:staging` / `deploy:prod` / `deploy:both` / `deploy:preview` | Wrangler `--env staging` / `--env production` / both / staging version upload |
+| `deploy:staging` / `deploy:prod` / `deploy:both` / `deploy:preview` | Build + Wrangler `--env staging` / `--env production` / both / staging version upload (secrets from local env files) |
 | `db:*` | generate, migrate:dev/staging/prod/all, import, import-demo, warm-routes |
 | `env:merge` / `env:sync` | Fill missing keys from per-env examples / copy secrets `.env*` → `.dev.vars*` |
 | `secrets:generate` / `secrets:rotate` | Fill or rotate `BETTER_AUTH_SECRET` in every `.env*` + `.dev.vars*` pair (or `--env`), then `cf:sync` for staging/prod |
