@@ -5,10 +5,13 @@ export type ChangelogEntry = {
 
 /** Curated product notes. Do not fetch docs/ from the Worker. */
 export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
-  {
+    {
     version: "Unreleased",
-    summary:
-      "Public landing, pricing, status, and changelog pages. Scripted demo tour. Staff stuck-import list and tenant-wipe runbook. Env feature flags. Activity guesses from dwell, hour, and place type (not an LLM). Coverage percent and visit badges.",
+    summary: "Changes since the last tagged release.",
+  },
+  {
+    version: "0.0.1",
+    summary: "Colour moods in Settings, Display: 30 named palettes (light and dark each) on top of the existing theme toggle. Stored in `locations-mood`. Map tiles still follow light and dark.",
   },
   {
     version: "Import quality",
