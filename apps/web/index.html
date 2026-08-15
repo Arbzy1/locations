@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-mood="unsolicited-linkedin-advice">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -19,6 +19,12 @@
           document.documentElement.setAttribute('data-theme', t);
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'dark');
+        }
+        try {
+          var m = localStorage.getItem('locations-mood') || 'unsolicited-linkedin-advice';
+          document.documentElement.setAttribute('data-mood', m);
+        } catch (e) {
+          document.documentElement.setAttribute('data-mood', 'unsolicited-linkedin-advice');
         }
       })();
     </script>

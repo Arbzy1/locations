@@ -27,6 +27,7 @@ What the hosted app does today. Nothing here is a roadmap.
 - Saved map views (capped) and a desktop overview mini-map
 - Optional custom raster XYZ in Settings when the operator allowlists hosts
 - Dark / light UI theme
+- Colour moods in Settings, Display (30 named palettes, each with light and dark). Light/dark stays on the rail; moods tint chrome and accents. Map tiles still follow light/dark.
 - Optional 3D globe of heatmap points at `/globe` (MapLibre, config flag `globe`)
 
 ## Trips and stats

@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./components/ui/eject-field.css";
+@import "./lib/theme/moods.css";
 
 @theme {
   --color-bg: var(--bg);

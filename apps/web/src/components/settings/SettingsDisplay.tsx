@@ -8,6 +8,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { EjectField } from "../ui/eject-field";
 import { Switch } from "../ui/switch";
+import ColourMoodCatalog from "./ColourMoodCatalog";
 
 type Props = {
   onError: (msg: string) => void;
@@ -58,6 +59,7 @@ export default function SettingsDisplay({ onError, onMessage }: Props) {
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
+      <ColourMoodCatalog />
       <Card>
         <CardTitle className="text-base">Units and timezone</CardTitle>
         <p className="mt-1 mb-4 text-sm text-text-muted">Used on maps, Insights, and day views.</p>

@@ -57,7 +57,7 @@ import {
 } from 'lucide-react';
 
 function useChartColors() {
-  const { theme } = useTheme();
+  const { theme, mood } = useTheme();
   return useMemo(() => {
     const s = getComputedStyle(document.documentElement);
     const read = (name: string, fallback: string) =>
@@ -69,7 +69,7 @@ function useChartColors() {
       text: read('--text', '#f0f6fc'),
       accent: read('--accent', '#58a6ff'),
     };
-  }, [theme]);
+  }, [theme, mood]);
 }
 
 export default function InsightsView() {

@@ -31,8 +31,8 @@ export function CookiesRoute() {
   return (
     <LegalPage title="Cookies">
       <p>
-        We use an essential session cookie and theme preference in localStorage. No advertising
-        cookies.
+        We use an essential session cookie, plus `locations-theme` and `locations-mood` in
+        localStorage. No advertising cookies.
       </p>
     </LegalPage>
   );

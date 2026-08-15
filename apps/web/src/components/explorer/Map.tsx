@@ -162,7 +162,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   const visitPopupById = useRef(new Map<string, string>());
   const overlayReady = useRef(false);
   const measureRef = useRef(false);
-  const { theme } = useTheme();
+  const { theme, mood } = useTheme();
   const { unit, mapBookmarks, mapTileDarkUrl, mapTileLightUrl } = useUnits();
   const queryClient = useQueryClient();
   const { isDesktop } = useBreakpoint();
@@ -679,6 +679,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       totalJourneys,
       unit,
       visits,
+      theme,
+      mood,
     ],
   );
   const syncOverlaysRef = useRef(syncOverlays);

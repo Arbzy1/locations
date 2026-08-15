@@ -11,6 +11,7 @@ import {
 } from './hooks/useApi';
 import { useSession, signOut } from './lib/auth';
 import { UnitsProvider } from './lib/units';
+import { useTheme } from './lib/theme';
 import { loadNavExpanded, saveNavExpanded } from './lib/nav/nav-memory';
 import { interactiveMotion, reducedInteractiveMotion } from './lib/motion';
 import { cn } from './lib/utils';
@@ -217,6 +218,7 @@ function AppContent() {
     poll: true,
   });
   const { data: session } = useSession();
+  const { moodName } = useTheme();
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
   const sessionUserId = (session?.user as { id?: string } | undefined)?.id;
   const isStaff =
@@ -424,6 +426,18 @@ function AppContent() {
             )}
           >
             <ThemeToggle className={navExpanded ? undefined : 'h-11 w-11'} showLabel={navExpanded} />
+            {navExpanded && (
+              <Button
+                asChild
+                variant="ghost"
+                className="h-11 w-full justify-start px-3"
+                title="Open colour moods in Settings"
+              >
+                <Link to="/settings?section=display">
+                  <span className="truncate text-xs text-text-muted">{moodName}</span>
+                </Link>
+              </Button>
+            )}
             {!isDemo && (
               <Button
                 type="button"
@@ -535,6 +549,14 @@ function AppContent() {
                     <span className="text-xs text-text-muted">Theme</span>
                     <ThemeToggle className="h-11 w-11" />
                   </div>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    className="h-11 justify-start"
+                    title="Open colour moods in Settings"
+                  >
+                    <Link to="/settings?section=display">{moodName}</Link>
+                  </Button>
                   <div className="max-h-48 overflow-y-auto">
                     <ExploreMenu compact />
                   </div>

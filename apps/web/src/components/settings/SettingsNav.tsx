@@ -13,7 +13,7 @@ const ITEMS: {
   { id: "overview", label: "Overview", title: "Settings overview", icon: LayoutDashboard },
   { id: "account", label: "Account", title: "Account, email, and devices", icon: User },
   { id: "billing", label: "Billing", title: "Subscription and invoices", icon: CreditCard },
-  { id: "display", label: "Display", title: "Units, timezone, and map tiles", icon: Ruler },
+  { id: "display", label: "Display", title: "Colour moods, units, timezone, and map tiles", icon: Ruler },
   { id: "data", label: "Timeline", title: "Import and manage Timeline data", icon: Upload },
   { id: "privacy", label: "Privacy", title: "Exports and delete account", icon: Lock },
 ];

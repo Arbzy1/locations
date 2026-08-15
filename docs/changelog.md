@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Colour moods in Settings, Display: 30 named palettes (light and dark each) on top of the existing theme toggle. Stored in `locations-mood`. Map tiles still follow light and dark.
+
 Web components are grouped by domain: `auth`, `settings`, `legal`, `explorer`, `shell`, plus existing `admin`, `catalog`, `marketing`, and `ui`. Web `lib` follows the same split (`map`, `explorer`, `nav`, `admin`, `settings`, `marketing`), with `utils`, `motion`, `theme`, `units`, `auth`, and `demo` left at the root.
 
 Public `/`, `/login`, and `/signup` share an AuthShell (desktop split hero, mobile sheet over a faint SVG world). Optional Google OAuth via Better Auth when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set; `GET /api/config` exposes `googleAuth` (no client id in the bundle). Login leads with Google and demo; email, magic link, and OTP stay as secondary paths.

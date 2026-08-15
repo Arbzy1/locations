@@ -3,10 +3,12 @@ import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import CatalogPage from './CatalogPage';
 import { useHeatmap, usePublicConfig } from '../../hooks/useApi';
+import { useTheme } from '../../lib/theme';
 
 export default function GlobeView() {
   const { data: config } = usePublicConfig();
   const { data: points = [] } = useHeatmap();
+  const { theme, mood } = useTheme();
   const host = useRef<HTMLDivElement>(null);
   const [error, setError] = useState('');
 
@@ -69,7 +71,7 @@ export default function GlobeView() {
       cancelled = true;
       map?.remove();
     };
-  }, [points, config]);
+  }, [points, config, theme, mood]);
 
   if (config && config.globe === false) {
     return (

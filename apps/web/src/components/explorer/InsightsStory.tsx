@@ -67,7 +67,7 @@ export function InsightsStory({
   chart: { muted: string; surface: string; border: string; text: string; accent: string };
 }) {
   const { unit, timezone } = useUnits();
-  const { theme } = useTheme();
+  const { theme, mood } = useTheme();
   const { data: streaksRaw } = useStreaks();
   const { data: deltasRaw } = usePlaceDeltas();
   const { data: lapsedRaw } = useLapsedPlaces();
@@ -111,6 +111,7 @@ export function InsightsStory({
 
   const walkMiles = monthly?.find((m) => m.month === monthYm)?.mode_miles?.walking ?? 0;
   void theme;
+  void mood;
 
   return (
     <>
