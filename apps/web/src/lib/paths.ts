@@ -79,7 +79,7 @@ export function isCatalogPath(pathname: string): boolean {
 }
 
 export function catalogTitle(pathname: string): string {
-  if (pathname.startsWith("/admin")) return "Operator";
+  if (pathname.startsWith("/admin")) return "Admin";
   if (pathname.startsWith("/places")) return "Places";
   if (pathname.startsWith("/corridors")) return "Corridor";
   if (pathname.startsWith("/review")) return "Year in review";

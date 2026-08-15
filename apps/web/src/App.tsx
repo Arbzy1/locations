@@ -37,6 +37,7 @@ import { Toaster } from './components/ui/sonner';
 import ExploreMenu from './components/ExploreMenu';
 import CatalogRouter from './components/catalog/CatalogRouter';
 import { isCatalogPath, catalogTitle } from './lib/paths';
+import { adminPageLabel } from './components/admin/adminNav';
 import {
   Flame,
   Calendar,
@@ -49,6 +50,7 @@ import {
   MoreHorizontal,
   PanelLeft,
   PanelLeftClose,
+  Shield,
 } from 'lucide-react';
 
 const queryClient = new QueryClient({
@@ -210,9 +212,17 @@ function AppContent() {
   });
   const { data: session } = useSession();
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
+  const isStaff =
+    (session?.user as { role?: string } | undefined)?.role === 'admin' ||
+    (session?.user as { role?: string } | undefined)?.role === 'developer';
+  const adminActive = location.pathname.startsWith('/admin');
 
   const exploring = isCatalogPath(location.pathname);
-  useDocumentTitle(`${exploring ? catalogTitle(location.pathname) : TAB_LABELS[activeTab]} · Locations`);
+  useDocumentTitle(
+    adminActive
+      ? `Admin · ${adminPageLabel(location.pathname)} · Locations`
+      : `${exploring ? catalogTitle(location.pathname) : TAB_LABELS[activeTab]} · Locations`,
+  );
 
   const selectTab = (id: TabId, date?: string) => {
     setMoreOpen(false);
@@ -334,6 +344,25 @@ function AppContent() {
             />
           ))}
           <ExploreMenu expanded={navExpanded} />
+          {isStaff && (
+            <Button
+              asChild
+              variant="ghost"
+              size={navExpanded ? 'default' : 'icon'}
+              className={cn(
+                navExpanded ? 'h-11 w-full justify-start gap-2 px-3' : 'h-11 w-11',
+                adminActive && 'bg-admin/15 text-admin hover:text-admin',
+              )}
+              title="Open Admin panel"
+              aria-label="Open Admin panel"
+              aria-current={adminActive ? 'page' : undefined}
+            >
+              <Link to="/admin">
+                <Shield size={18} />
+                <RailLabel show={navExpanded}>Admin</RailLabel>
+              </Link>
+            </Button>
+          )}
           <Button
             type="button"
             variant="ghost"

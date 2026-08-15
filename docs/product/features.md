@@ -87,7 +87,7 @@ What the hosted app does today. Nothing here is a roadmap.
 - Public demo with sample journeys (read-only) and a skippable scripted tour for the demo role
 - Public marketing pages outside the app shell: `/` landing, `/pricing`, `/status`, `/changelog` (Privacy, Terms, and Cookies links on those pages)
 - In-app changelog under Explore (`/updates`)
-- Staff (`admin` / `developer`) can open `/admin` operator console for accounts, flags, billing, imports, and diagnostics. They cannot open another user’s maps. Own-tenant counts stay on `/admin/me`.
+- Staff (`admin` / `developer`) can open the `/admin` Admin panel for accounts, flags, billing, imports, and diagnostics. They cannot open another user’s maps. Own-tenant counts stay on `/admin/me`.
 - Env feature flags on `GET /api/config` (`globe`, `demoTour`, `landing`)
 - Miles or kilometres, and an IANA timezone
 - Opt-in monthly recap email (counts only; off by default)

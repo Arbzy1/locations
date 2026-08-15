@@ -15,6 +15,7 @@
   --color-cycle: var(--cycle);
   --color-fly: var(--fly);
   --color-visit: var(--visit);
+  --color-admin: var(--admin);
   --color-background: var(--bg);
   --color-foreground: var(--text);
   --color-primary: var(--accent);
@@ -52,6 +53,7 @@
   --cycle: #56d364;
   --fly: #79c0ff;
   --visit: #bc8cff;
+  --admin: var(--visit);
   --background: var(--bg);
   --foreground: var(--text);
   --primary: var(--accent);
@@ -80,6 +82,7 @@
   --cycle: #1a7f37;
   --fly: #0969da;
   --visit: #8250df;
+  --admin: var(--visit);
   --background: var(--bg);
   --foreground: var(--text);
   --primary: var(--accent);

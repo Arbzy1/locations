@@ -2,10 +2,10 @@ import { useState } from "react";
 import { useSession } from "../../lib/auth";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
-import { Badge } from "../ui/badge";
 import { DEVELOPER_SAFE_CHECKS, summarizeCheckBody, type DeveloperCheck } from "../../lib/admin-checks";
 import { adminJson } from "../../lib/admin-api";
 import { AdminCard, AdminSection } from "./AdminSection";
+import { AdminStatus } from "./AdminUi";
 
 type CheckResult = {
   id: string;
@@ -32,10 +32,16 @@ async function runCheck(check: DeveloperCheck): Promise<CheckResult> {
 }
 
 const AUTHZ_MATRIX = [
-  "Unauthenticated /api/admin/* → 401",
-  "role=user or demo → 404 (not 403)",
-  "developer GET → 200; developer PATCH/POST → 404",
+  "Unauthenticated /api/admin/* returns 401",
+  "role=user or demo returns 404 (not 403)",
+  "developer GET returns 200; developer PATCH/POST returns 404",
   "admin mutations allowed; last admin cannot be demoted",
+];
+
+const GROUPS: { key: DeveloperCheck["group"]; label: string }[] = [
+  { key: "Public", label: "Public" },
+  { key: "Session", label: "Session" },
+  { key: "Operator", label: "Admin" },
 ];
 
 export function AdminDeveloperPage() {
@@ -68,12 +74,10 @@ export function AdminDeveloperPage() {
     } catch (err) {
       const status = (err as { status?: number }).status ?? 0;
       const pass = status === 400 || status === 404;
-      setProbe(`${pass ? "pass" : "fail"}: empty PATCH → ${status} in ${Math.round(performance.now() - started)}ms`);
+      setProbe(`${pass ? "pass" : "fail"}: empty PATCH returned ${status} in ${Math.round(performance.now() - started)}ms`);
     }
     setRunning(null);
   }
-
-  const groups = ["Public", "Session", "Operator"] as const;
 
   return (
     <AdminSection
@@ -85,10 +89,10 @@ export function AdminDeveloperPage() {
           Run all (safe)
         </Button>
       </div>
-      {groups.map((group) => (
-        <AdminCard key={group} title={group}>
+      {GROUPS.map((group) => (
+        <AdminCard key={group.key} title={group.label}>
           <ul className="space-y-2">
-            {DEVELOPER_SAFE_CHECKS.filter((c) => c.group === group).map((check) => {
+            {DEVELOPER_SAFE_CHECKS.filter((c) => c.group === group.key).map((check) => {
               const result = results[check.id];
               return (
                 <li key={check.id} className="flex min-h-11 flex-wrap items-center justify-between gap-2">
@@ -101,7 +105,9 @@ export function AdminDeveloperPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    {result && <Badge>{result.pass ? "pass" : "fail"}</Badge>}
+                    {result && (
+                      <AdminStatus tone={result.pass ? "ok" : "danger"}>{result.pass ? "Pass" : "Fail"}</AdminStatus>
+                    )}
                     <Button
                       type="button"
                       variant="outline"
@@ -151,7 +157,12 @@ export function AdminDeveloperPage() {
               Probe empty PATCH
             </Button>
           )}
-          {probe && <p className="mt-2 text-sm text-text-muted">{probe}</p>}
+          {probe && (
+            <p className="mt-2">
+              <AdminStatus tone={probe.startsWith("pass") ? "ok" : "danger"}>{probe.startsWith("pass") ? "Pass" : "Fail"}</AdminStatus>
+              <span className="ml-2 text-sm text-text-muted">{probe}</span>
+            </p>
+          )}
         </AdminCard>
       )}
     </AdminSection>

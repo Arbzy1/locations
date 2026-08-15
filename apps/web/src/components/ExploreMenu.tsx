@@ -73,9 +73,9 @@ export default function ExploreMenu({ compact, expanded }: { compact?: boolean; 
           </div>
         ))}
         {isStaff && (
-          <DropdownMenuItem asChild title="Operator console">
+          <DropdownMenuItem asChild title="Open the Admin panel">
             <Link to="/admin" className="flex h-11 items-center px-3 text-sm">
-              Operator
+              Admin
             </Link>
           </DropdownMenuItem>
         )}

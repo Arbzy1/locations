@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { adminJson } from "../../lib/admin-api";
 import { AdminCard, AdminError, AdminSection } from "./AdminSection";
+import { AdminBars, AdminSkeletonList, AdminStat } from "./AdminUi";
 
 type Analytics = {
   byRole: Record<string, number>;
@@ -10,28 +11,29 @@ type Analytics = {
 };
 
 export function AdminAnalyticsPage() {
-  const { data, isError } = useQuery({
+  const { data, isError, isPending } = useQuery({
     queryKey: ["admin-analytics"],
     queryFn: () => adminJson<Analytics>("/api/admin/analytics"),
   });
   if (isError) return <AdminError />;
   return (
     <AdminSection title="Analytics" description="Product metrics. Not location analytics and not other people’s maps.">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <AdminStat loading={isPending} value={data?.importsReady ?? 0} label="Latest job ready" tone="ok" />
+        <AdminStat
+          loading={isPending}
+          value={data?.importsError ?? 0}
+          label="Latest job error"
+          tone={(data?.importsError ?? 0) > 0 ? "danger" : "neutral"}
+        />
+        <AdminStat loading={isPending} value={data?.recapOptIn ?? 0} label="Recap opt-in" />
+      </div>
       <AdminCard title="Roles">
-        <ul className="space-y-1 text-sm">
-          {Object.entries(data?.byRole ?? {}).map(([role, count]) => (
-            <li key={role}>
-              {role}: {count}
-            </li>
-          ))}
-        </ul>
-      </AdminCard>
-      <AdminCard title="Imports and recap">
-        <ul className="space-y-1 text-sm">
-          <li>Latest job ready: {data?.importsReady ?? 0}</li>
-          <li>Latest job error: {data?.importsError ?? 0}</li>
-          <li>Recap opt-in: {data?.recapOptIn ?? 0}</li>
-        </ul>
+        {isPending ? (
+          <AdminSkeletonList rows={3} />
+        ) : (
+          <AdminBars items={Object.entries(data?.byRole ?? {}).map(([label, count]) => ({ label, count }))} />
+        )}
       </AdminCard>
     </AdminSection>
   );

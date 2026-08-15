@@ -67,7 +67,7 @@ export default function SignupPage() {
         <motion.div {...enterMotion} className="w-full max-w-md rounded-2xl border border-border bg-surface p-6">
           <h1 className="font-display text-2xl font-semibold text-text">Signup is closed</h1>
           <p className="mt-2 text-sm text-text-muted">
-            New accounts are not open right now. If you already have access, sign in. Operators can still invite users.
+            New accounts are not open right now. If you already have access, sign in. Admins can still invite users.
           </p>
           <Button asChild className="mt-4 w-full" title="Go to sign in">
             <Link to="/login">Sign in</Link>

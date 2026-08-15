@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { adminJson } from "../../lib/admin-api";
 import { AdminCard, AdminError, AdminSection } from "./AdminSection";
+import { AdminDl, AdminSkeletonList, AdminStatus, boolStatus } from "./AdminUi";
 
 type Maps = {
   commercialTiles: boolean;
@@ -10,20 +11,30 @@ type Maps = {
 };
 
 export function AdminMapsPage() {
-  const { data, isError } = useQuery({
+  const { data, isError, isPending } = useQuery({
     queryKey: ["admin-maps"],
     queryFn: () => adminJson<Maps>("/api/admin/maps"),
   });
   if (isError) return <AdminError />;
+  const tiles = boolStatus(Boolean(data?.commercialTiles), "Configured", "Missing", "warn");
+  const osrm = boolStatus(Boolean(data?.osrmConfigured), "Configured", "Missing", "warn");
+  const geocode = boolStatus(Boolean(data?.geocodeConfigured), "Configured", "Missing", "warn");
+  const hosts = boolStatus(Boolean(data?.customHostsAllowlist), "Allowlist set", "Not set", "warn");
   return (
     <AdminSection title="Maps" description="Whether commercial tiles, routing, and geocode env are set. Keys stay in Worker secrets.">
       <AdminCard>
-        <ul className="space-y-1 text-sm">
-          <li>Commercial tiles: {String(data?.commercialTiles ?? false)}</li>
-          <li>OSRM configured: {String(data?.osrmConfigured ?? false)}</li>
-          <li>Geocode configured: {String(data?.geocodeConfigured ?? false)}</li>
-          <li>Custom host allowlist: {String(data?.customHostsAllowlist ?? false)}</li>
-        </ul>
+        {isPending ? (
+          <AdminSkeletonList rows={4} />
+        ) : (
+          <AdminDl
+            rows={[
+              { label: "Commercial tiles", value: <AdminStatus tone={tiles.tone}>{tiles.label}</AdminStatus> },
+              { label: "OSRM", value: <AdminStatus tone={osrm.tone}>{osrm.label}</AdminStatus> },
+              { label: "Geocode", value: <AdminStatus tone={geocode.tone}>{geocode.label}</AdminStatus> },
+              { label: "Custom host allowlist", value: <AdminStatus tone={hosts.tone}>{hosts.label}</AdminStatus> },
+            ]}
+          />
+        )}
       </AdminCard>
     </AdminSection>
   );
