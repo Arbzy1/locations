@@ -8,25 +8,62 @@ import { filesFor } from "./env-paths.mjs";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Keys uploaded with `wrangler secret bulk`. Vars already in wrangler.toml stay out. */
-export const WORKER_SECRET_KEYS = [
-  "DATABASE_URL",
-  "BETTER_AUTH_SECRET",
-  "RESEND_API_KEY",
-  "EMAIL_FROM",
-  "DEMO_EMAIL",
-  "DEMO_PASSWORD",
-  "STRIPE_SECRET_KEY",
-  "STRIPE_WEBHOOK_SECRET",
-  "STRIPE_PRICE_MONTHLY",
-  "STRIPE_PRICE_YEARLY",
-  "GRACE_DAYS",
-  "MAP_TILE_DARK_URL",
-  "MAP_TILE_LIGHT_URL",
-  "MAP_TILE_ATTR",
-  "OSRM_BASE",
-  "GEOCODE_BASE",
-];
+/** CLI-only keys that never go to the Worker. */
+export const LOCAL_ONLY_KEYS = ["DATA_PATH"];
+
+/**
+ * Parse plaintext `[vars]` / `[env.*.vars]` keys from wrangler.toml.
+ * Those deploy with the Worker and must not be uploaded as secrets.
+ *
+ * @param {string} toml
+ * @returns {Set<string>}
+ */
+export function parseWranglerPlaintextVarKeys(toml) {
+  /** @type {Set<string>} */
+  const keys = new Set();
+  let inVars = false;
+  for (const line of toml.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("[")) {
+      inVars = /^\[(?:env\.[^.]+\.)?vars\]$/.test(trimmed);
+      continue;
+    }
+    if (!inVars || !trimmed || trimmed.startsWith("#")) continue;
+    const m = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+    if (m) keys.add(m[1]);
+  }
+  return keys;
+}
+
+/**
+ * Worker secret names: env-example keys minus wrangler.toml vars and CLI-only keys.
+ *
+ * @param {{ envExampleKeys: Iterable<string>, wranglerVarKeys: Iterable<string> }} input
+ * @returns {string[]}
+ */
+export function deriveWorkerSecretKeys({ envExampleKeys, wranglerVarKeys }) {
+  const skip = new Set([...wranglerVarKeys, ...LOCAL_ONLY_KEYS]);
+  return [...new Set(envExampleKeys)].filter((key) => !skip.has(key)).sort();
+}
+
+/**
+ * Keys uploaded with `wrangler secret bulk`.
+ * Derived from `.env*.example` so new secrets are picked up without a hardcoded list.
+ */
+export function loadWorkerSecretKeys() {
+  const wranglerPath = resolve(repoRoot, "wrangler.toml");
+  const envExampleKeys = [
+    ".env.example",
+    ".env.staging.example",
+    ".env.production.example",
+  ].flatMap((file) => Object.keys(readEnvFile(resolve(repoRoot, file))));
+  const wranglerVarKeys = existsSync(wranglerPath)
+    ? parseWranglerPlaintextVarKeys(readFileSync(wranglerPath, "utf8"))
+    : [];
+  return deriveWorkerSecretKeys({ envExampleKeys, wranglerVarKeys });
+}
+
+export const WORKER_SECRET_KEYS = loadWorkerSecretKeys();
 
 /** @param {string | null | undefined} value */
 export function isBlankSecret(value) {
@@ -193,4 +230,39 @@ export function writeKeyToEnvPair(name, key, value) {
   collapseDuplicateKeysInFile(devPath);
   console.log(`  ${files.env.label}: ${envResult} ${key}`);
   console.log(`  ${files.devVars.label}: ${devResult} ${key}`);
+}
+
+/**
+ * Upsert filled secrets and delete remote keys we no longer manage.
+ * Blank local values are left unchanged on Cloudflare.
+ *
+ * @param {{ secrets: Record<string, string>, remoteNames: string[], managedKeys?: Iterable<string> }} input
+ * @returns {{ payload: Record<string, string | null>, pruned: string[] }}
+ */
+export function secretBulkPayload({ secrets, remoteNames, managedKeys = WORKER_SECRET_KEYS }) {
+  /** @type {Record<string, string | null>} */
+  const payload = { ...secrets };
+  const managed = new Set(managedKeys);
+  /** @type {string[]} */
+  const pruned = [];
+  for (const remote of remoteNames) {
+    if (managed.has(remote)) continue;
+    payload[remote] = null;
+    pruned.push(remote);
+  }
+  pruned.sort();
+  return { payload, pruned };
+}
+
+/** @param {string} stdout */
+export function parseSecretListOutput(stdout) {
+  const text = String(stdout ?? "").trim();
+  const start = text.indexOf("[");
+  const end = text.lastIndexOf("]");
+  if (start === -1 || end === -1) return [];
+  const parsed = JSON.parse(text.slice(start, end + 1));
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .map((row) => (row && typeof row.name === "string" ? row.name : ""))
+    .filter(Boolean);
 }

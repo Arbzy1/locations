@@ -39,7 +39,7 @@ Filenames: Vitest is `*.test.ts`. Playwright is `*.spec.ts`.
 | Unit, API helper | `unit/api/{domain}/` | cors, rate-limit, unzip, place colour, email templates |
 | Unit, DB helper | `unit/db/{domain}/` | geo, entitlements, timeline parse, withTenant no-DB |
 | Unit, web helper | `unit/web/{domain}/` | hotspots ranking, formatDistance |
-| Unit, script | `unit/scripts/{domain}/` | env-file upsert |
+| Unit, script | `unit/scripts/{domain}/` | env-file upsert, cf:sync secret keys |
 | Integration, route | `integration/api/{domain}/` | 401 / owner 200 / cross-tenant 404 / demo 403 |
 | Integration, Stripe webhook | `integration/api/billing/` | invalid signature, replay, grant/revoke |
 | RLS leak | `rls/isolation/` | FORCE RLS without Drizzle tenant filters |

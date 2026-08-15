@@ -362,7 +362,7 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 | `db:*` | generate, migrate:dev/staging/prod/all, import, import-demo, warm-routes |
 | `env:merge` / `env:sync` | Fill missing keys from per-env examples / copy secrets `.env*` → `.dev.vars*` |
 | `secrets:generate` / `secrets:rotate` | Fill or rotate `BETTER_AUTH_SECRET` in every `.env*` + `.dev.vars*` pair (or `--env`), then `cf:sync` for staging/prod |
-| `cf:sync` / `cf:sync:staging` / `cf:sync:prod` / `cf:sync:dry` | `wrangler secret bulk` from that env's files |
+| `cf:sync` / `cf:sync:staging` / `cf:sync:prod` / `cf:sync:dry` | `wrangler secret bulk` from `.env*.example` keys (minus wrangler.toml vars); prunes unmanaged remote secrets |
 | `auth:create-user` / `auth:create-demo` | Invite / seed users |
 | `auth:promote-admin` / `auth:promote-developer` | Set `user.role` to staff |
 | `setup:project` | Interactive first-time setup |

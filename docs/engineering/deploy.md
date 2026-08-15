@@ -36,7 +36,7 @@ Push to `main` deploys staging. Production is a manual promote (`npm run deploy:
    npm run cf:sync:prod
    ```
 
-   Or `node scripts/cf-sync.mjs --dry-run` / `npm run cf:sync:dry` to list keys without uploading. Blank and example placeholders are skipped.
+   Or `node scripts/cf-sync.mjs --dry-run` / `npm run cf:sync:dry` to list keys without uploading. Keys come from `.env*.example` minus plaintext `[vars]` in `wrangler.toml`. Blank and example placeholders are skipped (existing Cloudflare values stay). Secrets on the Worker that are no longer in that list are deleted. Use `--no-prune` to skip deletion.
 
    Staging Stripe: test-mode keys. Add a Stripe test webhook to `https://locations-staging.aden.website/api/billing/webhook`. Production keeps live keys and the existing live webhook.
 

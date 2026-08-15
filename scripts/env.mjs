@@ -11,21 +11,9 @@ import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expandEnvNames, filesFor, takeEnvFlag } from "./env-paths.mjs";
-import { collapseDuplicateKeysInFile } from "./env-file.mjs";
+import { collapseDuplicateKeysInFile, WORKER_SECRET_KEYS } from "./env-file.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-const SYNC_KEYS = [
-  "DATABASE_URL",
-  "BETTER_AUTH_SECRET",
-  "RESEND_API_KEY",
-  "DEMO_EMAIL",
-  "DEMO_PASSWORD",
-  "STRIPE_SECRET_KEY",
-  "STRIPE_WEBHOOK_SECRET",
-  "STRIPE_PRICE_MONTHLY",
-  "STRIPE_PRICE_YEARLY",
-];
 
 /** @param {string} content */
 function parseEnvKeys(content) {
@@ -212,7 +200,7 @@ function syncEnv(name) {
   const fromEnv = parseEnvValues(readFileSync(envPath, "utf8"));
   /** @type {Record<string, string | undefined>} */
   const values = {};
-  for (const key of SYNC_KEYS) values[key] = fromEnv[key];
+  for (const key of WORKER_SECRET_KEYS) values[key] = fromEnv[key];
 
   const destContent = existsSync(destPath) ? readFileSync(destPath, "utf8") : "";
   writeFileSync(destPath, applyEnvValues(destContent, values), "utf8");

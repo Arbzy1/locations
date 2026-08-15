@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 /**
  * Upload Worker secrets from per-env .env / .dev.vars to Cloudflare.
+ * Keys come from `.env*.example` minus wrangler.toml `[vars]` (see WORKER_SECRET_KEYS).
+ * Remote secrets that are no longer in that list are deleted.
  *
  *   npm run cf:sync
  *   npm run cf:sync -- --env staging
  *   npm run cf:sync -- --env production
  *   npm run cf:sync -- --env all --dry-run
+ *   npm run cf:sync -- --no-prune
  */
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -13,7 +16,13 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expandEnvNames, takeEnvFlag } from "./env-paths.mjs";
-import { WORKER_SECRET_KEYS, isBlankSecret, loadMergedEnv } from "./env-file.mjs";
+import {
+  WORKER_SECRET_KEYS,
+  isBlankSecret,
+  loadMergedEnv,
+  parseSecretListOutput,
+  secretBulkPayload,
+} from "./env-file.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -40,7 +49,24 @@ export function collectWorkerSecrets(name) {
 
 /**
  * @param {import("./env-paths.mjs").EnvName} name
- * @param {{ dryRun?: boolean }} [opts]
+ * @returns {string[]}
+ */
+function listRemoteSecretNames(name) {
+  const result = spawnSync(
+    "npx",
+    ["wrangler", "secret", "list", "--env", name, "--format", "json"],
+    { cwd: root, encoding: "utf8", shell: true },
+  );
+  if (result.status !== 0) {
+    const err = String(result.stderr || result.stdout || "").trim();
+    throw new Error(err || `wrangler secret list failed for --env ${name}`);
+  }
+  return parseSecretListOutput(result.stdout);
+}
+
+/**
+ * @param {import("./env-paths.mjs").EnvName} name
+ * @param {{ dryRun?: boolean, prune?: boolean }} [opts]
  */
 export function pushWorkerSecrets(name, opts = {}) {
   if (name === "local") {
@@ -48,26 +74,45 @@ export function pushWorkerSecrets(name, opts = {}) {
     return;
   }
 
+  const prune = opts.prune !== false;
   const { secrets, skipped } = collectWorkerSecrets(name);
   const keys = Object.keys(secrets);
   if (skipped.length) {
     console.log(`  skip blank/placeholder: ${skipped.join(", ")}`);
   }
-  if (!keys.length) {
+
+  /** @type {string[]} */
+  let remoteNames = [];
+  if (prune) {
+    try {
+      remoteNames = listRemoteSecretNames(name);
+    } catch (err) {
+      console.error(
+        `  could not list remote secrets (prune skipped): ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  const { payload, pruned } = secretBulkPayload({ secrets, remoteNames });
+  if (pruned.length) {
+    console.log(`  prune unmanaged: ${pruned.join(", ")}`);
+  }
+  if (!keys.length && !pruned.length) {
     console.log("  nothing to upload (fill .env files first).");
     return;
   }
 
+  const upsert = keys.join(", ") || "(none)";
   if (opts.dryRun) {
-    console.log(`  [dry-run] wrangler secret bulk --env ${name}: ${keys.join(", ")}`);
+    console.log(`  [dry-run] wrangler secret bulk --env ${name}: ${upsert}`);
     return;
   }
 
   const tmpDir = mkdtempSync(join(tmpdir(), `locations-secrets-${name}-`));
   const tmpPath = join(tmpDir, "secrets.json");
-  writeFileSync(tmpPath, JSON.stringify(secrets), "utf8");
+  writeFileSync(tmpPath, JSON.stringify(payload), "utf8");
   try {
-    console.log(`  wrangler secret bulk --env ${name}: ${keys.join(", ")}`);
+    console.log(`  wrangler secret bulk --env ${name}: ${upsert}`);
     const result = spawnSync("npx", ["wrangler", "secret", "bulk", tmpPath, "--env", name], {
       cwd: root,
       stdio: "inherit",
@@ -87,6 +132,7 @@ function usage() {
   npm run cf:sync -- --env staging
   npm run cf:sync -- --env production
   npm run cf:sync -- --dry-run
+  npm run cf:sync -- --no-prune
 `);
 }
 
@@ -98,7 +144,8 @@ function main() {
   }
   const dryRun =
     argv.includes("--dry-run") || process.env.npm_config_dry_run === "true";
-  const rest = argv.filter((a) => a !== "--dry-run");
+  const prune = !argv.includes("--no-prune");
+  const rest = argv.filter((a) => a !== "--dry-run" && a !== "--no-prune");
   const hasExplicit = rest.includes("--env") || Boolean(process.env.LOCATIONS_ENV);
   const { name } = takeEnvFlag(rest);
   const names = expandEnvNames(!hasExplicit || name === "all" ? "all" : name).filter(
@@ -111,9 +158,10 @@ function main() {
   }
 
   console.log(`\nCloudflare secret sync${dryRun ? " (dry-run)" : ""}\n`);
+  console.log(`  managed keys: ${WORKER_SECRET_KEYS.join(", ")}\n`);
   for (const envName of names) {
     console.log(`[${envName}]`);
-    pushWorkerSecrets(envName, { dryRun });
+    pushWorkerSecrets(envName, { dryRun, prune });
     console.log("");
   }
 }
