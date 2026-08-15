@@ -12,7 +12,7 @@
     "@locations/db": "*",
     "@neondatabase/serverless": "^1.0.1",
     "better-auth": "^1.6.29",
-    "drizzle-orm": "^0.44.7",
+    "drizzle-orm": "^0.45.2",
     "fflate": "^0.8.3",
     "hono": "^4.9.0",
     "stripe": "^22.5.0"
@@ -20,6 +20,6 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250807.0",
     "typescript": "~5.9.3",
-    "wrangler": "^4.28.0"
+    "wrangler": "4.113.0"
   }
 }

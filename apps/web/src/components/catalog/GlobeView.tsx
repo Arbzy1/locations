@@ -1,18 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import * as maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import CatalogPage from './CatalogPage';
 import { useHeatmap, usePublicConfig } from '../../hooks/useApi';
-
-type MapInstance = {
-  remove: () => void;
-  on: (event: string, cb: () => void) => void;
-  addSource: (id: string, source: object) => void;
-  addLayer: (layer: object) => void;
-};
-
-type MapLibreModule = {
-  Map?: new (opts: object) => MapInstance;
-  default?: { Map: new (opts: object) => MapInstance };
-};
 
 export default function GlobeView() {
   const { data: config } = usePublicConfig();
@@ -23,15 +13,11 @@ export default function GlobeView() {
   useEffect(() => {
     if (config && config.globe === false) return;
     if (!host.current) return;
-    let map: MapInstance | null = null;
+    let map: maplibregl.Map | null = null;
     let cancelled = false;
     void (async () => {
       try {
-        const mod = (await import('maplibre-gl')) as MapLibreModule;
-        await import('maplibre-gl/dist/maplibre-gl.css');
         if (cancelled || !host.current) return;
-        const MapCtor = mod.Map ?? mod.default?.Map;
-        if (!MapCtor) throw new Error('Globe failed to load');
         const styleRes = await fetch('/api/config', { credentials: 'include' });
         const cfg = (await styleRes.json()) as { mapTileDark?: string; mapAttr?: string };
         const tiles = [cfg.mapTileDark || 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'].map((u) =>
@@ -40,7 +26,7 @@ export default function GlobeView() {
         const accent =
           getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() ||
           'var(--accent)';
-        const instance = new MapCtor({
+        const instance = new maplibregl.Map({
           container: host.current,
           style: {
             version: 8,
@@ -51,8 +37,8 @@ export default function GlobeView() {
           },
           center: [0, 20],
           zoom: 1.4,
-          projection: { type: 'globe' },
         });
+        instance.setProjection({ type: 'globe' });
         instance.on('load', () => {
           const features = points.map((p) => ({
             type: 'Feature' as const,
