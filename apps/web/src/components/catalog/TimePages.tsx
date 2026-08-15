@@ -2,8 +2,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMemo } from 'react';
 import { addMonths, addWeeks, format, parseISO, startOfWeek } from 'date-fns';
 import CatalogPage from './CatalogPage';
-import DayCalendar from '../DayCalendar';
-import MapView from '../Map';
+import DayCalendar from '../explorer/DayCalendar';
+import MapView from '../explorer/Map';
 import { Button } from '../ui/button';
 import { useDays, useHeatmap } from '../../hooks/useApi';
 import { formatMilesOrKm } from '../../utils/format';

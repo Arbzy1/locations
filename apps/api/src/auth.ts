@@ -9,7 +9,7 @@ import {
   user,
   verification,
 } from "@locations/db";
-import type { Env } from "./env";
+import { googleAuthEnabled, type Env } from "./env";
 import { allowedOrigins } from "./cors";
 import { sendEmail, isDemoRecipient } from "./email";
 import type { EmailKind } from "./email";
@@ -37,6 +37,7 @@ export function createAuth(env: Env, overlay?: { disableSignUp?: boolean }) {
   const db = createHttpDb(env.DATABASE_URL);
   const secure = env.BETTER_AUTH_URL.startsWith("https://");
   const disableSignUp = overlay?.disableSignUp ?? env.DISABLE_SIGNUP === "true";
+  const google = googleAuthEnabled(env);
 
   return betterAuth({
     database: drizzleAdapter(db, {
@@ -45,6 +46,23 @@ export function createAuth(env: Env, overlay?: { disableSignUp?: boolean }) {
     }),
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
+    ...(google
+      ? {
+          socialProviders: {
+            google: {
+              clientId: env.GOOGLE_CLIENT_ID!.trim(),
+              clientSecret: env.GOOGLE_CLIENT_SECRET!.trim(),
+              disableSignUp,
+            },
+          },
+        }
+      : {}),
+    account: {
+      accountLinking: {
+        enabled: true,
+        trustedProviders: google ? (["google"] as const) : [],
+      },
+    },
     emailAndPassword: {
       enabled: true,
       disableSignUp,

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from './ui/button';
-import { enterMotion } from '../lib/motion';
-import { usePublicConfig } from '../hooks/useApi';
-import { useSession } from '../lib/auth';
+import { Button } from '../ui/button';
+import { enterMotion } from '../../lib/motion';
+import { usePublicConfig } from '../../hooks/useApi';
+import { useSession } from '../../lib/auth';
 
 const STORAGE_KEY = 'locations-demo-tour';
 

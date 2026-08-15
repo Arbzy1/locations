@@ -20,7 +20,7 @@ export type ResolvedOpsFlags = {
   demoTour: boolean;
 };
 
-export type FlagRow = { key: string; value: string };
+export type FlagRow = { key: string; value: string; updatedBy: string | null; updatedAt: string | null };
 
 const TTL_MS = 5_000;
 let rowCache: { at: number; rows: FlagRow[] } | null = null;
@@ -59,15 +59,30 @@ export function clearOpsFlagCache(): void {
   rowCache = null;
 }
 
-function dbQueryable(db: unknown): db is { select: (...args: never[]) => unknown } {
+function dbQueryable(db: unknown): db is {
+  select: (...args: never[]) => unknown;
+  delete: (...args: never[]) => unknown;
+} {
   return typeof (db as { select?: unknown })?.select === "function";
 }
 
 export async function loadFlagRows(env: Env): Promise<FlagRow[]> {
   const db = getDb(env);
   if (!dbQueryable(db)) return [];
-  const rows = await db.select({ key: opsFlags.key, value: opsFlags.value }).from(opsFlags);
-  return rows.map((r) => ({ key: r.key, value: r.value }));
+  const rows = await db
+    .select({
+      key: opsFlags.key,
+      value: opsFlags.value,
+      updatedBy: opsFlags.updatedBy,
+      updatedAt: opsFlags.updatedAt,
+    })
+    .from(opsFlags);
+  return rows.map((r) => ({
+    key: r.key,
+    value: r.value,
+    updatedBy: r.updatedBy ?? null,
+    updatedAt: r.updatedAt?.toISOString?.() ?? (r.updatedAt ? String(r.updatedAt) : null),
+  }));
 }
 
 export async function resolveOpsFlags(env: Env, now = Date.now()): Promise<ResolvedOpsFlags> {
@@ -87,6 +102,7 @@ export async function listToggleFlags(env: Env): Promise<{
   flags: ResolvedOpsFlags;
   overlay: Record<OpsFlagKey, string | null>;
   source: Record<OpsFlagKey, "db" | "env">;
+  meta: Record<OpsFlagKey, { updatedBy: string | null; updatedAt: string | null }>;
 }> {
   const envFlags = flagsFromEnv(env);
   let rows: FlagRow[] = [];
@@ -95,12 +111,12 @@ export async function listToggleFlags(env: Env): Promise<{
   } catch {
     rows = [];
   }
-  const byKey = new Map(rows.map((r) => [r.key, r.value]));
+  const byKey = new Map(rows.map((r) => [r.key, r]));
   const overlay = {
-    signup_disabled: byKey.get("signup_disabled") ?? null,
-    landing_enabled: byKey.get("landing_enabled") ?? null,
-    globe_enabled: byKey.get("globe_enabled") ?? null,
-    demo_tour: byKey.get("demo_tour") ?? null,
+    signup_disabled: byKey.get("signup_disabled")?.value ?? null,
+    landing_enabled: byKey.get("landing_enabled")?.value ?? null,
+    globe_enabled: byKey.get("globe_enabled")?.value ?? null,
+    demo_tour: byKey.get("demo_tour")?.value ?? null,
   };
   const source: Record<OpsFlagKey, "db" | "env"> = {
     signup_disabled: overlay.signup_disabled !== null ? "db" : "env",
@@ -108,7 +124,26 @@ export async function listToggleFlags(env: Env): Promise<{
     globe_enabled: overlay.globe_enabled !== null ? "db" : "env",
     demo_tour: overlay.demo_tour !== null ? "db" : "env",
   };
-  return { flags: mergeFlags(envFlags, rows), overlay, source };
+  const emptyMeta = { updatedBy: null as string | null, updatedAt: null as string | null };
+  const flagMeta = (key: OpsFlagKey) => {
+    const row = byKey.get(key);
+    if (!row) return emptyMeta;
+    return { updatedBy: row.updatedBy ?? null, updatedAt: row.updatedAt ?? null };
+  };
+  const meta: Record<OpsFlagKey, { updatedBy: string | null; updatedAt: string | null }> = {
+    signup_disabled: flagMeta("signup_disabled"),
+    landing_enabled: flagMeta("landing_enabled"),
+    globe_enabled: flagMeta("globe_enabled"),
+    demo_tour: flagMeta("demo_tour"),
+  };
+  return { flags: mergeFlags(envFlags, rows), overlay, source, meta };
+}
+
+export async function deleteOpsFlag(env: Env, key: OpsFlagKey): Promise<void> {
+  const db = getDb(env);
+  if (!dbQueryable(db)) return;
+  await db.delete(opsFlags).where(eq(opsFlags.key, key));
+  clearOpsFlagCache();
 }
 
 export async function upsertOpsFlag(

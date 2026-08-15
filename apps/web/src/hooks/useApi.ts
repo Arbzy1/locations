@@ -647,6 +647,7 @@ export function usePersonality() {
 export function usePublicConfig() {
   return useQuery<{
     signupDisabled?: boolean;
+    googleAuth?: boolean;
     globe?: boolean;
     billingConfigured?: boolean;
     customTiles?: boolean;

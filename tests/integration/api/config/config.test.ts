@@ -24,6 +24,7 @@ describe("GET /api/config", () => {
     expect(body.customTiles).toBe(false);
     expect(body.globe).toBe(true);
     expect(body.billingConfigured).toBe(false);
+    expect(body.googleAuth).toBe(false);
     expect(body.flags).toEqual({ globe: true, demoTour: true, landing: true });
     expect(typeof body.mapTileDark).toBe("string");
     expect(body.mapStyleDark).toBeNull();
@@ -54,5 +55,29 @@ describe("GET /api/config", () => {
     };
     expect(body.globe).toBe(false);
     expect(body.flags).toEqual({ globe: false, demoTour: false, landing: false });
+  });
+
+  it("reports googleAuth only when both Google secrets are set", async () => {
+    const enabled = await requestApp(
+      app,
+      "/api/config",
+      {},
+      testEnv({
+        GOOGLE_CLIENT_ID: "gid.apps.googleusercontent.com",
+        GOOGLE_CLIENT_SECRET: "gsec",
+      }),
+    );
+    const enabledBody = (await enabled.json()) as { googleAuth: boolean };
+    expect(enabledBody.googleAuth).toBe(true);
+    expect(JSON.stringify(enabledBody)).not.toContain("gid.apps.googleusercontent.com");
+    expect(JSON.stringify(enabledBody)).not.toContain("gsec");
+
+    const idOnly = await requestApp(
+      app,
+      "/api/config",
+      {},
+      testEnv({ GOOGLE_CLIENT_ID: "gid.apps.googleusercontent.com" }),
+    );
+    expect(((await idOnly.json()) as { googleAuth: boolean }).googleAuth).toBe(false);
   });
 });

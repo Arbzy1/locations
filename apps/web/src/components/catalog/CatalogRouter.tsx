@@ -8,7 +8,7 @@ import AdminShell from '../admin/AdminShell';
 import { ComparePage, ReplayPage } from './CompareReplay';
 import GlobeView from './GlobeView';
 import CatalogPage from './CatalogPage';
-import YearReviewView from '../YearReviewView';
+import YearReviewView from '../explorer/YearReviewView';
 
 export default function CatalogRouter() {
   const { pathname } = useLocation();

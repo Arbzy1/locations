@@ -14,29 +14,31 @@ import { UnitsProvider } from './lib/units';
 import { loadNavExpanded, saveNavExpanded } from './lib/nav-memory';
 import { interactiveMotion, reducedInteractiveMotion } from './lib/motion';
 import { cn } from './lib/utils';
-import HotspotsView from './components/HotspotsView';
-import DayView from './components/DayView';
-import DayTripsView from './components/DayTripsView';
-import InsightsView from './components/InsightsView';
-import SettingsView from './components/SettingsView';
-import LoginPage from './components/LoginPage';
-import SignupPage from './components/SignupPage';
-import ForgotPage from './components/ForgotPage';
-import ResetPasswordPage from './components/ResetPasswordPage';
-import { CookiesRoute, PrivacyRoute, TermsRoute } from './components/LegalRoutes';
+import HotspotsView from './components/explorer/HotspotsView';
+import DayView from './components/explorer/DayView';
+import DayTripsView from './components/explorer/DayTripsView';
+import InsightsView from './components/explorer/InsightsView';
+import SettingsView from './components/settings/SettingsView';
+import LoginPage from './components/auth/LoginPage';
+import SignupPage from './components/auth/SignupPage';
+import ForgotPage from './components/auth/ForgotPage';
+import ResetPasswordPage from './components/auth/ResetPasswordPage';
+import { CookiesRoute, PrivacyRoute, TermsRoute } from './components/legal/LegalRoutes';
 import LandingPage from './components/marketing/LandingPage';
 import PricingPage from './components/marketing/PricingPage';
 import StatusPage from './components/marketing/StatusPage';
 import ChangelogPage from './components/marketing/ChangelogPage';
-import DemoTour from './components/DemoTour';
-import ThemeToggle from './components/ThemeToggle';
-import CommandPalette from './components/CommandPalette';
+import DemoTour from './components/shell/DemoTour';
+import ThemeToggle from './components/shell/ThemeToggle';
+import CommandPalette from './components/shell/CommandPalette';
 import { Button } from './components/ui/button';
-import ImportDropZone from './components/ImportDropZone';
+import ImportDropZone from './components/explorer/ImportDropZone';
 import { Toaster } from './components/ui/sonner';
-import ExploreMenu from './components/ExploreMenu';
+import ExploreMenu from './components/shell/ExploreMenu';
 import CatalogRouter from './components/catalog/CatalogRouter';
+import ImportCutIn from './components/ImportCutIn';
 import { isCatalogPath, catalogTitle } from './lib/paths';
+import { shouldFireImportCutIn, type ImportCutInJob } from './lib/import-cut-in';
 import { adminPageLabel } from './components/admin/adminNav';
 import {
   Flame,
@@ -203,8 +205,12 @@ function AppContent() {
   const dayViewDate = params.date ?? '';
   const [moreOpen, setMoreOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState(loadNavExpanded);
+  const [cutInJob, setCutInJob] = useState<ImportCutInJob | null>(null);
+  const [hostSplit, setHostSplit] = useState(false);
   const reduceMotion = useReducedMotion();
   const navReady = useRef(false);
+  const cutInPrimed = useRef(false);
+  const cutInPrev = useRef<{ id: string; status: string } | null>(null);
   const { data: routeProgress } = useRouteProgress();
   const { data: overview, isLoading: overviewLoading } = useOverview();
   const { data: importStatus } = useImportStatus({
@@ -212,6 +218,7 @@ function AppContent() {
   });
   const { data: session } = useSession();
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
+  const sessionUserId = (session?.user as { id?: string } | undefined)?.id;
   const isStaff =
     (session?.user as { role?: string } | undefined)?.role === 'admin' ||
     (session?.user as { role?: string } | undefined)?.role === 'developer';
@@ -237,6 +244,26 @@ function AppContent() {
     isDemo ||
     (overview?.total_visits ?? 0) > 0 ||
     (overview?.total_activities ?? 0) > 0;
+
+  useEffect(() => {
+    cutInPrimed.current = false;
+    cutInPrev.current = null;
+  }, [sessionUserId]);
+
+  useEffect(() => {
+    if (!importStatus) return;
+    const latest = importStatus.latestJob;
+    const snapshot = latest ? { id: latest.id, status: latest.status } : null;
+    if (!cutInPrimed.current) {
+      cutInPrimed.current = true;
+      cutInPrev.current = snapshot;
+      return;
+    }
+    if (shouldFireImportCutIn(cutInPrev.current, snapshot) && latest && !isDemo) {
+      setCutInJob(latest);
+    }
+    cutInPrev.current = snapshot;
+  }, [importStatus, isDemo, sessionUserId]);
 
   useEffect(() => {
     if (isDemo || overviewLoading || importing || hasData) return;
@@ -288,6 +315,14 @@ function AppContent() {
 
   return (
     <div className="relative flex h-dvh w-screen flex-col overflow-hidden bg-bg safe-pt safe-px">
+      <ImportCutIn
+        job={cutInJob}
+        onHostSplit={setHostSplit}
+        onDone={() => {
+          setCutInJob(null);
+          setHostSplit(false);
+        }}
+      />
       {isDemo && (
         <div className="flex shrink-0 flex-col gap-2 border-b border-accent/30 bg-accent/10 px-4 py-2 text-xs text-accent sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <span>
@@ -309,10 +344,15 @@ function AppContent() {
           </Button>
         </div>
       )}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div
+        className={cn(
+          'import-cut-in-host flex min-h-0 flex-1 overflow-hidden',
+          hostSplit && 'import-cut-in-host--split',
+        )}
+      >
         <motion.aside
           className={cn(
-            'hidden shrink-0 flex-col gap-1 overflow-hidden border-r border-border bg-surface py-4 lg:flex',
+            'import-cut-in-host__upper hidden shrink-0 flex-col gap-1 overflow-hidden border-r border-border bg-surface py-4 lg:flex',
             navExpanded ? 'items-stretch px-2' : 'items-center',
           )}
           initial={false}
@@ -417,7 +457,7 @@ function AppContent() {
           </div>
         </motion.aside>
 
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="import-cut-in-host__lower relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div className="flex items-center gap-3 border-b border-border px-4 py-2">
             <CommandPalette />
           </div>

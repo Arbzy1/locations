@@ -7,3 +7,10 @@ export const authClient = createAuthClient({
 });
 
 export const { useSession, signIn, signOut, signUp } = authClient;
+
+export function continueWithGoogle() {
+  return authClient.signIn.social({
+    provider: 'google',
+    callbackURL: '/hotspots',
+  });
+}

@@ -8,30 +8,30 @@ import {
   YAxis,
 } from 'recharts';
 import { Flame, Footprints, Sparkles } from 'lucide-react';
-import StatCard from './StatCard';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
+import StatCard from '../shell/StatCard';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 import {
   useHourOfWeek,
   useLapsedPlaces,
   usePersonality,
   usePlaceDeltas,
   useStreaks,
-} from '../hooks/useApi';
-import type { MonthlyStats, PersonalityTag, YearlyStats } from '../types';
-import { MODE_LABELS } from '../types';
-import { formatMilesOrKm, type DistanceUnit } from '../utils/format';
-import { useUnits } from '../lib/units';
-import { useTheme } from '../lib/theme';
-import { currentMonthYm, isStreaks } from '../lib/year-review';
+} from '../../hooks/useApi';
+import type { MonthlyStats, PersonalityTag, YearlyStats } from '../../types';
+import { MODE_LABELS } from '../../types';
+import { formatMilesOrKm, type DistanceUnit } from '../../utils/format';
+import { useUnits } from '../../lib/units';
+import { useTheme } from '../../lib/theme';
+import { currentMonthYm, isStreaks } from '../../lib/year-review';
 import {
   loadDismissedPersonality,
   saveDismissedPersonality,
   visiblePersonality,
-} from '../lib/personality';
-import { WALK_GOAL_KEY, loadWalkGoal, saveWalkGoal, walkProgress, type WalkGoal } from '../lib/walk-goal';
-import { isGridCluster } from '../lib/trips';
+} from '../../lib/personality';
+import { WALK_GOAL_KEY, loadWalkGoal, saveWalkGoal, walkProgress, type WalkGoal } from '../../lib/walk-goal';
+import { isGridCluster } from '../../lib/trips';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MODE_CSS: Record<string, string> = {

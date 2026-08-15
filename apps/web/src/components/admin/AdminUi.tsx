@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
 import { Skeleton } from "../ui/skeleton";
 import type { AdminTone } from "../../lib/admin-status";
 
@@ -131,4 +132,21 @@ export function AdminSkeletonList({ rows = 4 }: { rows?: number }) {
 
 export function AdminEmpty({ children }: { children: ReactNode }) {
   return <p className="text-sm text-text-muted">{children}</p>;
+}
+
+export function AdminLoadMore({
+  onClick,
+  disabled,
+  hidden,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  hidden?: boolean;
+}) {
+  if (hidden) return null;
+  return (
+    <Button type="button" variant="outline" className="mt-3" title="Load more rows" onClick={onClick} disabled={disabled}>
+      Load more
+    </Button>
+  );
 }

@@ -1,8 +1,8 @@
 import { CreditCard, LayoutDashboard, Lock, Ruler, Upload, User } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { Button } from "./ui/button";
-import { cn } from "../lib/utils";
-import type { SettingsSection } from "../lib/settings-section";
+import { Button } from "../ui/button";
+import { cn } from "../../lib/utils";
+import type { SettingsSection } from "../../lib/settings-section";
 
 const ITEMS: {
   id: SettingsSection;

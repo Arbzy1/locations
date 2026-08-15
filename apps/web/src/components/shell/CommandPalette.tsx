@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { Dialog, DialogContent } from './ui/dialog';
-import { Sheet, SheetContent } from './ui/sheet';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { useBreakpoint } from '../hooks/useBreakpoint';
-import { useDays, usePlaceLabels, useSearch } from '../hooks/useApi';
-import { EXPLORE_LINKS, placePath } from '../lib/paths';
+import { Dialog, DialogContent } from '../ui/dialog';
+import { Sheet, SheetContent } from '../ui/sheet';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { useDays, usePlaceLabels, useSearch } from '../../hooks/useApi';
+import { EXPLORE_LINKS, placePath } from '../../lib/paths';
 import {
   chordTarget,
   isPasswordField,
   isTypingTarget,
   parseCommandQuery,
-} from '../lib/command-query';
-import { gpsHotspotsPath, hasSavableFilters } from '../lib/view-search-params';
+} from '../../lib/command-query';
+import { gpsHotspotsPath, hasSavableFilters } from '../../lib/view-search-params';
 import {
   deleteFilterPreset,
   loadFilterPresets,
@@ -23,7 +23,7 @@ import {
   saveFilterPreset,
   type FilterPreset,
   type RecentPlace,
-} from '../lib/nav-memory';
+} from '../../lib/nav-memory';
 
 type Row = {
   id: string;

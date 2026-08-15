@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
 import { Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
-import type { DataSourceInfo } from "../types";
-import { useImportStatus, useInvalidateLocationQueries, useSources } from "../hooks/useApi";
-import { useSession } from "../lib/auth";
-import { PLACE_COLOR_TOKENS, sourceTokenVar } from "../lib/hotspots";
-import { Button } from "./ui/button";
-import { Card, CardTitle } from "./ui/card";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Dialog, DialogContent } from "./ui/dialog";
-import { AlertDialog, AlertDialogContent } from "./ui/alert-dialog";
-import ImportDropZone, { TIMEZONE_SKEW_COPY } from "./ImportDropZone";
+import type { DataSourceInfo } from "../../types";
+import { useImportStatus, useInvalidateLocationQueries, useSources } from "../../hooks/useApi";
+import { useSession } from "../../lib/auth";
+import { PLACE_COLOR_TOKENS, sourceTokenVar } from "../../lib/hotspots";
+import { Button } from "../ui/button";
+import { Card, CardTitle } from "../ui/card";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { Dialog, DialogContent } from "../ui/dialog";
+import { AlertDialog, AlertDialogContent } from "../ui/alert-dialog";
+import ImportDropZone, { TIMEZONE_SKEW_COPY } from "../explorer/ImportDropZone";
 
 type Props = {
   onMessage: (msg: string) => void;

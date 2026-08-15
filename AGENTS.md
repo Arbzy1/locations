@@ -58,14 +58,14 @@ GOOD: Private explorer - heatmaps, day views, and trips.
 <!-- sync:cursor-rule name="password-input" order="20" globs="apps/web/**/*.{tsx,jsx}" -->
 Never use a bare `<input type="password">` in the web app.
 
-Use [`PasswordInput`](apps/web/src/components/PasswordInput.tsx), which wraps the shadcn Input and includes a show/hide toggle with **react-icons** (`FaEye` / `FaEyeSlash`).
+Use [`PasswordInput`](apps/web/src/components/auth/PasswordInput.tsx), which wraps the shadcn Input and includes a show/hide toggle with **react-icons** (`FaEye` / `FaEyeSlash`).
 
 ```tsx
 // BAD
 <input type="password" value={password} onChange={...} />
 
 // GOOD
-import PasswordInput from './PasswordInput';
+import PasswordInput from '../auth/PasswordInput';
 
 <PasswordInput
   required
@@ -163,7 +163,7 @@ The web app supports dark and light mode via `html[data-theme="dark"|"light"]` a
 
 **Map tiles**
 
-- Default basemap should follow theme. Prefer env-configured commercial tiles; Carto `dark_all` / `light_all` is the fallback as in [`Map.tsx`](apps/web/src/components/Map.tsx).
+- Default basemap should follow theme. Prefer env-configured commercial tiles; Carto `dark_all` / `light_all` is the fallback as in [`Map.tsx`](apps/web/src/components/explorer/Map.tsx).
 
 **Toggle**
 
@@ -223,7 +223,7 @@ Hover styles for polish are fine; hover as the only way to reach content is not.
 
 ### Map responsiveness
 
-<!-- sync:cursor-rule name="ui-map-responsive" order="80" globs="apps/web/src/components/Map.tsx,apps/web/src/components/**/*View.tsx" -->
+<!-- sync:cursor-rule name="ui-map-responsive" order="80" globs="apps/web/src/components/explorer/Map.tsx,apps/web/src/components/**/*View.tsx" -->
 Leaflet maps must stay usable when the container is small or resizes.
 
 **Controls and legend**
@@ -235,7 +235,7 @@ Leaflet maps must stay usable when the container is small or resizes.
 
 **Size invalidation**
 
-- Call `invalidateSize` (or bump `sizeSignal` on [`Map.tsx`](apps/web/src/components/Map.tsx)) when panels open/close, sheets resize, or breakpoints change.
+- Call `invalidateSize` (or bump `sizeSignal` on [`Map.tsx`](apps/web/src/components/explorer/Map.tsx)) when panels open/close, sheets resize, or breakpoints change.
 - Listen for window resize as a baseline.
 
 **Viewport**
@@ -330,7 +330,7 @@ Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_s
 
 ### Maps and vendors
 
-<!-- sync:cursor-rule name="maps-vendors" order="150" globs="apps/api/**/*,apps/web/src/components/Map.tsx" -->
+<!-- sync:cursor-rule name="maps-vendors" order="150" globs="apps/api/**/*,apps/web/src/components/explorer/Map.tsx" -->
 - Tile, routing, and geocode hosts come from env (commercial providers). Public OSRM/Nominatim/OSM tiles are fallbacks for local dev only.
 - API keys stay in Worker secrets, never `VITE_*`.
 - Initial map viewport and clusters are derived from the tenant’s data, not hardcoded UK points.

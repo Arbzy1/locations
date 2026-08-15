@@ -57,14 +57,14 @@ GOOD: Private explorer - heatmaps, day views, and trips.
 
 Never use a bare `<input type="password">` in the web app.
 
-Use [`PasswordInput`](apps/web/src/components/PasswordInput.tsx), which wraps the shadcn Input and includes a show/hide toggle with **react-icons** (`FaEye` / `FaEyeSlash`).
+Use [`PasswordInput`](apps/web/src/components/auth/PasswordInput.tsx), which wraps the shadcn Input and includes a show/hide toggle with **react-icons** (`FaEye` / `FaEyeSlash`).
 
 ```tsx
 // BAD
 <input type="password" value={password} onChange={...} />
 
 // GOOD
-import PasswordInput from './PasswordInput';
+import PasswordInput from '../auth/PasswordInput';
 
 <PasswordInput
   required
@@ -154,7 +154,7 @@ The web app supports dark and light mode via `html[data-theme="dark"|"light"]` a
 
 **Map tiles**
 
-- Default basemap should follow theme. Prefer env-configured commercial tiles; Carto `dark_all` / `light_all` is the fallback as in [`Map.tsx`](apps/web/src/components/Map.tsx).
+- Default basemap should follow theme. Prefer env-configured commercial tiles; Carto `dark_all` / `light_all` is the fallback as in [`Map.tsx`](apps/web/src/components/explorer/Map.tsx).
 
 **Toggle**
 
@@ -220,7 +220,7 @@ Leaflet maps must stay usable when the container is small or resizes.
 
 **Size invalidation**
 
-- Call `invalidateSize` (or bump `sizeSignal` on [`Map.tsx`](apps/web/src/components/Map.tsx)) when panels open/close, sheets resize, or breakpoints change.
+- Call `invalidateSize` (or bump `sizeSignal` on [`Map.tsx`](apps/web/src/components/explorer/Map.tsx)) when panels open/close, sheets resize, or breakpoints change.
 - Listen for window resize as a baseline.
 
 **Viewport**

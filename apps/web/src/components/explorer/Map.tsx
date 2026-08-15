@@ -10,19 +10,19 @@ import {
 import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONSource, Map as MLMap, Marker, PositionAnchor, StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type { Visit, Activity, HeatmapPoint, Connector, MapFocusTarget, HotspotLabel } from '../types';
-import { MODE_LABELS } from '../types';
-import { formatTime, formatDistance, formatDuration } from '../utils/format';
-import { useTheme } from '../lib/theme';
+import type { Visit, Activity, HeatmapPoint, Connector, MapFocusTarget, HotspotLabel } from '../../types';
+import { MODE_LABELS } from '../../types';
+import { formatTime, formatDistance, formatDuration } from '../../utils/format';
+import { useTheme } from '../../lib/theme';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useUnits } from '../lib/units';
-import { useBreakpoint } from '../hooks/useBreakpoint';
-import { useSession } from '../lib/auth';
-import { escapeHtml } from '../lib/escapeHtml';
-import { Dialog, DialogContent } from './ui/dialog';
-import { Input } from './ui/input';
-import { Button } from './ui/button';
-import { Label } from './ui/label';
+import { useUnits } from '../../lib/units';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { useSession } from '../../lib/auth';
+import { escapeHtml } from '../../lib/escapeHtml';
+import { Dialog, DialogContent } from '../ui/dialog';
+import { Input } from '../ui/input';
+import { Button } from '../ui/button';
+import { Label } from '../ui/label';
 import {
   CARTO_DARK,
   CARTO_LIGHT,
@@ -30,14 +30,14 @@ import {
   rasterStyle,
   resolveRasterTemplate,
   type BasemapId,
-} from '../lib/mapStyle';
-import { dashClass, extendBounds, getArrowPoints, lineCoords, toLngLat } from '../lib/mapGeometry';
-import { activityPopupHtml, connectorPopupHtml, getJourneyColor, visitPopupHtml } from '../lib/mapPopups';
-import { pathLengthMeters } from '../lib/mapMeasure';
-import { spiderfyOffsets } from '../lib/mapSpiderfy';
-import { lookaroundLinksHtml } from '../lib/mapLinks';
-import type { MapBookmark } from '../lib/mapBookmarks';
-import { MAX_MAP_BOOKMARKS } from '../lib/mapBookmarks';
+} from '../../lib/mapStyle';
+import { dashClass, extendBounds, getArrowPoints, lineCoords, toLngLat } from '../../lib/mapGeometry';
+import { activityPopupHtml, connectorPopupHtml, getJourneyColor, visitPopupHtml } from '../../lib/mapPopups';
+import { pathLengthMeters } from '../../lib/mapMeasure';
+import { spiderfyOffsets } from '../../lib/mapSpiderfy';
+import { lookaroundLinksHtml } from '../../lib/mapLinks';
+import type { MapBookmark } from '../../lib/mapBookmarks';
+import { MAX_MAP_BOOKMARKS } from '../../lib/mapBookmarks';
 import MapChrome from './MapChrome';
 
 type FC = {

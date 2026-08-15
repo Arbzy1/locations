@@ -7,24 +7,24 @@ import {
   useInvalidateLocationQueries,
   useSources,
   usePlaceLabels,
-} from '../hooks/useApi';
-import { useBreakpoint } from '../hooks/useBreakpoint';
-import { useSession } from '../lib/auth';
+} from '../../hooks/useApi';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { useSession } from '../../lib/auth';
 import MapView from './Map';
-import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from './MobilePanel';
+import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from '../shell/MobilePanel';
 import { Flame, EyeOff, Eye, Star } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { placePath } from '../lib/paths';
-import { formatDuration } from '../utils/format';
-import type { HeatmapPoint, HotspotLabel, MapFocusTarget } from '../types';
-import { Input } from './ui/input';
-import { Button } from './ui/button';
+import { placePath } from '../../lib/paths';
+import { formatDuration } from '../../utils/format';
+import type { HeatmapPoint, HotspotLabel, MapFocusTarget } from '../../types';
+import { Input } from '../ui/input';
+import { Button } from '../ui/button';
 import FilterPresets from './FilterPresets';
 import {
   parseHotspotsQuery,
   serializeHotspotsQuery,
   type HotspotsQuery,
-} from '../lib/view-search-params';
+} from '../../lib/view-search-params';
 import {
   PLACE_COLOR_TOKENS,
   filterAndRankPlaces,
@@ -36,7 +36,7 @@ import {
   uniqueLabelTags,
   uniqueTopTypes,
   type PlaceLabelMeta,
-} from '../lib/hotspots';
+} from '../../lib/hotspots';
 
 type HotspotArea = HeatmapPoint & {
   label: string;

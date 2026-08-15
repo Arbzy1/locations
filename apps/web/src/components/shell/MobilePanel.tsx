@@ -1,6 +1,6 @@
 import { useEffect, useId, type ReactNode } from 'react';
 import { ChevronUp, X } from 'lucide-react';
-import { useBreakpoint } from '../hooks/useBreakpoint';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 export type MobilePanelHeight = 'peek' | 'half' | 'full';
 

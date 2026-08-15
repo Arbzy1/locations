@@ -1,7 +1,7 @@
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import CatalogPage from './CatalogPage';
-import MapView from '../Map';
+import MapView from '../explorer/Map';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import {

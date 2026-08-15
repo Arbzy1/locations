@@ -1,8 +1,8 @@
 import { Pause, Play, Sun, Sunset } from 'lucide-react';
-import { Button } from './ui/button';
-import { formatTime } from '../utils/format';
-import { PLAYBACK_SPEEDS, type PlaybackSpeed } from '../lib/dayPlayback';
-import { cn } from '../lib/utils';
+import { Button } from '../ui/button';
+import { formatTime } from '../../utils/format';
+import { PLAYBACK_SPEEDS, type PlaybackSpeed } from '../../lib/dayPlayback';
+import { cn } from '../../lib/utils';
 
 interface Props {
   rangeStart: number;

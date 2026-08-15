@@ -2,16 +2,16 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useMemo } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Download } from 'lucide-react';
-import StatCard from './StatCard';
-import { Button } from './ui/button';
-import { usePlaceLabels, useYearReview, useYearlyStats } from '../hooks/useApi';
-import { formatMilesOrKm } from '../utils/format';
-import { useUnits } from '../lib/units';
-import { MODE_COLORS, MODE_LABELS } from '../types';
-import type { MultiDayTrip } from '../types';
-import { enterMotion } from '../lib/motion';
-import { downloadElementPng } from '../lib/insights-export';
-import { isGridCluster, multiDayTripLabel } from '../lib/trips';
+import StatCard from '../shell/StatCard';
+import { Button } from '../ui/button';
+import { usePlaceLabels, useYearReview, useYearlyStats } from '../../hooks/useApi';
+import { formatMilesOrKm } from '../../utils/format';
+import { useUnits } from '../../lib/units';
+import { MODE_COLORS, MODE_LABELS } from '../../types';
+import type { MultiDayTrip } from '../../types';
+import { enterMotion } from '../../lib/motion';
+import { downloadElementPng } from '../../lib/insights-export';
+import { isGridCluster, multiDayTripLabel } from '../../lib/trips';
 
 export default function YearReviewView() {
   const { year: yearParam } = useParams();

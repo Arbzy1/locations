@@ -4,8 +4,29 @@ const SECRETISH = /\b(sk_|whsec_|re_[A-Za-z0-9]|BEGIN [A-Z ]+PRIVATE KEY)/;
 export const ALLOWED_OPS_ROLES = ["user", "admin", "developer"] as const;
 export type OpsAssignableRole = (typeof ALLOWED_OPS_ROLES)[number];
 
+export const INVITE_OPS_ROLES = ["user", "developer"] as const;
+export type OpsInviteRole = (typeof INVITE_OPS_ROLES)[number];
+
+export const EMAIL_TEST_KINDS = ["password_changed"] as const;
+
 export function isAssignableOpsRole(role: string): role is OpsAssignableRole {
   return (ALLOWED_OPS_ROLES as readonly string[]).includes(role);
+}
+
+export function isInviteOpsRole(role: string): role is OpsInviteRole {
+  return (INVITE_OPS_ROLES as readonly string[]).includes(role);
+}
+
+export function sanitizeJobError(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let text = raw.replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  text = text.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted]");
+  text = text.replace(/https?:\/\/\S+/gi, "[url]");
+  if (SECRETISH.test(text)) return "Job failed";
+  if (/\b(-?\d{1,3}\.\d+),\s*(-?\d{1,3}\.\d+)\b/.test(text)) return "Job failed";
+  if (text.length > 160) text = `${text.slice(0, 157)}...`;
+  return text;
 }
 
 export function lastAdminDemoteBlocked(opts: {

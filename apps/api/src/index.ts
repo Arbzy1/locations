@@ -10,7 +10,7 @@ import {
   type TenantId,
   type PlaceColorToken,
 } from "@locations/db";
-import type { Env, ImportQueueMessage } from "./env";
+import { googleAuthEnabled, type Env, type ImportQueueMessage } from "./env";
 import { createAuth } from "./auth";
 import { corsOriginFor } from "./cors";
 import { blockDemo } from "./guards";
@@ -307,6 +307,7 @@ app.get("/api/config", async (c) => {
     customTiles: customTileHosts.length > 0,
     customTileHosts,
     signupDisabled: flags.signupDisabled,
+    googleAuth: googleAuthEnabled(c.env),
     globe: flags.globeEnabled,
     billingConfigured: Boolean(c.env.STRIPE_SECRET_KEY),
     flags: {

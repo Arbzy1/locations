@@ -3,6 +3,7 @@ import { isAdminRole, isStaffRole, withTenant } from "@locations/db";
 import type { Env } from "./env";
 import { getDb, staffTenantStats } from "./services";
 import { isOpsFlagKey, listToggleFlags, type OpsFlagKey } from "./ops-flags";
+import { sanitizeJobError } from "./admin-guards";
 import {
   getOpsAnalytics,
   getOpsBilling,
@@ -12,12 +13,19 @@ import {
   getOpsExports,
   getOpsImports,
   getOpsMaps,
+  getOpsMapsProbe,
   getOpsOverview,
   getOpsUserCard,
+  failOpsExportJob,
+  failOpsImportJob,
+  inviteOpsUser,
   listOpsAudit,
   listOpsUsers,
   patchOpsFlags,
+  resetOpsFlag,
   revokeOpsUserSessions,
+  sendOpsEmailTest,
+  sendOpsPasswordReset,
   setOpsUserRole,
   verifyOpsUser,
   wipeOpsUser,
@@ -83,7 +91,12 @@ export function registerAdminRoutes(app: AdminApp) {
     if ("error" in gate) return gate.error;
     const db = getDb(c.env);
     const tenant = c.get("tenant");
-    return c.json(await withTenant(db, tenant, (tx) => staffTenantStats(tx, tenant)));
+    const stats = await withTenant(db, tenant, (tx) => staffTenantStats(tx, tenant));
+    return c.json({
+      ...stats,
+      stuckJobs: stats.stuckJobs.map((job) => ({ ...job, error: sanitizeJobError(job.error) })),
+      recentJobs: stats.recentJobs.map((job) => ({ ...job, error: sanitizeJobError(job.error) })),
+    });
   });
 
   app.get("/api/admin/overview", async (c) => {
@@ -118,15 +131,42 @@ export function registerAdminRoutes(app: AdminApp) {
     return c.json(await listToggleFlags(c.env));
   });
 
+  app.post("/api/admin/flags/reset", async (c) => {
+    const gate = requireAdmin(c);
+    if ("error" in gate) return gate.error;
+    const limited = rejectMutLimit(c);
+    if (limited) return limited;
+    const body = (await c.req.json().catch(() => null)) as { key?: string } | null;
+    const result = await resetOpsFlag(c.env, gate.user, body?.key ?? "");
+    if ("error" in result) return c.json({ error: result.error }, result.status);
+    console.log(JSON.stringify({ userId: gate.user.id, action: "flags_reset", ok: true }));
+    return c.json(await listToggleFlags(c.env));
+  });
+
   app.get("/api/admin/users", async (c) => {
     const gate = requireStaff(c);
     if ("error" in gate) return gate.error;
     const url = new URL(c.req.url);
     const q = url.searchParams.get("q") ?? undefined;
     const cursor = url.searchParams.get("cursor") ?? undefined;
+    const role = url.searchParams.get("role") ?? undefined;
+    const verified = url.searchParams.get("verified") ?? undefined;
+    const billing = url.searchParams.get("billing") ?? undefined;
     const limitRaw = Number(url.searchParams.get("limit") ?? "25");
     const limit = Number.isFinite(limitRaw) ? limitRaw : 25;
-    return c.json(await listOpsUsers(c.env, { q, cursor, limit }));
+    return c.json(await listOpsUsers(c.env, { q, cursor, limit, role, verified, billing }));
+  });
+
+  app.post("/api/admin/users", async (c) => {
+    const gate = requireAdmin(c);
+    if ("error" in gate) return gate.error;
+    const limited = rejectMutLimit(c);
+    if (limited) return limited;
+    const body = (await c.req.json().catch(() => null)) as { email?: string; name?: string; role?: string } | null;
+    const result = await inviteOpsUser(c.env, gate.user, body ?? {});
+    if ("error" in result) return c.json({ error: result.error }, result.status);
+    console.log(JSON.stringify({ userId: gate.user.id, action: "invite", ok: true }));
+    return c.json(result);
   });
 
   app.get("/api/admin/users/:id", async (c) => {
@@ -177,6 +217,17 @@ export function registerAdminRoutes(app: AdminApp) {
     return c.json(result);
   });
 
+  app.post("/api/admin/users/:id/send-reset", async (c) => {
+    const gate = requireAdmin(c);
+    if ("error" in gate) return gate.error;
+    const limited = rejectMutLimit(c);
+    if (limited) return limited;
+    const result = await sendOpsPasswordReset(c.env, gate.user, c.req.param("id"));
+    if ("error" in result) return c.json({ error: result.error }, result.status);
+    console.log(JSON.stringify({ userId: gate.user.id, action: "send_reset", ok: true }));
+    return c.json(result);
+  });
+
   app.post("/api/admin/users/:id/wipe", async (c) => {
     const gate = requireAdmin(c);
     if ("error" in gate) return gate.error;
@@ -197,7 +248,26 @@ export function registerAdminRoutes(app: AdminApp) {
   app.get("/api/admin/imports", async (c) => {
     const gate = requireStaff(c);
     if ("error" in gate) return gate.error;
-    return c.json(await getOpsImports(c.env, new URL(c.req.url).searchParams.get("cursor") ?? undefined));
+    const url = new URL(c.req.url);
+    return c.json(await getOpsImports(c.env, url.searchParams.get("cursor") ?? undefined, url.searchParams.get("status") ?? undefined));
+  });
+
+  app.post("/api/admin/imports/:userId/jobs/:jobId/fail", async (c) => {
+    const gate = requireAdmin(c);
+    if ("error" in gate) return gate.error;
+    const limited = rejectMutLimit(c);
+    if (limited) return limited;
+    const body = (await c.req.json().catch(() => null)) as { confirm?: string } | null;
+    const result = await failOpsImportJob(
+      c.env,
+      gate.user,
+      c.req.param("userId"),
+      c.req.param("jobId"),
+      body?.confirm ?? "",
+    );
+    if ("error" in result) return c.json({ error: result.error }, result.status);
+    console.log(JSON.stringify({ userId: gate.user.id, action: "import_fail", ok: true }));
+    return c.json(result);
   });
 
   app.get("/api/admin/exports", async (c) => {
@@ -206,10 +276,46 @@ export function registerAdminRoutes(app: AdminApp) {
     return c.json(await getOpsExports(c.env, new URL(c.req.url).searchParams.get("cursor") ?? undefined));
   });
 
+  app.post("/api/admin/exports/:userId/jobs/:jobId/fail", async (c) => {
+    const gate = requireAdmin(c);
+    if ("error" in gate) return gate.error;
+    const limited = rejectMutLimit(c);
+    if (limited) return limited;
+    const body = (await c.req.json().catch(() => null)) as { confirm?: string } | null;
+    const result = await failOpsExportJob(
+      c.env,
+      gate.user,
+      c.req.param("userId"),
+      c.req.param("jobId"),
+      body?.confirm ?? "",
+    );
+    if ("error" in result) return c.json({ error: result.error }, result.status);
+    console.log(JSON.stringify({ userId: gate.user.id, action: "export_fail", ok: true }));
+    return c.json(result);
+  });
+
   app.get("/api/admin/email", async (c) => {
     const gate = requireStaff(c);
     if ("error" in gate) return gate.error;
     return c.json(await getOpsEmail(c.env));
+  });
+
+  app.post("/api/admin/email/test", async (c) => {
+    const gate = requireAdmin(c);
+    if ("error" in gate) return gate.error;
+    const limited = rejectMutLimit(c);
+    if (limited) return limited;
+    const body = (await c.req.json().catch(() => null)) as { kind?: string } | null;
+    const result = await sendOpsEmailTest(c.env, gate.user, body?.kind ?? "");
+    if ("error" in result) return c.json({ error: result.error }, result.status);
+    console.log(JSON.stringify({ userId: gate.user.id, action: "email_test", ok: true }));
+    return c.json(result);
+  });
+
+  app.get("/api/admin/maps/probe", async (c) => {
+    const gate = requireStaff(c);
+    if ("error" in gate) return gate.error;
+    return c.json(await getOpsMapsProbe(c.env));
   });
 
   app.get("/api/admin/maps", async (c) => {
@@ -233,7 +339,13 @@ export function registerAdminRoutes(app: AdminApp) {
   app.get("/api/admin/audit", async (c) => {
     const gate = requireStaff(c);
     if ("error" in gate) return gate.error;
-    return c.json(await listOpsAudit(c.env, new URL(c.req.url).searchParams.get("cursor") ?? undefined));
+    const url = new URL(c.req.url);
+    return c.json(
+      await listOpsAudit(c.env, {
+        cursor: url.searchParams.get("cursor") ?? undefined,
+        action: url.searchParams.get("action") ?? undefined,
+      }),
+    );
   });
 
   app.get("/api/admin/diagnostics", async (c) => {

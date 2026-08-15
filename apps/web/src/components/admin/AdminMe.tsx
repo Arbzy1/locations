@@ -1,11 +1,26 @@
 import { Link } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAdminStats } from "../../hooks/useApi";
+import { useSession } from "../../lib/auth";
+import { adminJson } from "../../lib/admin-api";
 import { Button } from "../ui/button";
 import { AdminCard, AdminError, AdminSection } from "./AdminSection";
 import { AdminSkeletonList, AdminStat, AdminStatus, AdminTable, jobStatus } from "./AdminUi";
 
 export function AdminMePage() {
+  const { data: session } = useSession();
+  const userId = (session?.user as { id?: string } | undefined)?.id;
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
   const { data, isError, isPending } = useAdminStats();
+  const queryClient = useQueryClient();
+  const failImport = useMutation({
+    mutationFn: (jobId: string) =>
+      adminJson(`/api/admin/imports/${userId}/jobs/${jobId}/fail`, {
+        method: "POST",
+        body: JSON.stringify({ confirm: "stuck" }),
+      }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["admin-stats"] }),
+  });
   if (isError) return <AdminError />;
   const stuck = data?.stuckJobs ?? [];
   const recent = data?.recentJobs ?? [];
@@ -41,7 +56,7 @@ export function AdminMePage() {
           <AdminSkeletonList rows={2} />
         ) : (
           <AdminTable
-            headers={["Job", "Status", "Age", "Parsed", "Visits"]}
+            headers={["Job", "Status", "Age", "Parsed", "Visits", "Error"]}
             empty={stuck.length === 0}
             emptyLabel="No stuck imports on your tenant."
           >
@@ -56,18 +71,35 @@ export function AdminMePage() {
                   <td className="px-3 py-2 tabular-nums text-text-muted">{job.ageMinutes} min</td>
                   <td className="px-3 py-2 tabular-nums">{job.parsedCount}</td>
                   <td className="px-3 py-2 tabular-nums">{job.visitCount}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col gap-1">
+                      {job.error && <span className="text-xs text-train">{job.error}</span>}
+                      {isAdmin && userId && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          title="Fail this stuck import so you can upload again"
+                          disabled={failImport.isPending}
+                          onClick={() => failImport.mutate(job.id)}
+                        >
+                          Unlock
+                        </Button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               );
             })}
           </AdminTable>
         )}
+        {failImport.isError && <p className="mt-2 text-sm text-train">{(failImport.error as Error).message}</p>}
       </AdminCard>
       <AdminCard title="Recent jobs">
         {isPending ? (
           <AdminSkeletonList rows={2} />
         ) : (
           <AdminTable
-            headers={["Job", "Status", "Age", "Parsed", "Visits"]}
+            headers={["Job", "Status", "Age", "Parsed", "Visits", "Error"]}
             empty={recent.length === 0}
             emptyLabel="No recent jobs on your tenant."
           >
@@ -82,6 +114,7 @@ export function AdminMePage() {
                   <td className="px-3 py-2 tabular-nums text-text-muted">{job.ageMinutes} min</td>
                   <td className="px-3 py-2 tabular-nums">{job.parsedCount}</td>
                   <td className="px-3 py-2 tabular-nums">{job.visitCount}</td>
+                  <td className="px-3 py-2 text-xs text-train">{job.error ?? ""}</td>
                 </tr>
               );
             })}

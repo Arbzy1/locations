@@ -2,8 +2,8 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPinned } from 'lucide-react';
 import { Button } from '../ui/button';
-import ThemeToggle from '../ThemeToggle';
-import { LegalFooter } from '../LegalFooter';
+import ThemeToggle from '../shell/ThemeToggle';
+import { LegalFooter } from '../legal/LegalFooter';
 import { useSession } from '../../lib/auth';
 
 const NAV = [

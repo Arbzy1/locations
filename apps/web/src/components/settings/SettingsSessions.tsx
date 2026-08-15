@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Monitor, Smartphone } from "lucide-react";
-import { authClient } from "../lib/auth";
+import { authClient } from "../../lib/auth";
 import {
   formatSessionTime,
   listDeviceSessions,
@@ -8,10 +8,10 @@ import {
   revokeOtherDeviceSessions,
   summarizeUserAgent,
   type DeviceSession,
-} from "../lib/sessions";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import { Card, CardTitle } from "./ui/card";
+} from "../../lib/sessions";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Card, CardTitle } from "../ui/card";
 
 type Props = {
   currentToken?: string;

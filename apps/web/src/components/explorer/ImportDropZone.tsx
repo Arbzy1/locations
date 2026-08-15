@@ -1,11 +1,11 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { Loader2, Upload } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
-import { cn } from '../lib/utils';
-import { hoverSpring } from '../lib/motion';
-import { Button } from './ui/button';
-import { AlertDialog, AlertDialogContent } from './ui/alert-dialog';
-import { useInvalidateLocationQueries } from '../hooks/useApi';
+import { cn } from '../../lib/utils';
+import { hoverSpring } from '../../lib/motion';
+import { Button } from '../ui/button';
+import { AlertDialog, AlertDialogContent } from '../ui/alert-dialog';
+import { useInvalidateLocationQueries } from '../../hooks/useApi';
 
 export type ImportPreview = {
   chosenPath: string | null;

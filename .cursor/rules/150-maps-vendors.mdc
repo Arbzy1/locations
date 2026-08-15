@@ -1,6 +1,6 @@
 ---
 description: maps-vendors (synced from AGENTS.md)
-globs: apps/api/**/*,apps/web/src/components/Map.tsx
+globs: apps/api/**/*,apps/web/src/components/explorer/Map.tsx
 alwaysApply: false
 ---
 

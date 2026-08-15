@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
-import { Button } from './ui/button';
-import ThemeToggle from './ThemeToggle';
+import { Button } from '../ui/button';
+import ThemeToggle from '../shell/ThemeToggle';
 
 export default function LegalPage({
   title,

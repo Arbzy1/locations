@@ -2,9 +2,13 @@
 
 ## Unreleased
 
+Web components are grouped by domain: `auth`, `settings`, `legal`, `explorer`, `shell`, plus existing `admin`, `catalog`, `marketing`, and `ui`.
+
+Public `/`, `/login`, and `/signup` share an AuthShell (desktop split hero, mobile sheet over a faint SVG world). Optional Google OAuth via Better Auth when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set; `GET /api/config` exposes `googleAuth` (no client id in the bundle). Login leads with Google and demo; email, magic link, and OTP stay as secondary paths.
+
 `npm run test:security` encodes the security catalog: route matrix, policy scanners, FORCE RLS leaks, privacy/XSS, and `npm audit`. Not a live pentest.
 
-Admin panel at `/admin` (accounts and ops, not other-user maps). `ops_flags` / `ops_audit` overlay wrangler kill switches. `npm run test:admin` covers the `/api/admin` matrix.
+Admin panel at `/admin` (accounts and ops, not other-user maps). Operator tools: invite, password reset, unverify, stuck import/export unlock (fail the job, no Takeout requeue), flag reset to env, maps probe, email self-test to the staff inbox, attention tiles, and load-more lists. Payloads stay ids, emails, counts, statuses, and sanitized errors. `ops_flags` / `ops_audit` overlay wrangler kill switches. `npm run test:admin` covers the `/api/admin` matrix.
 
 Account delete wipes Timeline under FORCE RLS (`withTenant`), pages R2 prefixes until empty, and clears verification tokens. Password reset and email change revoke other sessions. One active import per tenant (409). In-app rate limits on search, billing, and reverse-geocode; Cloudflare WAF remains the hard edge control. Staging CSP is enforcing. Production/staging `workers_dev` hostnames are off. Better Auth upgraded to 1.6 (hashed email OTPs, two-step email change).
 

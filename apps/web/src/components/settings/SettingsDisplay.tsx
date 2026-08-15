@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { useInvalidateLocationQueries, usePublicConfig } from "../hooks/useApi";
-import { useUnits } from "../lib/units";
-import type { DistanceUnit } from "../utils/format";
-import { Button } from "./ui/button";
-import { Card, CardTitle } from "./ui/card";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Switch } from "./ui/switch";
+import { useInvalidateLocationQueries, usePublicConfig } from "../../hooks/useApi";
+import { useUnits } from "../../lib/units";
+import type { DistanceUnit } from "../../utils/format";
+import { Button } from "../ui/button";
+import { Card, CardTitle } from "../ui/card";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { Switch } from "../ui/switch";
 
 type Props = {
   onError: (msg: string) => void;

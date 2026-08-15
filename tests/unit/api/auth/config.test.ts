@@ -26,8 +26,16 @@ vi.mock("@locations/api/email", async () => {
 });
 
 import { createAuth } from "@locations/api/auth";
+import { googleAuthEnabled } from "@locations/api/env";
 
 describe("Better Auth 1.6 config", () => {
+  it("treats Google as configured only when both secrets are non-empty", () => {
+    expect(googleAuthEnabled({})).toBe(false);
+    expect(googleAuthEnabled({ GOOGLE_CLIENT_ID: "id" })).toBe(false);
+    expect(googleAuthEnabled({ GOOGLE_CLIENT_ID: " id ", GOOGLE_CLIENT_SECRET: "  " })).toBe(false);
+    expect(googleAuthEnabled({ GOOGLE_CLIENT_ID: "id", GOOGLE_CLIENT_SECRET: "sec" })).toBe(true);
+  });
+
   it("requires verification, revokes sessions on reset, and confirms email change to the current inbox", async () => {
     sendEmail.mockClear();
     const auth = createAuth(testEnv());
@@ -65,6 +73,43 @@ describe("Better Auth 1.6 config", () => {
 
   it("disables public signup when DISABLE_SIGNUP is true", () => {
     const auth = createAuth(testEnv({ DISABLE_SIGNUP: "true" }));
+    expect(auth.options.emailAndPassword?.disableSignUp).toBe(true);
+  });
+
+  it("omits Google social login when either secret is missing", () => {
+    const none = createAuth(testEnv());
+    expect(none.options.socialProviders?.google).toBeUndefined();
+
+    const idOnly = createAuth(testEnv({ GOOGLE_CLIENT_ID: "gid.apps.googleusercontent.com" }));
+    expect(idOnly.options.socialProviders?.google).toBeUndefined();
+  });
+
+  it("enables Google with account linking and the signup kill switch", () => {
+    const auth = createAuth(
+      testEnv({
+        GOOGLE_CLIENT_ID: "gid.apps.googleusercontent.com",
+        GOOGLE_CLIENT_SECRET: "gsec",
+        DISABLE_SIGNUP: "true",
+      }),
+    );
+    expect(auth.options.socialProviders?.google).toMatchObject({
+      clientId: "gid.apps.googleusercontent.com",
+      clientSecret: "gsec",
+      disableSignUp: true,
+    });
+    expect(auth.options.account?.accountLinking?.enabled).toBe(true);
+    expect(auth.options.account?.accountLinking?.trustedProviders).toEqual(["google"]);
+  });
+
+  it("applies the ops overlay disableSignUp to Google", () => {
+    const auth = createAuth(
+      testEnv({
+        GOOGLE_CLIENT_ID: "gid.apps.googleusercontent.com",
+        GOOGLE_CLIENT_SECRET: "gsec",
+      }),
+      { disableSignUp: true },
+    );
+    expect(auth.options.socialProviders?.google?.disableSignUp).toBe(true);
     expect(auth.options.emailAndPassword?.disableSignUp).toBe(true);
   });
 

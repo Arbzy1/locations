@@ -8,6 +8,11 @@ type Analytics = {
   importsReady: number;
   importsError: number;
   recapOptIn: number;
+  unverifiedCount: number;
+  entitledCount: number;
+  lapsedCount: number;
+  sampledAccounts: number;
+  signupsByWeek: { week: string; count: number }[];
 };
 
 export function AdminAnalyticsPage() {
@@ -18,16 +23,41 @@ export function AdminAnalyticsPage() {
   if (isError) return <AdminError />;
   return (
     <AdminSection title="Analytics" description="Product metrics. Not location analytics and not other people’s maps.">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <AdminStat loading={isPending} value={data?.importsReady ?? 0} label="Latest job ready" tone="ok" />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <AdminStat loading={isPending} value={data?.importsReady ?? 0} label="Latest job ready" hint="Sampled" tone="ok" />
         <AdminStat
           loading={isPending}
           value={data?.importsError ?? 0}
           label="Latest job error"
+          hint="Sampled"
           tone={(data?.importsError ?? 0) > 0 ? "danger" : "neutral"}
         />
-        <AdminStat loading={isPending} value={data?.recapOptIn ?? 0} label="Recap opt-in" />
+        <AdminStat loading={isPending} value={data?.recapOptIn ?? 0} label="Recap opt-in" hint="Sampled" />
+        <AdminStat loading={isPending} value={data?.unverifiedCount ?? 0} label="Unverified" hint="Exact count" tone={(data?.unverifiedCount ?? 0) > 0 ? "warn" : "ok"} />
       </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <AdminStat
+          loading={isPending}
+          value={data?.entitledCount ?? 0}
+          label="Entitled"
+          hint={`Sample cap ${data?.sampledAccounts ?? 100}`}
+          tone="ok"
+        />
+        <AdminStat
+          loading={isPending}
+          value={data?.lapsedCount ?? 0}
+          label="Lapsed"
+          hint="Sampled accounts without entitlement"
+          tone={(data?.lapsedCount ?? 0) > 0 ? "warn" : "neutral"}
+        />
+      </div>
+      <AdminCard title="Signups by week">
+        {isPending ? (
+          <AdminSkeletonList rows={6} />
+        ) : (
+          <AdminBars items={(data?.signupsByWeek ?? []).map((row) => ({ label: row.week, count: row.count }))} />
+        )}
+      </AdminCard>
       <AdminCard title="Roles">
         {isPending ? (
           <AdminSkeletonList rows={3} />

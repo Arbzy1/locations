@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
-import { Button } from "./ui/button";
-import { Card, CardTitle } from "./ui/card";
-import { Dialog, DialogContent } from "./ui/dialog";
+import { Button } from "../ui/button";
+import { Card, CardTitle } from "../ui/card";
+import { Dialog, DialogContent } from "../ui/dialog";
 
 type Props = {
   onMessage: (msg: string) => void;

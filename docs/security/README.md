@@ -19,6 +19,7 @@ Keep Drizzle tenant filters **and** FORCE RLS. Full classes:
 - Rate-limit `/api/auth/*`, `/api/import`, `/api/search`, `/api/billing/checkout`, `/api/billing/portal`, and `/api/place/:id` in the Worker. Those in-memory maps are **per isolate** and are a backstop only.
 - In production, add Cloudflare Rate Limiting / WAF rules for the same paths (and `/api/auth/demo`). Dashboard WAF is the hard edge control.
 - Demo password lives in Worker env, not the JS bundle.
+- Google OAuth secrets (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) stay in the Worker. `GET /api/config` exposes only `googleAuth: boolean`. No Google JS CDN or One Tap.
 - CORS allowlist is `BETTER_AUTH_URL` only in staging/production. Localhost origins are added only when that URL is loopback.
 
 ## Headers and XSS

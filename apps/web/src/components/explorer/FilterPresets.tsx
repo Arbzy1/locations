@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import {
   deleteFilterPreset,
   loadFilterPresets,
   saveFilterPreset,
-} from '../lib/nav-memory';
-import { hasSavableFilters } from '../lib/view-search-params';
+} from '../../lib/nav-memory';
+import { hasSavableFilters } from '../../lib/view-search-params';
 
 export default function FilterPresets() {
   const location = useLocation();

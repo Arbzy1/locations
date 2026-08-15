@@ -1,11 +1,11 @@
 import { CreditCard, Lock, Upload, User } from "lucide-react";
-import StatCard from "./StatCard";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import { Card, CardTitle } from "./ui/card";
-import { useImportStatus, useSources } from "../hooks/useApi";
-import { useUnits } from "../lib/units";
-import type { SettingsSection } from "../lib/settings-section";
+import StatCard from "../shell/StatCard";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Card, CardTitle } from "../ui/card";
+import { useImportStatus, useSources } from "../../hooks/useApi";
+import { useUnits } from "../../lib/units";
+import type { SettingsSection } from "../../lib/settings-section";
 
 type Props = {
   name?: string;

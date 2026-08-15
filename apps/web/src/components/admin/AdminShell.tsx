@@ -16,6 +16,7 @@ import {
   Map,
   BarChart3,
   ScrollText,
+  Activity,
   Code,
 } from "lucide-react";
 import { useSession } from "../../lib/auth";
@@ -36,6 +37,7 @@ import { AdminMapsPage } from "./AdminMaps";
 import { AdminDemoPage } from "./AdminDemo";
 import { AdminAnalyticsPage } from "./AdminAnalytics";
 import { AdminAuditPage } from "./AdminAudit";
+import { AdminDiagnosticsPage } from "./AdminDiagnostics";
 import { AdminDeveloperPage } from "./AdminDeveloper";
 import { AdminMePage } from "./AdminMe";
 
@@ -52,6 +54,7 @@ const ICONS: Record<AdminNavIcon, ComponentType<{ size?: number }>> = {
   map: Map,
   chart: BarChart3,
   scroll: ScrollText,
+  pulse: Activity,
   code: Code,
 };
 
@@ -124,6 +127,7 @@ function AdminOutlet() {
   if (pathname === "/admin/demo") return <AdminDemoPage />;
   if (pathname === "/admin/analytics") return <AdminAnalyticsPage />;
   if (pathname === "/admin/audit") return <AdminAuditPage />;
+  if (pathname === "/admin/diagnostics") return <AdminDiagnosticsPage />;
   if (pathname === "/admin/developer") return <AdminDeveloperPage />;
   if (pathname === "/admin/me") return <AdminMePage />;
   return <p className="text-sm text-text-muted">This Admin page is not available.</p>;

@@ -15,11 +15,19 @@ export const DEVELOPER_SAFE_CHECKS: DeveloperCheck[] = [
   { id: "admin-overview", group: "Operator", label: "Admin overview", url: "/api/admin/overview", title: "Check operator overview" },
   { id: "flags", group: "Operator", label: "Flags", url: "/api/admin/flags", title: "Check flag overlay" },
   { id: "users", group: "Operator", label: "Users", url: "/api/admin/users?limit=1", title: "Check user directory cap" },
+  { id: "users-filter", group: "Operator", label: "Users filter", url: "/api/admin/users?verified=false&limit=1", title: "Check user list filters" },
   { id: "billing", group: "Operator", label: "Billing", url: "/api/admin/billing", title: "Check billing rollup" },
   { id: "imports", group: "Operator", label: "Imports", url: "/api/admin/imports", title: "Check import rollup" },
+  { id: "imports-stuck", group: "Operator", label: "Stuck imports", url: "/api/admin/imports?status=stuck", title: "Check stuck import filter" },
+  { id: "exports", group: "Operator", label: "Exports", url: "/api/admin/exports", title: "Check export rollup" },
+  { id: "email", group: "Operator", label: "Email", url: "/api/admin/email", title: "Check email catalog" },
+  { id: "demo", group: "Operator", label: "Demo", url: "/api/admin/demo", title: "Check demo account status" },
+  { id: "stats", group: "Operator", label: "My tenant stats", url: "/api/admin/stats", title: "Check own tenant stats" },
   { id: "maps", group: "Operator", label: "Maps", url: "/api/admin/maps", title: "Check map vendor booleans" },
+  { id: "maps-probe", group: "Operator", label: "Maps probe", url: "/api/admin/maps/probe", title: "Check map vendor probe" },
   { id: "analytics", group: "Operator", label: "Analytics", url: "/api/admin/analytics", title: "Check product metrics" },
   { id: "audit", group: "Operator", label: "Audit", url: "/api/admin/audit", title: "Check staff audit log" },
+  { id: "audit-flags", group: "Operator", label: "Audit flags", url: "/api/admin/audit?action=flags", title: "Check audit action filter" },
 ];
 
 const SECRET_OR_COORD = new RegExp(

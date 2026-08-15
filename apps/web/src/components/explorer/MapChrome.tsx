@@ -1,17 +1,17 @@
 import { useEffect } from 'react';
 import { Layers, Bookmark, Ruler, Box } from 'lucide-react';
-import { Button } from './ui/button';
-import { Label } from './ui/label';
-import { Switch } from './ui/switch';
-import { Sheet, SheetContent } from './ui/sheet';
+import { Button } from '../ui/button';
+import { Label } from '../ui/label';
+import { Switch } from '../ui/switch';
+import { Sheet, SheetContent } from '../ui/sheet';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from './ui/dropdown-menu';
-import type { BasemapId } from '../lib/mapStyle';
-import type { MapBookmark } from '../lib/mapBookmarks';
+} from '../ui/dropdown-menu';
+import type { BasemapId } from '../../lib/mapStyle';
+import type { MapBookmark } from '../../lib/mapBookmarks';
 
 export type MapChromeProps = {
   isNarrow: boolean;

@@ -1,6 +1,6 @@
 ---
 description: ui-map-responsive (synced from AGENTS.md)
-globs: apps/web/src/components/Map.tsx,apps/web/src/components/**/*View.tsx
+globs: apps/web/src/components/explorer/Map.tsx,apps/web/src/components/**/*View.tsx
 alwaysApply: false
 ---
 
@@ -19,7 +19,7 @@ Leaflet maps must stay usable when the container is small or resizes.
 
 **Size invalidation**
 
-- Call `invalidateSize` (or bump `sizeSignal` on [`Map.tsx`](apps/web/src/components/Map.tsx)) when panels open/close, sheets resize, or breakpoints change.
+- Call `invalidateSize` (or bump `sizeSignal` on [`Map.tsx`](apps/web/src/components/explorer/Map.tsx)) when panels open/close, sheets resize, or breakpoints change.
 - Listen for window resize as a baseline.
 
 **Viewport**

@@ -1,15 +1,15 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Compass } from 'lucide-react';
 import { format } from 'date-fns';
-import { Button } from './ui/button';
+import { Button } from '../ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from './ui/dropdown-menu';
-import { EXPLORE_LINKS, isCatalogPath, type ExploreLink } from '../lib/paths';
-import { useSession } from '../lib/auth';
+} from '../ui/dropdown-menu';
+import { EXPLORE_LINKS, isCatalogPath, type ExploreLink } from '../../lib/paths';
+import { useSession } from '../../lib/auth';
 
 export default function ExploreMenu({ compact, expanded }: { compact?: boolean; expanded?: boolean }) {
   const location = useLocation();

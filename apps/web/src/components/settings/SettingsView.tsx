@@ -2,16 +2,16 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useSearchParams } from "react-router-dom";
 import { Settings } from "lucide-react";
-import { useSession } from "../lib/auth";
-import { useUnits } from "../lib/units";
-import { enterMotion } from "../lib/motion";
-import { useBreakpoint } from "../hooks/useBreakpoint";
+import { useSession } from "../../lib/auth";
+import { useUnits } from "../../lib/units";
+import { enterMotion } from "../../lib/motion";
+import { useBreakpoint } from "../../hooks/useBreakpoint";
 import {
   parseSettingsSection,
   settingsSectionSearch,
   type SettingsSection,
-} from "../lib/settings-section";
-import { Badge } from "./ui/badge";
+} from "../../lib/settings-section";
+import { Badge } from "../ui/badge";
 import SettingsNav from "./SettingsNav";
 import SettingsOverview from "./SettingsOverview";
 import SettingsAccount from "./SettingsAccount";

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import CatalogPage from './CatalogPage';
-import MapView from '../Map';
+import MapView from '../explorer/Map';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { useBreakpoint } from '../../hooks/useBreakpoint';

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { authClient, useSession } from "../lib/auth";
-import { Button } from "./ui/button";
-import { Card, CardTitle } from "./ui/card";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import PasswordInput from "./PasswordInput";
+import { authClient, useSession } from "../../lib/auth";
+import { Button } from "../ui/button";
+import { Card, CardTitle } from "../ui/card";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import PasswordInput from "../auth/PasswordInput";
 import SettingsSessions from "./SettingsSessions";
 
 type Props = {

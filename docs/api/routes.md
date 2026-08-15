@@ -8,7 +8,7 @@ All other `/api/*` require a session.
 |--------|------|--------|
 | GET | `/api/health` | `{ ok, worker, db }` Worker liveness plus a database ping. `db` is `ok` or `error`. No connection strings. |
 | GET | `/api/me` | user, tenant, entitlements, settings |
-| GET | `/api/config` | map tile/style templates, `customTiles`, `signupDisabled`, `globe`, `billingConfigured`, `flags` (`globe`, `demoTour`, `landing`) |
+| GET | `/api/config` | map tile/style templates, `customTiles`, `signupDisabled`, `googleAuth`, `globe`, `billingConfigured`, `flags` (`globe`, `demoTour`, `landing`) |
 | GET | `/api/overview` | tenant summary; query `sourceId`, `from`, `to` |
 | GET | `/api/days` | |
 | DELETE | `/api/days` | `from`, `to`, optional `sourceId`; not demo; rebuilds aggregates |
@@ -27,23 +27,30 @@ All other `/api/*` require a session.
 | GET/POST | `/api/chapters` | life chapters; POST not demo |
 | PATCH/DELETE | `/api/chapters/:id` | not demo |
 | GET | `/api/import/jobs` | job list without R2 keys |
-| GET | `/api/admin/stats` | staff only; caller tenant counts, stuck jobs (id/status/age/counts); others 404 |
-| GET | `/api/admin/overview` | staff; histograms, health, flag snapshot |
-| GET/PATCH | `/api/admin/flags` | staff GET; admin PATCH overlay on signup/landing/globe/demo tour |
-| GET | `/api/admin/users` | staff; paginated directory (`q` prefix, `limit` cap 50) |
-| GET | `/api/admin/users/:id` | staff; counts, billing status, job ids; 404 if missing |
+| GET | `/api/admin/stats` | staff only; caller tenant counts, stuck jobs (id/status/age/counts, sanitized error); others 404 |
+| GET | `/api/admin/overview` | staff; health, flags, attention (stuck/past_due/unverified/admin count), vendor diagnostics booleans |
+| GET/PATCH | `/api/admin/flags` | staff GET (env vs db, `updatedBy`/`updatedAt`); admin PATCH overlay on signup/landing/globe/demo tour |
+| POST | `/api/admin/flags/reset` | admin; delete overlay row for one key (`flags_reset` audit) |
+| GET | `/api/admin/users` | staff; paginated directory (`q`, `role`, `verified`, `billing`, `cursor`, `limit` cap 50); last session time |
+| POST | `/api/admin/users` | admin; invite `{ email, name?, role?: user\|developer }`; random password never returned; duplicate 400 |
+| GET | `/api/admin/users/:id` | staff; counts, billing (no Stripe ids), quota, grace, sanitized job errors; 404 if missing |
 | POST | `/api/admin/users/:id/role` | admin; `user` / `admin` / `developer`; last-admin guard |
 | POST | `/api/admin/users/:id/revoke-sessions` | admin |
-| POST | `/api/admin/users/:id/verify` | admin |
+| POST | `/api/admin/users/:id/verify` | admin; `{ emailVerified }` true or false |
+| POST | `/api/admin/users/:id/send-reset` | admin; password reset to the account email; log `{ kind, ok }` only |
 | POST | `/api/admin/users/:id/wipe` | admin; body must repeat target email |
-| GET | `/api/admin/billing` | staff; status histogram, past_due user ids |
-| GET | `/api/admin/imports` | staff; job ids and counts across accounts |
-| GET | `/api/admin/exports` | staff; export job ids/status; no ZIP download |
-| GET | `/api/admin/email` | staff; kind catalog + last recap `{ considered, sent }` |
-| GET | `/api/admin/maps` | staff; vendor configured booleans, never keys |
-| GET | `/api/admin/demo` | staff; whether a demo account exists |
-| GET | `/api/admin/analytics` | staff; role counts, import ready/error, recap opt-in |
-| GET | `/api/admin/audit` | staff; action log |
+| GET | `/api/admin/billing` | staff; status histogram, past_due email/grace/period/interval (`monthly`/`yearly`/`other`, never raw `price_`) |
+| GET | `/api/admin/imports` | staff; job ids, counts, sanitized error, account email; `status=stuck\|error\|all` |
+| POST | `/api/admin/imports/:userId/jobs/:jobId/fail` | admin; `{ confirm: "stuck" }` fails pending/processing, deletes R2 object; unknown 404; no requeue |
+| GET | `/api/admin/exports` | staff; export job ids/status/error; no ZIP download |
+| POST | `/api/admin/exports/:userId/jobs/:jobId/fail` | admin; same unlock as imports |
+| GET | `/api/admin/email` | staff; kind catalog, `resendConfigured`, last recap `{ considered, sent }` |
+| POST | `/api/admin/email/test` | admin; `{ kind: password_changed }` to the **session email only** |
+| GET | `/api/admin/maps/probe` | staff; `{ name, ok, status, ms }` per vendor; never URLs, keys, or bodies |
+| GET | `/api/admin/maps` | staff; vendor configured booleans and custom host count, never keys |
+| GET | `/api/admin/demo` | staff; exists, demo email, demo-tenant visit/source counts; no recreate |
+| GET | `/api/admin/analytics` | staff; role counts, unverified exact, entitled/lapsed sampled, signups by week |
+| GET | `/api/admin/audit` | staff; action log with scrubbed meta; `action`, `cursor` |
 | GET | `/api/admin/diagnostics` | staff; Worker/Neon/flag/vendor booleans |
 | GET | `/api/search` | `q=` places (cluster, type, labels, tags) and days; hidden omitted; ISO date is exact; rate-limited |
 | GET | `/api/sources` | |

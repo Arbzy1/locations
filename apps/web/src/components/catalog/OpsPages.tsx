@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import CatalogPage from './CatalogPage';
 import { Button } from '../ui/button';
 import { useCachedAnalytics, useImportJobs, useImportStatus } from '../../hooks/useApi';
-import { TIMEZONE_SKEW_COPY } from '../ImportDropZone';
+import { TIMEZONE_SKEW_COPY } from '../explorer/ImportDropZone';
 import { useSession } from '../../lib/auth';
 import ChangelogList from '../marketing/ChangelogList';
 

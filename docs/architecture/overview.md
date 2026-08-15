@@ -22,4 +22,4 @@ Browser ──► Cloudflare Worker (static assets + /api/*)
 
 Authenticated API work runs inside `withTenant()` so `app.tenant` is set for RLS.
 
-Public SPA routes (no app shell): `/` landing, `/pricing`, `/status`, `/changelog`, plus Privacy, Terms, and Cookies. Feature flags and tile templates come from `GET /api/config`.
+Public SPA routes (no app shell): `/` landing, `/pricing`, `/status`, `/changelog`, plus Privacy, Terms, and Cookies. Feature flags, `googleAuth`, and tile templates come from `GET /api/config`.

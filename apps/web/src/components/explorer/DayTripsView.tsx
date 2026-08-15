@@ -1,14 +1,14 @@
 import { useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useDayTrips, useMultiDayTrips, usePlaceLabels } from '../hooks/useApi';
-import { formatDate, formatMilesOrKm } from '../utils/format';
-import { useUnits } from '../lib/units';
-import { MODE_COLORS, MODE_LABELS } from '../types';
-import type { DayTrip } from '../types';
-import { multiDayTripLabel } from '../lib/trips';
-import { Button } from './ui/button';
+import { useDayTrips, useMultiDayTrips, usePlaceLabels } from '../../hooks/useApi';
+import { formatDate, formatMilesOrKm } from '../../utils/format';
+import { useUnits } from '../../lib/units';
+import { MODE_COLORS, MODE_LABELS } from '../../types';
+import type { DayTrip } from '../../types';
+import { multiDayTripLabel } from '../../lib/trips';
+import { Button } from '../ui/button';
 import FilterPresets from './FilterPresets';
-import { parseDayTripsQuery, serializeDayTripsQuery } from '../lib/view-search-params';
+import { parseDayTripsQuery, serializeDayTripsQuery } from '../../lib/view-search-params';
 import {
   Compass,
   Filter,

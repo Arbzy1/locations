@@ -15,21 +15,21 @@ import {
   useLowMovementDays,
   useStreaks,
   useCachedAnalytics,
-} from '../hooks/useApi';
-import StatCard from './StatCard';
+} from '../../hooks/useApi';
+import StatCard from '../shell/StatCard';
 import MapView from './Map';
-import { Button } from './ui/button';
-import { MODE_COLORS, MODE_LABELS } from '../types';
-import { formatMilesOrKm } from '../utils/format';
-import { useUnits } from '../lib/units';
-import { formatFunFact, isGridCluster, multiDayTripLabel } from '../lib/trips';
-import { corridorPath, placePath, tripPath } from '../lib/paths';
-import { downloadElementPng, downloadTextFile, insightsCsv } from '../lib/insights-export';
+import { Button } from '../ui/button';
+import { MODE_COLORS, MODE_LABELS } from '../../types';
+import { formatMilesOrKm } from '../../utils/format';
+import { useUnits } from '../../lib/units';
+import { formatFunFact, isGridCluster, multiDayTripLabel } from '../../lib/trips';
+import { corridorPath, placePath, tripPath } from '../../lib/paths';
+import { downloadElementPng, downloadTextFile, insightsCsv } from '../../lib/insights-export';
 import { InsightsStory } from './InsightsStory';
-import { isStreaks } from '../lib/year-review';
+import { isStreaks } from '../../lib/year-review';
 import { Link } from 'react-router-dom';
-import type { ActivityGuessCount, BadgeSummary, FlightSummary } from '../types';
-import { useTheme } from '../lib/theme';
+import type { ActivityGuessCount, BadgeSummary, FlightSummary } from '../../types';
+import { useTheme } from '../../lib/theme';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {

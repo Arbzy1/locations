@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import type { Visit, Activity, Connector } from '../types';
-import { MODE_LABELS } from '../types';
-import { formatTime, formatDuration, formatDistance } from '../utils/format';
-import { useUnits } from '../lib/units';
+import type { Visit, Activity, Connector } from '../../types';
+import { MODE_LABELS } from '../../types';
+import { formatTime, formatDuration, formatDistance } from '../../utils/format';
+import { useUnits } from '../../lib/units';
 import {
   continuesPastDate,
   startedBeforeDate,
   UNKNOWN_MOVEMENT_HINT,
-} from '../lib/dayPlayback';
-import { cn } from '../lib/utils';
+} from '../../lib/dayPlayback';
+import { cn } from '../../lib/utils';
 import {
   MapPin,
   Footprints,

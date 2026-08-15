@@ -13,7 +13,8 @@ export type AdminNavIcon =
   | "map"
   | "chart"
   | "scroll"
-  | "code";
+  | "code"
+  | "pulse";
 
 export type AdminNavItem = {
   to: string;
@@ -38,6 +39,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { to: "/admin/maps", label: "Maps", title: "Map vendor configuration", group: "Jobs", icon: "map" },
   { to: "/admin/analytics", label: "Analytics", title: "Product metrics", group: "Diagnostics", icon: "chart" },
   { to: "/admin/audit", label: "Audit", title: "Staff action log", group: "Diagnostics", icon: "scroll" },
+  { to: "/admin/diagnostics", label: "Diagnostics", title: "Worker and vendor health", group: "Diagnostics", icon: "pulse" },
   { to: "/admin/developer", label: "Developer", title: "Live diagnostics checks", group: "Diagnostics", icon: "code" },
 ];
 

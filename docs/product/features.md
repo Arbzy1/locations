@@ -74,11 +74,11 @@ What the hosted app does today. Nothing here is a roadmap.
 
 ## Account
 
-- Sign up with email and password (unless signup is turned off; then `/signup` shows a closed-signup page)
+- Sign up with Google (when configured) or email and password (unless signup is turned off; then `/signup` shows a closed-signup page)
 - Onboarding steps at `/onboarding` (verify, Takeout, import). Empty accounts are sent there from Hotspots.
 - Import history and data-health counts under Explore
 - Verify email with a link or a 6-digit code; resend from Settings
-- Sign in with password, a one-time email link, or a 6-digit code
+- Sign in with Google (when `GET /api/config` `googleAuth` is true), password, a one-time email link, or a 6-digit code
 - Forgot password; choose a new password at `/reset-password`
 - Change display name, email (re-verify), and password from Settings
 - List signed-in sessions and revoke one or all other devices from Settings
@@ -87,7 +87,7 @@ What the hosted app does today. Nothing here is a roadmap.
 - Public demo with sample journeys (read-only) and a skippable scripted tour for the demo role
 - Public marketing pages outside the app shell: `/` landing, `/pricing`, `/status`, `/changelog` (Privacy, Terms, and Cookies links on those pages)
 - In-app changelog under Explore (`/updates`)
-- Staff (`admin` / `developer`) can open the `/admin` Admin panel for accounts, flags, billing, imports, and diagnostics. They cannot open another user’s maps. Own-tenant counts stay on `/admin/me`.
+- Staff (`admin` / `developer`) can open the `/admin` Admin panel for accounts, flags, billing, imports, exports, email, maps, analytics, audit, and diagnostics. They cannot open another user’s maps. Own-tenant counts stay on `/admin/me`. Admin can invite (`user` / `developer`), send a password reset, unverify, unlock stuck jobs (fail only, user re-uploads), reset flags to env, and send a self-test email to their own inbox. Developer stays GET-only. Demo create/reset stays `npm run auth:create-demo`.
 - Env feature flags on `GET /api/config` (`globe`, `demoTour`, `landing`)
 - Miles or kilometres, and an IANA timezone
 - Opt-in monthly recap email (counts only; off by default)

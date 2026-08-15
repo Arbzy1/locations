@@ -1,29 +1,44 @@
 import { useQuery } from "@tanstack/react-query";
 import { adminJson } from "../../lib/admin-api";
 import { AdminCard, AdminError, AdminSection } from "./AdminSection";
-import { AdminSkeletonList, AdminStatus, boolStatus } from "./AdminUi";
+import { AdminDl, AdminSkeletonList, AdminStatus, boolStatus } from "./AdminUi";
+
+type Demo =
+  | { exists: false }
+  | { exists: true; email: string; visitCount: number; sourceCount: number };
 
 export function AdminDemoPage() {
   const { data, isError, isPending } = useQuery({
     queryKey: ["admin-demo"],
-    queryFn: () => adminJson<{ exists: boolean }>("/api/admin/demo"),
+    queryFn: () => adminJson<Demo>("/api/admin/demo"),
   });
   if (isError) return <AdminError />;
   const exists = boolStatus(Boolean(data?.exists), "Exists", "Missing", "warn");
   return (
     <AdminSection
       title="Demo"
-      description="Read-only. Create or reset the demo user with npm run auth:create-demo. The password is never shown here."
+      description="Read-only. Create or reset with npm run auth:create-demo. The password is never shown here."
     >
       <AdminCard>
         {isPending ? (
-          <AdminSkeletonList rows={1} />
+          <AdminSkeletonList rows={3} />
         ) : (
-          <div className="flex min-h-11 items-center gap-3">
-            <span className="text-sm text-text">Demo account</span>
-            <AdminStatus tone={exists.tone}>{exists.label}</AdminStatus>
-          </div>
+          <AdminDl
+            rows={[
+              { label: "Demo account", value: <AdminStatus tone={exists.tone}>{exists.label}</AdminStatus> },
+              ...(data?.exists
+                ? [
+                    { label: "Email", value: data.email },
+                    { label: "Visits (demo tenant)", value: String(data.visitCount) },
+                    { label: "Sources (demo tenant)", value: String(data.sourceCount) },
+                  ]
+                : []),
+            ]}
+          />
         )}
+        <p className="mt-3 text-xs text-text-muted">
+          Recreate stays on the CLI so a demo password never lands in the Admin UI or the client bundle.
+        </p>
       </AdminCard>
     </AdminSection>
   );

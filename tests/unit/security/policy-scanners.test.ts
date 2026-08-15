@@ -27,11 +27,12 @@ describe("policy scanners", { timeout: 20_000 }, () => {
     expect(hits).toEqual([]);
   });
 
-  it("keeps demo passwords and Stripe keys out of the web app", () => {
+  it("keeps demo passwords, Stripe keys, and Google secrets out of the web app", () => {
     const files = walkSourceFiles(root, ["apps/web"]);
     const hits: string[] = [];
     for (const file of files) {
       if (file.text.includes("DEMO_PASSWORD")) hits.push(`${file.rel}: DEMO_PASSWORD`);
+      if (file.text.includes("GOOGLE_CLIENT_SECRET")) hits.push(`${file.rel}: GOOGLE_CLIENT_SECRET`);
       if (/sk_live_|sk_test_|whsec_/.test(file.text)) hits.push(`${file.rel}: stripe-looking secret`);
     }
     expect(hits).toEqual([]);
@@ -54,7 +55,7 @@ describe("policy scanners", { timeout: 20_000 }, () => {
   });
 
   it("escapes Map popup HTML", () => {
-    const map = readFileSync(join(root, "apps/web/src/components/Map.tsx"), "utf8");
+    const map = readFileSync(join(root, "apps/web/src/components/explorer/Map.tsx"), "utf8");
     const popups = readFileSync(join(root, "apps/web/src/lib/mapPopups.ts"), "utf8");
     const lines = [...map.split("\n"), ...popups.split("\n")];
     const unsafe: string[] = [];

@@ -2,6 +2,8 @@ export type Env = {
   DATABASE_URL: string;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
   ASSETS: Fetcher;
   UPLOADS: R2Bucket;
   IMPORT_QUEUE?: Queue;
@@ -28,6 +30,10 @@ export type Env = {
   DEMO_TOUR?: string;
   LANDING_ENABLED?: string;
 };
+
+export function googleAuthEnabled(env: Pick<Env, "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET">): boolean {
+  return Boolean(env.GOOGLE_CLIENT_ID?.trim() && env.GOOGLE_CLIENT_SECRET?.trim());
+}
 
 export type ImportQueueMessage = {
   kind?: "import";

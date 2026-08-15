@@ -13,9 +13,9 @@ import {
 } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { MODE_COLORS, MODE_LABELS } from '../types';
-import type { DaySummary } from '../types';
-import { Button } from './ui/button';
+import { MODE_COLORS, MODE_LABELS } from '../../types';
+import type { DaySummary } from '../../types';
+import { Button } from '../ui/button';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 

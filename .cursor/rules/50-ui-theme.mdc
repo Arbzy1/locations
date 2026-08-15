@@ -29,7 +29,7 @@ The web app supports dark and light mode via `html[data-theme="dark"|"light"]` a
 
 **Map tiles**
 
-- Default basemap should follow theme. Prefer env-configured commercial tiles; Carto `dark_all` / `light_all` is the fallback as in [`Map.tsx`](apps/web/src/components/Map.tsx).
+- Default basemap should follow theme. Prefer env-configured commercial tiles; Carto `dark_all` / `light_all` is the fallback as in [`Map.tsx`](apps/web/src/components/explorer/Map.tsx).
 
 **Toggle**
 

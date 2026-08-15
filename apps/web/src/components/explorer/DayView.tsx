@@ -1,16 +1,16 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDayData, useDays, useSources } from '../hooks/useApi';
-import { useBreakpoint } from '../hooks/useBreakpoint';
+import { useDayData, useDays, useSources } from '../../hooks/useApi';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 import MapView from './Map';
 import Timeline from './Timeline';
 import DayCalendar from './DayCalendar';
 import DayPlaybackBar from './DayPlaybackBar';
-import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from './MobilePanel';
-import { formatDate, formatMilesOrKm } from '../utils/format';
-import { useUnits } from '../lib/units';
-import { MODE_COLORS, MODE_LABELS } from '../types';
-import type { Visit, Activity, Connector, MapFocusTarget } from '../types';
+import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from '../shell/MobilePanel';
+import { formatDate, formatMilesOrKm } from '../../utils/format';
+import { useUnits } from '../../lib/units';
+import { MODE_COLORS, MODE_LABELS } from '../../types';
+import type { Visit, Activity, Connector, MapFocusTarget } from '../../types';
 import {
   buildPlaybackSegments,
   playbackRange,
@@ -18,11 +18,11 @@ import {
   PLAYBACK_SPEEDS,
   DEFAULT_PLAYBACK_SPEED,
   type PlaybackSpeed,
-} from '../lib/dayPlayback';
-import { sunTimes } from '../utils/sunTimes';
-import { isTypingTarget } from '../lib/command-query';
-import { sourceTokenVar } from '../lib/hotspots';
-import { Button } from './ui/button';
+} from '../../lib/dayPlayback';
+import { sunTimes } from '../../utils/sunTimes';
+import { isTypingTarget } from '../../lib/command-query';
+import { sourceTokenVar } from '../../lib/hotspots';
+import { Button } from '../ui/button';
 import {
   ChevronDown,
   ChevronLeft,
