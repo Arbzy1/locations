@@ -15,16 +15,40 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function git(args, opts = {}) {
+  const { capture = false, ...rest } = opts;
   return execFileSync("git", args, {
     cwd: root,
     encoding: "utf8",
-    stdio: opts.capture ? ["ignore", "pipe", "pipe"] : "inherit",
-    ...opts,
+    stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
+    ...rest,
   });
 }
 
 function gitOut(args) {
   return git(args, { capture: true }).trim();
+}
+
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function pushOrigin(branch, { attempts = 4 } = {}) {
+  let lastErr;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      git(["push", "origin", branch]);
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (i === attempts) throw err;
+      const wait = 400 * 2 ** (i - 1);
+      console.warn(
+        `Push of ${branch} failed (attempt ${i}/${attempts}); retrying in ${wait}ms...`,
+      );
+      sleep(wait);
+    }
+  }
+  throw lastErr;
 }
 
 function parseArgs(argv) {
@@ -131,11 +155,6 @@ function main() {
     try {
       git(["checkout", branch]);
       git(["merge", base, "-m", `Merge branch '${base}' into ${branch}`]);
-      if (opts.push) {
-        git(["push", "origin", branch]);
-      }
-      results.push({ branch, ok: true });
-      console.log(`Merged ${base} into ${branch}`);
     } catch (err) {
       console.error(`Failed to merge ${base} into ${branch}`);
       try {
@@ -143,8 +162,32 @@ function main() {
       } catch {
         // no merge in progress
       }
-      results.push({ branch, ok: false, error: String(err?.message || err) });
+      results.push({
+        branch,
+        ok: false,
+        stage: "merge",
+        error: String(err?.message || err),
+      });
+      continue;
     }
+
+    if (opts.push) {
+      try {
+        pushOrigin(branch);
+      } catch (err) {
+        console.error(`Merged ${base} into ${branch}, but push to origin failed`);
+        results.push({
+          branch,
+          ok: false,
+          stage: "push",
+          error: String(err?.message || err),
+        });
+        continue;
+      }
+    }
+
+    results.push({ branch, ok: true });
+    console.log(`Merged ${base} into ${branch}${opts.push ? " and pushed origin" : ""}`);
   }
 
   if (!opts.dryRun && startBranch) {
@@ -157,17 +200,28 @@ function main() {
   }
 
   const failed = results.filter((r) => !r.ok);
+  const mergeFailed = failed.filter((r) => r.stage === "merge");
+  const pushFailed = failed.filter((r) => r.stage === "push");
   console.log("\nSummary:");
   for (const r of results) {
-    console.log(`  ${r.ok ? "ok" : "FAIL"}  ${r.branch}`);
+    const label = r.ok ? "ok" : r.stage === "push" ? "PUSH FAIL" : "FAIL";
+    console.log(`  ${label}  ${r.branch}`);
   }
 
-  if (failed.length) {
+  if (mergeFailed.length) {
     console.error(
-      `\n${failed.length} branch(es) need manual conflict resolution.`,
+      `\n${mergeFailed.length} branch(es) need manual conflict resolution.`,
     );
-    process.exit(1);
   }
+  if (pushFailed.length) {
+    console.error(
+      `\n${pushFailed.length} branch(es) merged locally but failed to push:`,
+    );
+    for (const r of pushFailed) {
+      console.error(`  git push origin ${r.branch}`);
+    }
+  }
+  if (failed.length) process.exit(1);
 
   console.log("\nAll branches updated.");
 }
