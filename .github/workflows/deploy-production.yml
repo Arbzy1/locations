@@ -22,6 +22,7 @@ jobs:
       - run: npm run test:placement
       - run: npm run test:unit
       - run: npm run test:integration
+      - run: npm run test:admin
       - run: npm run typecheck:all
       - run: npm run build:all
       - name: Deploy Worker (production)

@@ -274,7 +274,7 @@ Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_s
 - Rotate the session on password or email change.
 - Demo login must not embed a password in the client bundle. Use `POST /api/auth/demo`.
 - `user.role` is server-only (`input: false`). Demo cannot mutate sources or billing.
-- Staff roles (`admin`, `developer`) skip the Stripe import gate and count as entitled on `/api/me`. They still use their own tenant. Promote with `auth:promote-admin` / `auth:promote-developer`.
+- Staff roles (`admin`, `developer`) skip the Stripe import gate and count as entitled on `/api/me`. They still use their own tenant for location reads. Operator APIs (`/api/admin/*`) manage accounts and flags; they do not open another user’s map. Promote with `auth:promote-admin` / `auth:promote-developer`.
 - Delete account wipes Neon tenant rows, R2 prefix, sessions, and the Stripe customer.
 - Password fields use `PasswordInput`.
 
@@ -328,6 +328,7 @@ Invent a new leaf under the matching kind/layer. Never next to source. Shared ha
 - `npm run test:placement` fails if a test file is outside this tree or in the wrong kind folder. Run it before adding tests.
 - `npm run test:unit` is the default (no network, no DB).
 - `test:integration` covers `app.request()` routes (401, owner 200, cross-tenant 404, demo 403).
+- `test:admin` is the dense `/api/admin` matrix (401, user/demo 404, developer GET vs mutate, last-admin, wipe email, PII scanner).
 - `test:rls` needs `DATABASE_URL` and asserts FORCE RLS even without Drizzle filters. Skip locally if unset; CI must run it.
 - `test:security` runs placement, policy scanners, the API threat matrix, RLS, and `deps:audit`. Not a live pentest. New `/api/*` routes need a catalog row.
 - Every new API route needs positive + unauthenticated + cross-tenant + demo-denied tests under `tests/integration/api/{domain}/`.
@@ -374,7 +375,7 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 | `setup:project` | Interactive first-time setup |
 | `typecheck:all` / `lint:web` | Quality gates |
 | `rules:sync` | Regenerate tool-specific rule files from `AGENTS.md` |
-| `test:placement` / `test:unit` / `test:integration` / `test:rls` / `test:security` / `test:watch` / `test:e2e` / `test:all` / `test:report` | Placement lint, Vitest, security catalog, Playwright, markdown report |
+| `test:placement` / `test:unit` / `test:integration` / `test:admin` / `test:rls` / `test:security` / `test:watch` / `test:e2e` / `test:all` / `test:report` | Placement lint, Vitest (including operator admin matrix), security catalog, Playwright, markdown report |
 | `loc` / `loc:report` | Lines-of-code summary / write `reports/loc.md` |
 | `kill:servers` | Free ports 5173 and 8787 |
 | `deps:audit` | `npm audit` (high/critical) |
@@ -399,11 +400,12 @@ Non-negotiables:
 - **Home:** [`tests/`](tests/README.md) is the only legal location. `npm run test:placement` enforces it.
 - **Unit:** `npm run test:unit` (`tests/unit/**/*.test.ts`; no external services).
 - **Integration:** `npm run test:integration` (`tests/integration/**/*.test.ts`; `app.request()`, mocked Stripe/R2).
+- **Admin:** `npm run test:admin` (Vitest project `admin`; operator route matrix).
 - **RLS:** `npm run test:rls` (`tests/rls/**/*.test.ts`; real Postgres). Isolation is app-level **and** FORCE RLS.
 - **Security catalog:** `npm run test:security` (scanners, route matrix, RLS, `deps:audit`). Not a live pentest.
 - **E2E:** Playwright (`npm run test:e2e`) against `PLAYWRIGHT_BASE_URL` (default `http://127.0.0.1:8787`); files in `tests/e2e/`.
 - Prioritize auth/tenant boundaries, billing webhooks, imports, and data-mutating routes.
-- CI runs placement, unit, integration, `test:security`, RLS, e2e, and `deps:audit`.
+- CI runs placement, unit, integration, `test:admin`, `test:security`, RLS, e2e, and `deps:audit`.
 
 ## Things not to do
 

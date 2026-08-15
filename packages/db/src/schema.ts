@@ -342,6 +342,28 @@ export const stripeEvents = pgTable("stripe_events", {
   processedAt: timestamp("processed_at").notNull().defaultNow(),
 });
 
+/** Operator kill switches. Not a tenant table. App-layer staff gate. */
+export const opsFlags = pgTable("ops_flags", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  updatedBy: text("updated_by"),
+});
+
+/** Staff action log. Not a tenant table. Meta is ids/counts/flag keys only. */
+export const opsAudit = pgTable(
+  "ops_audit",
+  {
+    id: text("id").primaryKey(),
+    actorUserId: text("actor_user_id").notNull(),
+    action: text("action").notNull(),
+    targetUserId: text("target_user_id"),
+    meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("ops_audit_created_at_idx").on(t.createdAt), index("ops_audit_actor_idx").on(t.actorUserId)],
+);
+
 export type RouteStep = {
   name: string;
   distance_meters: number;
@@ -374,4 +396,9 @@ export function canWriteAsRole(role: string | null | undefined): boolean {
 /** Owner/staff roles that skip the Stripe import gate. Not a tenant bypass. */
 export function isStaffRole(role: string | null | undefined): boolean {
   return role === "admin" || role === "developer";
+}
+
+/** Admins may mutate operator data. Developers are read-only on `/api/admin/*`. */
+export function isAdminRole(role: string | null | undefined): boolean {
+  return role === "admin";
 }

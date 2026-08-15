@@ -4,6 +4,8 @@
 
 `npm run test:security` encodes the security catalog: route matrix, policy scanners, FORCE RLS leaks, privacy/XSS, and `npm audit`. Not a live pentest.
 
+Operator console at `/admin` (accounts and ops, not other-user maps). `ops_flags` / `ops_audit` overlay wrangler kill switches. `npm run test:admin` covers the `/api/admin` matrix.
+
 Account delete wipes Timeline under FORCE RLS (`withTenant`), pages R2 prefixes until empty, and clears verification tokens. Password reset and email change revoke other sessions. One active import per tenant (409). In-app rate limits on search, billing, and reverse-geocode; Cloudflare WAF remains the hard edge control. Staging CSP is enforcing. Production/staging `workers_dev` hostnames are off. Better Auth upgraded to 1.6 (hashed email OTPs, two-step email change).
 
 Public marketing pages outside the app shell (landing, pricing, status, changelog), a skippable scripted demo tour, staff stuck-import list and tenant-wipe runbook, and env feature flags (`globe`, `demoTour`, `landing`). `GET /api/health` reports Worker and database separately. Activity guesses from dwell, hour, and place type (not an LLM) plus coverage percent and visit badges; existing tenants see those after the next import.
@@ -16,7 +18,7 @@ Settings: signed-in session list and revoke, pause vs cancel billing copy (invoi
 
 Command palette search (`Ctrl/Cmd+K`, mobile sheet), URL-synced Hotspots and Day Trips filters, GPS jump, on-device recents and filter presets, and `g h` / `[` `]` keyboard jumps.
 
-Explore overflow (desktop rail and mobile More) with nested catalog pages: place directory and place pages, corridors, coverage, compare, time-lapse, month/week/on this day/gaps, year-in-review PNG, trip stories and named trips, commute, away nights, firsts, chapters, onboarding, import history, data health, staff console (own tenant counts, stuck imports, wipe runbook), in-app changelog, activity guesses, badges, and an optional heatmap globe.
+Explore overflow (desktop rail and mobile More) with nested catalog pages: place directory and place pages, corridors, coverage, compare, time-lapse, month/week/on this day/gaps, year-in-review PNG, trip stories and named trips, commute, away nights, firsts, chapters, onboarding, import history, data health, operator console (accounts, flags, billing, imports; own tenant on `/admin/me`), in-app changelog, activity guesses, badges, and an optional heatmap globe.
 
 Day View time scrubber and playback (estimated path along stays and predicted routes), sunrise/sunset ticks, overnight stay labels, and unknown-movement gap copy.
 

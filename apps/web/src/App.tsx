@@ -449,6 +449,7 @@ function AuthedShell() {
         <Route path="/imports" element={<AppContent />} />
         <Route path="/health" element={<AppContent />} />
         <Route path="/admin" element={<AppContent />} />
+        <Route path="/admin/*" element={<AppContent />} />
         <Route path="/globe" element={<AppContent />} />
         <Route path="/updates" element={<AppContent />} />
         <Route path="/badges" element={<AppContent />} />

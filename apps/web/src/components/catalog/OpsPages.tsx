@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import CatalogPage from './CatalogPage';
 import { Button } from '../ui/button';
-import { useAdminStats, useCachedAnalytics, useImportJobs, useImportStatus } from '../../hooks/useApi';
+import { useCachedAnalytics, useImportJobs, useImportStatus } from '../../hooks/useApi';
 import { TIMEZONE_SKEW_COPY } from '../ImportDropZone';
 import { useSession } from '../../lib/auth';
 import ChangelogList from '../marketing/ChangelogList';
@@ -88,75 +88,6 @@ export function HealthPage() {
           {TIMEZONE_SKEW_COPY}
         </p>
       )}
-    </CatalogPage>
-  );
-}
-
-export function AdminPage() {
-  const { data, isError } = useAdminStats();
-  if (isError) {
-    return (
-      <CatalogPage title="Staff console">
-        <p className="text-sm text-text-muted">Not found.</p>
-      </CatalogPage>
-    );
-  }
-  const stuck = data?.stuckJobs ?? [];
-  const recent = data?.recentJobs ?? [];
-  return (
-    <CatalogPage
-      title="Staff console"
-      description="Your tenant only. Other accounts stay behind row-level security. No coordinates or place names."
-    >
-      <ul className="space-y-2 text-sm">
-        <li>Visits: {data?.visitCount ?? 0}</li>
-        <li>Sources: {data?.sourceCount ?? 0}</li>
-        <li>Latest job: {data?.latestJobStatus ?? 'none'}</li>
-        <li>Recent jobs listed: {data?.recentJobCount ?? 0}</li>
-        <li>Stuck imports (pending or processing over 15 minutes): {data?.stuckJobCount ?? 0}</li>
-      </ul>
-      {stuck.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-text">Stuck jobs</h3>
-          <ul className="space-y-2 text-sm">
-            {stuck.map((j) => (
-              <li key={j.id} className="rounded-lg border border-border bg-bg px-3 py-2">
-                <div className="font-mono text-xs">{j.id}</div>
-                <div className="text-text-muted">
-                  {j.status} · {j.ageMinutes} min · {j.parsedCount} parsed · {j.visitCount} visits
-                </div>
-                {j.error && <div className="text-train">{j.error}</div>}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {recent.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-text">Recent jobs</h3>
-          <ul className="space-y-2 text-sm">
-            {recent.map((j) => (
-              <li key={j.id} className="rounded-lg border border-border bg-bg px-3 py-2">
-                <div className="font-mono text-xs">{j.id}</div>
-                <div className="text-text-muted">
-                  {j.status} · {j.ageMinutes} min · {j.parsedCount} parsed · {j.visitCount} visits
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div className="rounded-lg border border-border bg-bg px-3 py-3 text-sm text-text-muted">
-        <h3 className="font-semibold text-text">Wipe this tenant</h3>
-        <p className="mt-2">
-          Staff still use their own tenant. To wipe: Settings, Danger zone, Delete account. That removes
-          Neon rows, the R2 prefix, sessions, and the Stripe customer. Coordinates are never written to
-          logs or email. Check Worker logs by job id only. Do not paste Timeline JSON.
-        </p>
-        <Button asChild className="mt-3" variant="outline" title="Open Settings danger zone">
-          <Link to="/settings">Open Settings</Link>
-        </Button>
-      </div>
     </CatalogPage>
   );
 }

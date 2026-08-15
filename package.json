@@ -44,6 +44,7 @@
     "test:placement": "node scripts/test-placement.mjs",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:admin": "vitest run --project admin",
     "test:rls": "vitest run --project rls",
     "test:security": "node scripts/test-security.mjs",
     "test:all": "vitest run",

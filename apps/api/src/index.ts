@@ -16,6 +16,8 @@ import { corsOriginFor } from "./cors";
 import { blockDemo } from "./guards";
 import { clientIp, rateLimit } from "./rate-limit";
 import { applySecurityHeaders, isProductionHttps } from "./security-headers";
+import { registerAdminRoutes } from "./admin";
+import { resolveOpsFlags } from "./ops-flags";
 import {
   cspSourcesForHosts,
   extraCspHostsFromEnv,
@@ -77,7 +79,6 @@ import {
   upsertChapter,
   deleteChapter,
   listImportJobs,
-  staffTenantStats,
   patchSource,
   previewImport,
   deleteTenantDateRange,
@@ -149,7 +150,8 @@ app.all("/api/auth/*", async (c) => {
     c.header("Retry-After", String(limited.retryAfterSec));
     return c.json({ error: "Too many auth requests" }, 429);
   }
-  const auth = createAuth(c.env);
+  const flags = await resolveOpsFlags(c.env);
+  const auth = createAuth(c.env, { disableSignUp: flags.signupDisabled });
   const res = await auth.handler(c.req.raw);
   if (res.ok && c.req.method === "POST" && c.req.path.endsWith("/change-password")) {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
@@ -289,8 +291,9 @@ async function readTimelineUpload(
   };
 }
 
-app.get("/api/config", (c) => {
+app.get("/api/config", async (c) => {
   const customTileHosts = parseCustomTileHosts(c.env.MAP_CUSTOM_TILE_HOSTS);
+  const flags = await resolveOpsFlags(c.env);
   return c.json({
     mapTileDark:
       c.env.MAP_TILE_DARK_URL ||
@@ -303,13 +306,13 @@ app.get("/api/config", (c) => {
     mapStyleLight: c.env.MAP_STYLE_LIGHT_URL || null,
     customTiles: customTileHosts.length > 0,
     customTileHosts,
-    signupDisabled: c.env.DISABLE_SIGNUP === "true",
-    globe: c.env.GLOBE_ENABLED !== "false",
+    signupDisabled: flags.signupDisabled,
+    globe: flags.globeEnabled,
     billingConfigured: Boolean(c.env.STRIPE_SECRET_KEY),
     flags: {
-      globe: c.env.GLOBE_ENABLED !== "false",
-      demoTour: c.env.DEMO_TOUR !== "false",
-      landing: c.env.LANDING_ENABLED !== "false",
+      globe: flags.globeEnabled,
+      demoTour: flags.demoTour,
+      landing: flags.landingEnabled,
     },
   });
 });
@@ -1029,12 +1032,7 @@ app.get("/api/import/jobs", async (c) => {
   return c.json(await withTenant(db, tenant, (tx) => listImportJobs(tx, tenant)));
 });
 
-app.get("/api/admin/stats", async (c) => {
-  if (!isStaffRole(c.get("user")?.role)) return c.json({ error: "Not found" }, 404);
-  const db = getDb(c.env);
-  const tenant = c.get("tenant");
-  return c.json(await withTenant(db, tenant, (tx) => staffTenantStats(tx, tenant)));
-});
+registerAdminRoutes(app);
 
 for (const key of [
   "away-nights",

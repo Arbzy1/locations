@@ -25,9 +25,12 @@ tests/
     web/            apps/web helpers
     scripts/        repo scripts
     security/       policy scanners, catalog drift, privacy/XSS (`test:security`)
+    api/admin/      operator flags, last-admin, payload scrub (`test:admin`)
+    web/admin/      developer-page check helpers (`test:admin`)
   integration/      npm run test:integration
     api/            Hono app.request and webhook HTTP
       security/     route threat matrix (`test:security`)
+      admin/        /api/admin matrix (`test:admin`)
   rls/              npm run test:rls (live DATABASE_URL)
   e2e/              npm run test:e2e (Playwright, *.spec.ts)
 ```
@@ -77,8 +80,9 @@ Tiny synthetic Timeline JSON only: [`fixtures/timeline/`](fixtures/timeline/). N
 | Script | What |
 | --- | --- |
 | `npm run test:placement` | Fail if tests live outside this tree |
-| `npm run test:unit` | `tests/unit/**/*.test.ts` except `tests/unit/security/` (that project is `test:security`) |
-| `npm run test:integration` | `tests/integration/**/*.test.ts` except `tests/integration/api/security/` |
+| `npm run test:unit` | `tests/unit/**/*.test.ts` except `tests/unit/security/` and `tests/unit/{api,web}/admin/` |
+| `npm run test:integration` | `tests/integration/**/*.test.ts` except `tests/integration/api/security/` and `tests/integration/api/admin/` |
+| `npm run test:admin` | Vitest project `admin`: `tests/unit/{api,web}/admin/` and `tests/integration/api/admin/` |
 | `npm run test:rls` | `tests/rls/**/*.test.ts` (loads `.env` / `.dev.vars`; skipIf without `DATABASE_URL`) |
 | `npm run test:security` | Placement, Vitest `security` project, RLS, `deps:audit`. Not a live pentest. |
 | `npm run test:e2e` | Playwright `tests/e2e` |

@@ -67,6 +67,7 @@ const CATALOG_EXACT = new Set([
 
 export function isCatalogPath(pathname: string): boolean {
   if (CATALOG_EXACT.has(pathname)) return true;
+  if (pathname.startsWith("/admin")) return true;
   if (pathname.startsWith("/places/")) return true;
   if (pathname.startsWith("/corridors/")) return true;
   if (pathname.startsWith("/areas/")) return true;
@@ -78,6 +79,7 @@ export function isCatalogPath(pathname: string): boolean {
 }
 
 export function catalogTitle(pathname: string): string {
+  if (pathname.startsWith("/admin")) return "Operator";
   if (pathname.startsWith("/places")) return "Places";
   if (pathname.startsWith("/corridors")) return "Corridor";
   if (pathname.startsWith("/review")) return "Year in review";

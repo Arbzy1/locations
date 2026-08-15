@@ -3,7 +3,8 @@ import { PlacesDirectory, PlacePage, CorridorPage, CoveragePage, AreaPage, Areas
 import { MonthPage, WeekPage, OnThisDayPage, GapsPage } from './TimePages';
 import { TripStoryPage, TripBuilderPage, HolidaysPage, CommutePage, WeekdayPage } from './TripPages';
 import { FirstsPage, MovingPage, AnomalyPage, ChaptersPage, BadgesPage, GuessesPage } from './LifePages';
-import { OnboardingPage, ImportsPage, HealthPage, AdminPage, UpdatesPage } from './OpsPages';
+import { OnboardingPage, ImportsPage, HealthPage, UpdatesPage } from './OpsPages';
+import AdminShell from '../admin/AdminShell';
 import { ComparePage, ReplayPage } from './CompareReplay';
 import GlobeView from './GlobeView';
 import CatalogPage from './CatalogPage';
@@ -37,7 +38,7 @@ export default function CatalogRouter() {
   if (pathname === '/onboarding') return <OnboardingPage />;
   if (pathname === '/imports') return <ImportsPage />;
   if (pathname === '/health') return <HealthPage />;
-  if (pathname === '/admin') return <AdminPage />;
+  if (pathname.startsWith('/admin')) return <AdminShell />;
   if (pathname === '/updates') return <UpdatesPage />;
   if (pathname === '/badges') return <BadgesPage />;
   if (pathname === '/guesses') return <GuessesPage />;

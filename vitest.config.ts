@@ -23,7 +23,13 @@ export default defineConfig({
           name: "unit",
           environment: "node",
           include: ["tests/unit/**/*.test.ts"],
-          exclude: ["**/node_modules/**", "**/dist/**", "tests/unit/security/**"],
+          exclude: [
+            "**/node_modules/**",
+            "**/dist/**",
+            "tests/unit/security/**",
+            "tests/unit/api/admin/**",
+            "tests/unit/web/admin/**",
+          ],
         },
       },
       {
@@ -32,7 +38,25 @@ export default defineConfig({
           name: "integration",
           environment: "node",
           include: ["tests/integration/**/*.test.ts"],
-          exclude: ["**/node_modules/**", "**/dist/**", "tests/integration/api/security/**"],
+          exclude: [
+            "**/node_modules/**",
+            "**/dist/**",
+            "tests/integration/api/security/**",
+            "tests/integration/api/admin/**",
+          ],
+        },
+      },
+      {
+        resolve: { alias },
+        test: {
+          name: "admin",
+          environment: "node",
+          include: [
+            "tests/unit/api/admin/**/*.test.ts",
+            "tests/unit/web/admin/**/*.test.ts",
+            "tests/integration/api/admin/**/*.test.ts",
+          ],
+          exclude: ["**/node_modules/**", "**/dist/**"],
         },
       },
       {

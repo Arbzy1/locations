@@ -31,4 +31,6 @@ Worker connections use a transactional driver. Each authenticated request:
 
 `route_cache` and `place_cache` are OSM geometry/address only. User-edited names live in `place_labels`.
 
-Catalog tenant tables `named_trips`, `life_chapters`, and `export_jobs` use the same FORCE RLS policy as visits. Staff `/api/admin/stats` reads the caller’s tenant only.
+Catalog tenant tables `named_trips`, `life_chapters`, and `export_jobs` use the same FORCE RLS policy as visits. Staff `/api/admin/stats` reads the caller’s tenant only. Cross-account operator pages loop `withTenant(tenantForUser(id), …)` for counts and job ids. They never `BYPASSRLS` and never select visits without a tenant GUC.
+
+`ops_flags` and `ops_audit` are **not** tenant tables. They follow `stripe_events`: ENABLE RLS, `USING (true)`, app-layer staff gate. Do not add them to the FORCE tenant list.

@@ -2,6 +2,7 @@ import { user, tenantForUser, withTenant } from "@locations/db";
 import type { Env } from "./env";
 import { getAnalytics, getDb, getUserSettings, upsertUserSettings } from "./services";
 import { sendProductEmail } from "./email";
+import { LAST_RECAP_FLAG_KEY, writeInternalFlag } from "./ops-flags";
 
 export function lastCompleteMonthYm(now = new Date()): string {
   const prev = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0));
@@ -117,5 +118,10 @@ export async function runMonthlyRecaps(env: Env, now = new Date()): Promise<{ co
       sent += 1;
     }
   }
+  await writeInternalFlag(
+    env,
+    LAST_RECAP_FLAG_KEY,
+    JSON.stringify({ considered, sent, at: now.toISOString() }),
+  ).catch(() => undefined);
   return { considered, sent };
 }

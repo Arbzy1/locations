@@ -13,6 +13,7 @@ import type { Env } from "./env";
 import { allowedOrigins } from "./cors";
 import { sendEmail, isDemoRecipient } from "./email";
 import type { EmailKind } from "./email";
+import { resolveOpsFlags } from "./ops-flags";
 
 function siteVars(env: Env) {
   return { siteUrl: env.BETTER_AUTH_URL.replace(/\/$/, "") };
@@ -32,10 +33,10 @@ async function sendAuthEmail(
   });
 }
 
-export function createAuth(env: Env) {
+export function createAuth(env: Env, overlay?: { disableSignUp?: boolean }) {
   const db = createHttpDb(env.DATABASE_URL);
   const secure = env.BETTER_AUTH_URL.startsWith("https://");
-  const disableSignUp = env.DISABLE_SIGNUP === "true";
+  const disableSignUp = overlay?.disableSignUp ?? env.DISABLE_SIGNUP === "true";
 
   return betterAuth({
     database: drizzleAdapter(db, {
@@ -114,6 +115,11 @@ export function createAuth(env: Env) {
       },
     },
   });
+}
+
+export async function createAuthForEnv(env: Env) {
+  const flags = await resolveOpsFlags(env);
+  return createAuth(env, { disableSignUp: flags.signupDisabled });
 }
 
 export type Auth = ReturnType<typeof createAuth>;

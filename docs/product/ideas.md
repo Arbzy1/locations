@@ -154,14 +154,14 @@ Prefer exports and screenshots over multi-user maps unless you are ready to redo
 
 ## 12. Staff, demo, and growth
 
-Shipped: skippable scripted demo tour, public landing at `/` (kill switch `LANDING_ENABLED`), `/pricing`, `/status` (Worker + Neon via `GET /api/health`), public `/changelog` plus in-app `/updates`, staff stuck-import list and wipe runbook on `/admin` (own tenant; job ids and counts only), env flags on `GET /api/config` (`globe`, `demoTour`, `landing`).
+Shipped: skippable scripted demo tour, public landing at `/` (kill switch `LANDING_ENABLED`, overridable from the operator console), `/pricing`, `/status` (Worker + Neon via `GET /api/health`), public `/changelog` plus in-app `/updates`, operator console at `/admin` (accounts, flags, billing, imports, exports; job ids and counts only), env flags on `GET /api/config` (`globe`, `demoTour`, `landing`) with a DB overlay.
 
 Remaining:
 
 - Richer demo script (more steps, highlight chrome)
 - Dollar amounts on pricing (keep price ids server-only)
 - Status history / incidents (not just a live ping)
-- Cross-tenant admin (rejected under FORCE RLS; staff stay on their own tenant)
+- Cross-tenant **Timeline** (rejected under FORCE RLS; staff stay on their own tenant for maps). Operator **accounts** shipped.
 
 ---
 

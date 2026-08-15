@@ -27,7 +27,24 @@ All other `/api/*` require a session.
 | GET/POST | `/api/chapters` | life chapters; POST not demo |
 | PATCH/DELETE | `/api/chapters/:id` | not demo |
 | GET | `/api/import/jobs` | job list without R2 keys |
-| GET | `/api/admin/stats` | staff only; own tenant counts, stuck jobs (id/status/age/counts); others 404 |
+| GET | `/api/admin/stats` | staff only; caller tenant counts, stuck jobs (id/status/age/counts); others 404 |
+| GET | `/api/admin/overview` | staff; histograms, health, flag snapshot |
+| GET/PATCH | `/api/admin/flags` | staff GET; admin PATCH overlay on signup/landing/globe/demo tour |
+| GET | `/api/admin/users` | staff; paginated directory (`q` prefix, `limit` cap 50) |
+| GET | `/api/admin/users/:id` | staff; counts, billing status, job ids; 404 if missing |
+| POST | `/api/admin/users/:id/role` | admin; `user` / `admin` / `developer`; last-admin guard |
+| POST | `/api/admin/users/:id/revoke-sessions` | admin |
+| POST | `/api/admin/users/:id/verify` | admin |
+| POST | `/api/admin/users/:id/wipe` | admin; body must repeat target email |
+| GET | `/api/admin/billing` | staff; status histogram, past_due user ids |
+| GET | `/api/admin/imports` | staff; job ids and counts across accounts |
+| GET | `/api/admin/exports` | staff; export job ids/status; no ZIP download |
+| GET | `/api/admin/email` | staff; kind catalog + last recap `{ considered, sent }` |
+| GET | `/api/admin/maps` | staff; vendor configured booleans, never keys |
+| GET | `/api/admin/demo` | staff; whether a demo account exists |
+| GET | `/api/admin/analytics` | staff; role counts, import ready/error, recap opt-in |
+| GET | `/api/admin/audit` | staff; action log |
+| GET | `/api/admin/diagnostics` | staff; Worker/Neon/flag/vendor booleans |
 | GET | `/api/search` | `q=` places (cluster, type, labels, tags) and days; hidden omitted; ISO date is exact; rate-limited |
 | GET | `/api/sources` | |
 | PATCH/DELETE | `/api/sources/:id` | not demo; PATCH `label` and/or allowlisted `color` |

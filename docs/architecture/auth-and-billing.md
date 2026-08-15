@@ -8,6 +8,10 @@ Forgot-password links go to `/reset-password`. Settings can change password (oth
 
 Demo: `POST /api/auth/demo` signs in with server-side `DEMO_EMAIL` / `DEMO_PASSWORD`. The client must not embed the demo password. Demo never receives email. Demo may list/revoke its own sessions and download the sample GDPR pack.
 
+Staff (`admin`, `developer`) skip the Stripe import gate on their **own** tenant. They also get `/api/admin/*` for accounts and ops. `admin` may mutate flags, roles, sessions, and wipe (email confirm). `developer` is read-only on those routes (404 on PATCH/POST). Non-staff gets **404**, not 403. Location reads still use `withTenant(tenantForUser(target))` for counts only. No impersonation and no admin map of another user’s Timeline.
+
+`ops_flags` overlays wrangler `DISABLE_SIGNUP` / `LANDING_ENABLED` / `GLOBE_ENABLED` / `DEMO_TOUR` when a row is present. `ops_audit` logs staff actions (ids and counts, no coordinates).
+
 See [Transactional email](../product/email.md) for the kind catalog.
 
 ## Billing
