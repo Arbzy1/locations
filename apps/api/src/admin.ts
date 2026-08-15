@@ -94,8 +94,8 @@ export function registerAdminRoutes(app: AdminApp) {
     const stats = await withTenant(db, tenant, (tx) => staffTenantStats(tx, tenant));
     return c.json({
       ...stats,
-      stuckJobs: stats.stuckJobs.map((job) => ({ ...job, error: sanitizeJobError(job.error) })),
-      recentJobs: stats.recentJobs.map((job) => ({ ...job, error: sanitizeJobError(job.error) })),
+      stuckJobs: (stats.stuckJobs ?? []).map((job) => ({ ...job, error: sanitizeJobError(job.error) })),
+      recentJobs: (stats.recentJobs ?? []).map((job) => ({ ...job, error: sanitizeJobError(job.error) })),
     });
   });
 

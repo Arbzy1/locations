@@ -4,8 +4,8 @@ const SECRETISH = /\b(sk_|whsec_|re_[A-Za-z0-9]|BEGIN [A-Z ]+PRIVATE KEY)/;
 export const ALLOWED_OPS_ROLES = ["user", "admin", "developer"] as const;
 export type OpsAssignableRole = (typeof ALLOWED_OPS_ROLES)[number];
 
-export const INVITE_OPS_ROLES = ["user", "developer"] as const;
-export type OpsInviteRole = (typeof INVITE_OPS_ROLES)[number];
+export const OPS_INVITATION_ROLES = ["user", "developer"] as const;
+export type OpsInviteRole = (typeof OPS_INVITATION_ROLES)[number];
 
 export const EMAIL_TEST_KINDS = ["password_changed"] as const;
 
@@ -14,7 +14,7 @@ export function isAssignableOpsRole(role: string): role is OpsAssignableRole {
 }
 
 export function isInviteOpsRole(role: string): role is OpsInviteRole {
-  return (INVITE_OPS_ROLES as readonly string[]).includes(role);
+  return (OPS_INVITATION_ROLES as readonly string[]).includes(role);
 }
 
 export function sanitizeJobError(raw: string | null | undefined): string | null {

@@ -361,6 +361,9 @@ describe("API auth boundaries", () => {
       sourceCount: 1,
       latestJobStatus: "ready",
       recentJobCount: 1,
+      stuckJobCount: 0,
+      stuckJobs: [],
+      recentJobs: [],
     } as never);
     const res = await request("/api/admin/stats");
     expect(res.status).toBe(200);
