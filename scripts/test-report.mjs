@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Run unit + integration tests and write reports/test-report.md.
+ * Run unit + integration + security tests and write reports/test-report.md.
  *
  *   npm run test:report
  */
@@ -8,6 +8,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { renderMarkdown, summarize } from "./test-report-render.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const reportsDir = join(root, "reports");
@@ -28,6 +29,8 @@ const result = spawnSync(
     "unit",
     "--project",
     "integration",
+    "--project",
+    "security",
     "--reporter=default",
     "--reporter=json",
     "--outputFile",
@@ -40,7 +43,7 @@ const result = spawnSync(
   },
 );
 
-/** @type {{ numTotalTests?: number, numPassedTests?: number, numFailedTests?: number, numPendingTests?: number, testResults?: Array<{ name?: string, assertionResults?: Array<{ fullName?: string, title?: string, status?: string, failureMessages?: string[] }> }> }} */
+/** @type {Record<string, unknown>} */
 let payload = {};
 try {
   payload = JSON.parse(readFileSync(jsonPath, "utf8"));
@@ -48,49 +51,10 @@ try {
   payload = {};
 }
 
-const failed = [];
-for (const suite of payload.testResults ?? []) {
-  for (const assertion of suite.assertionResults ?? []) {
-    if (assertion.status === "failed") {
-      failed.push(assertion.fullName || assertion.title || suite.name || "unknown");
-    }
-  }
-}
-
-const total = payload.numTotalTests ?? 0;
-const passed = payload.numPassedTests ?? Math.max(0, total - failed.length);
-const failedCount = payload.numFailedTests ?? failed.length;
-const pending = payload.numPendingTests ?? 0;
+const summary = summarize(payload);
 const generated = new Date().toISOString();
-const ok = failedCount === 0 && (result.status ?? 1) === 0;
-
-const failedSection =
-  failed.length === 0
-    ? "None."
-    : failed.map((name) => `- ${name}`).join("\n");
-
-const markdown = `# Test report
-
-Generated: ${generated}
-
-Unit and integration only (no RLS, no e2e).
-
-## Summary
-
-| Metric | Count |
-| --- | ---: |
-| Total | ${total} |
-| Passed | ${passed} |
-| Failed | ${failedCount} |
-| Pending | ${pending} |
-| Result | ${ok ? "pass" : "fail"} |
-
-## Failed tests
-
-${failedSection}
-
-Regenerate with \`npm run test:report\`.
-`;
+const ok = summary.failed === 0 && (result.status ?? 1) === 0;
+const markdown = renderMarkdown(summary, { generated, ok });
 
 writeFileSync(mdPath, markdown, "utf8");
 console.log(`\nWrote reports/test-report.md (${ok ? "pass" : "fail"})`);

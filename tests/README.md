@@ -83,7 +83,7 @@ Tiny synthetic Timeline JSON only: [`fixtures/timeline/`](fixtures/timeline/). N
 | `npm run test:security` | Placement, Vitest `security` project, RLS, `deps:audit`. Not a live pentest. |
 | `npm run test:e2e` | Playwright `tests/e2e` |
 | `npm run test:all` | All Vitest projects |
-| `npm run test:report` | unit + integration markdown report |
+| `npm run test:report` | unit + integration + security; charted markdown report |
 
 A new `/api/*` route without a row in [`helpers/api-route-catalog.ts`](helpers/api-route-catalog.ts) fails `test:security`.
 

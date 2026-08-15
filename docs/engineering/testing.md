@@ -11,7 +11,7 @@ All tests live under [`tests/`](../../tests/README.md). Placement map and decisi
 | `npm run test:security` | Placement + policy scanners + API threat matrix + RLS + `deps:audit`. Not a live pentest. |
 | `npm run test:e2e` | Playwright (`tests/e2e/00`–`70`) |
 | `npm run test:all` | All Vitest projects (rls skipped if no DB) |
-| `npm run test:report` | unit + integration, writes `reports/test-report.md` |
+| `npm run test:report` | unit + integration + security; charted markdown at `reports/test-report.md` |
 | `npm run loc` / `loc:report` | Lines of code; report writes `reports/loc.md` |
 
 Fixtures: `tests/fixtures/timeline/`. Never commit real Takeout. Do not name a fixture `Records.json`.
