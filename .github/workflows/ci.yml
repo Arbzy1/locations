@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run test:placement
+      - run: npm run test:unit
+      - run: npm run test:integration
+      - run: npm run test:admin
+      - run: npm run test:security
+      - run: npm run test:rls
+      - run: npm run typecheck:all
+
+  rls:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.DATABASE_URL != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run test:rls
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

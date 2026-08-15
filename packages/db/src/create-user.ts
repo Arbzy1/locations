@@ -1,27 +1,24 @@
-import { config } from "dotenv";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { loadEnvFiles, takeEnvName } from "./load-env.js";
 import { randomUUID } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { hashPassword } from "better-auth/crypto";
 import { account, user } from "./schema.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-config({ path: resolve(__dirname, "../../../.env") });
-config({ path: resolve(__dirname, "../../../.dev.vars") });
-
 async function main() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is required");
+  const { name, argv } = takeEnvName();
+  loadEnvFiles(name);
 
-  const email = process.argv[2];
-  const password = process.argv[3];
-  const name = process.argv[4] || email?.split("@")[0] || "User";
-  const role = process.argv[5] || "admin";
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error(`DATABASE_URL is required (${name} env files)`);
+
+  const email = argv[0];
+  const password = argv[1];
+  const displayName = argv[2] || email?.split("@")[0] || "User";
+  const role = argv[3] || "admin";
 
   if (!email || !password) {
-    console.error("Usage: npm run auth:create-user -- <email> <password> [name] [role]");
+    console.error("Usage: npm run auth:create-user -- <email> <password> [name] [role] [--env local|staging|production]");
     process.exit(1);
   }
 
@@ -32,7 +29,7 @@ async function main() {
 
   await db.insert(user).values({
     id,
-    name,
+    name: displayName,
     email,
     emailVerified: true,
     role,

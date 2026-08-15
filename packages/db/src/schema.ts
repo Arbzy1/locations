@@ -17,6 +17,31 @@ export type TenantId = string;
 
 export type ImportJobStatus = "pending" | "processing" | "ready" | "error";
 
+export type ExportJobStatus = ImportJobStatus;
+
+export type SubscriptionStatus =
+  | "none"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "unpaid"
+  | "paused";
+
+export const PLACE_COLOR_TOKENS = [
+  "accent",
+  "visit",
+  "walk",
+  "train",
+  "car",
+  "bus",
+  "cycle",
+] as const;
+
+export type PlaceColorToken = (typeof PLACE_COLOR_TOKENS)[number];
+
+export type DistanceUnit = "mi" | "km";
+
 /* ─── Better Auth tables ─── */
 
 export const user = pgTable("user", {
@@ -86,6 +111,7 @@ export const dataSources = pgTable(
     id: text("id").primaryKey(),
     tenant: text("tenant").notNull(),
     label: text("label").notNull(),
+    color: text("color").$type<PlaceColorToken | null>(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -106,13 +132,37 @@ export const importJobs = pgTable(
     error: text("error"),
     visitCount: integer("visit_count"),
     activityCount: integer("activity_count"),
+    parsedCount: integer("parsed_count"),
+    merge: boolean("merge").notNull().default(false),
+    chosenFile: text("chosen_file"),
     r2Key: text("r2_key"),
+    notifiedAt: timestamp("notified_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [
     index("import_jobs_tenant_idx").on(t.tenant),
     index("import_jobs_user_id_idx").on(t.userId),
+  ],
+);
+
+export const exportJobs = pgTable(
+  "export_jobs",
+  {
+    id: text("id").primaryKey(),
+    tenant: text("tenant").notNull(),
+    userId: text("user_id").notNull(),
+    status: text("status").notNull().$type<ExportJobStatus>(),
+    error: text("error"),
+    visitCount: integer("visit_count"),
+    activityCount: integer("activity_count"),
+    r2Key: text("r2_key"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("export_jobs_tenant_idx").on(t.tenant),
+    index("export_jobs_user_id_idx").on(t.userId),
   ],
 );
 
@@ -138,6 +188,7 @@ export const visits = pgTable(
     index("visits_tenant_date_idx").on(t.tenant, t.date),
     index("visits_place_id_idx").on(t.placeId),
     index("visits_tenant_source_idx").on(t.tenant, t.sourceId),
+    index("visits_tenant_cluster_idx").on(t.tenant, t.cluster),
   ],
 );
 
@@ -207,6 +258,112 @@ export const placeCache = pgTable(
   (t) => [uniqueIndex("place_cache_place_id_uidx").on(t.placeId)],
 );
 
+export const placeLabels = pgTable(
+  "place_labels",
+  {
+    tenant: text("tenant").notNull(),
+    placeKey: text("place_key").notNull(),
+    label: text("label").notNull(),
+    hidden: boolean("hidden").notNull().default(false),
+    favourite: boolean("favourite").notNull().default(false),
+    color: text("color").$type<PlaceColorToken | null>(),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tenant, t.placeKey] })],
+);
+
+export const namedTrips = pgTable(
+  "named_trips",
+  {
+    id: text("id").primaryKey(),
+    tenant: text("tenant").notNull(),
+    name: text("name").notNull(),
+    start: text("start").notNull(),
+    end: text("end").notNull(),
+    dates: jsonb("dates").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("named_trips_tenant_idx").on(t.tenant)],
+);
+
+export const lifeChapters = pgTable(
+  "life_chapters",
+  {
+    id: text("id").primaryKey(),
+    tenant: text("tenant").notNull(),
+    name: text("name").notNull(),
+    start: text("start").notNull(),
+    end: text("end").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("life_chapters_tenant_idx").on(t.tenant)],
+);
+
+/** Saved map camera (lng/lat, not lat/lon) for MapLibre jumpTo. */
+export type MapBookmark = {
+  id: string;
+  name: string;
+  lng: number;
+  lat: number;
+  zoom: number;
+  pitch: number;
+  bearing: number;
+};
+
+export const userSettings = pgTable("user_settings", {
+  tenant: text("tenant").primaryKey(),
+  distanceUnit: text("distance_unit").notNull().$type<DistanceUnit>().default("mi"),
+  timezone: text("timezone"),
+  monthlyRecapEnabled: boolean("monthly_recap_enabled").notNull().default(false),
+  monthlyRecapLastYm: text("monthly_recap_last_ym"),
+  mapBookmarks: jsonb("map_bookmarks").$type<MapBookmark[]>().notNull().default([]),
+  mapTileDarkUrl: text("map_tile_dark_url"),
+  mapTileLightUrl: text("map_tile_light_url"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const subscriptions = pgTable("subscriptions", {
+  tenant: text("tenant").primaryKey(),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  status: text("status").notNull().$type<SubscriptionStatus>().default("none"),
+  priceId: text("price_id"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  graceUntil: timestamp("grace_until"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const stripeEvents = pgTable("stripe_events", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  processedAt: timestamp("processed_at").notNull().defaultNow(),
+});
+
+/** Operator kill switches. Not a tenant table. App-layer staff gate. */
+export const opsFlags = pgTable("ops_flags", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  updatedBy: text("updated_by"),
+});
+
+/** Staff action log. Not a tenant table. Meta is ids/counts/flag keys only. */
+export const opsAudit = pgTable(
+  "ops_audit",
+  {
+    id: text("id").primaryKey(),
+    actorUserId: text("actor_user_id").notNull(),
+    action: text("action").notNull(),
+    targetUserId: text("target_user_id"),
+    meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("ops_audit_created_at_idx").on(t.createdAt), index("ops_audit_actor_idx").on(t.actorUserId)],
+);
+
 export type RouteStep = {
   name: string;
   distance_meters: number;
@@ -220,6 +377,9 @@ export type ActivityRow = typeof activities.$inferSelect;
 export type DayStatsRow = typeof dayStats.$inferSelect;
 export type DataSourceRow = typeof dataSources.$inferSelect;
 export type ImportJobRow = typeof importJobs.$inferSelect;
+export type ExportJobRow = typeof exportJobs.$inferSelect;
+export type SubscriptionRow = typeof subscriptions.$inferSelect;
+export type UserSettingsRow = typeof userSettings.$inferSelect;
 
 /** Resolve the data tenant for an authenticated app user. */
 export function tenantForUser(user: {
@@ -227,4 +387,18 @@ export function tenantForUser(user: {
   role?: string | null;
 }): TenantId {
   return user.role === "demo" ? "demo" : user.id;
+}
+
+export function canWriteAsRole(role: string | null | undefined): boolean {
+  return role !== "demo";
+}
+
+/** Owner/staff roles that skip the Stripe import gate. Not a tenant bypass. */
+export function isStaffRole(role: string | null | undefined): boolean {
+  return role === "admin" || role === "developer";
+}
+
+/** Admins may mutate operator data. Developers are read-only on `/api/admin/*`. */
+export function isAdminRole(role: string | null | undefined): boolean {
+  return role === "admin";
 }

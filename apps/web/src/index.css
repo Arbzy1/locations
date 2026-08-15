@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "./components/ui/eject-field.css";
+@import "./lib/theme/moods.css";
 
 @theme {
   --color-bg: var(--bg);
@@ -15,6 +17,14 @@
   --color-cycle: var(--cycle);
   --color-fly: var(--fly);
   --color-visit: var(--visit);
+  --color-admin: var(--admin);
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--on-accent);
+  --color-card: var(--surface);
+  --color-muted: var(--text-muted);
+  --color-ring: var(--accent);
 
   /* Semantic UI durations: use as duration-ui-fast, etc. */
   --duration-ui-fast: 150ms;
@@ -45,6 +55,14 @@
   --cycle: #56d364;
   --fly: #79c0ff;
   --visit: #bc8cff;
+  --admin: var(--visit);
+  --background: var(--bg);
+  --foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: var(--on-accent);
+  --card: var(--surface);
+  --muted-foreground: var(--text-muted);
+  --ring: var(--accent);
   --surface-hover: #21262d;
   --scrollbar-thumb: #30363d;
   --scrollbar-thumb-hover: #484f58;
@@ -66,6 +84,14 @@
   --cycle: #1a7f37;
   --fly: #0969da;
   --visit: #8250df;
+  --admin: var(--visit);
+  --background: var(--bg);
+  --foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: var(--on-accent);
+  --card: var(--surface);
+  --muted-foreground: var(--text-muted);
+  --ring: var(--accent);
   --surface-hover: #eaeef2;
   --scrollbar-thumb: #d0d7de;
   --scrollbar-thumb-hover: #afb8c1;
@@ -133,12 +159,8 @@ body {
   }
 }
 
-/* Compact Leaflet chrome on narrow viewports */
+/* Compact map chrome on narrow viewports */
 @media (max-width: 1023px) {
-  .leaflet-control-layers {
-    max-width: min(12rem, 70vw);
-  }
-
   .journey-legend {
     max-height: min(140px, 28vh) !important;
     min-width: 0 !important;
@@ -213,48 +235,53 @@ button:active:not(:disabled) {
   }
 }
 
-/* Leaflet overrides: theme-aware */
-.leaflet-container {
+/* MapLibre overrides: theme-aware */
+.maplibregl-map {
   background: var(--bg) !important;
 }
 
-.leaflet-control-zoom a {
+.maplibregl-ctrl-group {
   background: var(--surface) !important;
-  color: var(--text) !important;
   border-color: var(--border) !important;
-  transition: background-color var(--ui-duration-fast) var(--ui-ease),
-    color var(--ui-duration-fast) var(--ui-ease),
-    border-color var(--ui-duration-fast) var(--ui-ease) !important;
 }
 
-.leaflet-control-zoom a:hover {
+.maplibregl-ctrl-group button {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  width: 44px !important;
+  height: 44px !important;
+}
+
+.maplibregl-ctrl-group button:hover {
   background: var(--surface-hover) !important;
 }
 
-.leaflet-control-attribution {
+.maplibregl-ctrl-attrib {
   background: color-mix(in srgb, var(--surface) 80%, transparent) !important;
   color: var(--text-muted) !important;
 }
 
-.leaflet-control-attribution a {
+.maplibregl-ctrl-attrib a {
   color: var(--accent) !important;
 }
 
-.leaflet-popup-content-wrapper {
+.maplibregl-popup-content {
   background: var(--surface) !important;
   color: var(--text) !important;
   border: 1px solid var(--border) !important;
   border-radius: 8px !important;
+  padding: 10px 12px !important;
 }
 
-.leaflet-popup-tip {
-  background: var(--surface) !important;
+.maplibregl-popup-tip {
+  border-top-color: var(--surface) !important;
+  border-bottom-color: var(--surface) !important;
 }
 
-.leaflet-control-layers {
-  background: var(--surface) !important;
-  color: var(--text) !important;
-  border-color: var(--border) !important;
+.maplibregl-popup-close-button {
+  color: var(--text-muted) !important;
+  font-size: 18px !important;
+  padding: 4px 8px !important;
 }
 
 /* Custom scrollbar */

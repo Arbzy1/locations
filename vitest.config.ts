@@ -4,15 +4,83 @@ import { defineConfig } from "vitest/config";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 
+const alias = {
+  "@locations/db": path.resolve(root, "packages/db/src/index.ts"),
+  "@locations/api": path.resolve(root, "apps/api/src"),
+  "@locations/web": path.resolve(root, "apps/web/src"),
+  "@tests": path.resolve(root, "tests"),
+};
+
 export default defineConfig({
+  resolve: { alias },
   test: {
     environment: "node",
-    include: ["**/*.{test,spec}.ts"],
-    exclude: ["**/node_modules/**", "**/e2e/**", "**/legacy/**", "**/dist/**"],
-  },
-  resolve: {
-    alias: {
-      "@locations/db": path.resolve(root, "packages/db/src/index.ts"),
-    },
+    exclude: ["**/node_modules/**", "**/legacy/**", "**/dist/**"],
+    projects: [
+      {
+        resolve: { alias },
+        test: {
+          name: "unit",
+          environment: "node",
+          include: ["tests/unit/**/*.test.ts"],
+          exclude: [
+            "**/node_modules/**",
+            "**/dist/**",
+            "tests/unit/security/**",
+            "tests/unit/api/admin/**",
+            "tests/unit/web/admin/**",
+          ],
+        },
+      },
+      {
+        resolve: { alias },
+        test: {
+          name: "integration",
+          environment: "node",
+          include: ["tests/integration/**/*.test.ts"],
+          exclude: [
+            "**/node_modules/**",
+            "**/dist/**",
+            "tests/integration/api/security/**",
+            "tests/integration/api/admin/**",
+          ],
+        },
+      },
+      {
+        resolve: { alias },
+        test: {
+          name: "admin",
+          environment: "node",
+          include: [
+            "tests/unit/api/admin/**/*.test.ts",
+            "tests/unit/web/admin/**/*.test.ts",
+            "tests/integration/api/admin/**/*.test.ts",
+          ],
+          exclude: ["**/node_modules/**", "**/dist/**"],
+        },
+      },
+      {
+        resolve: { alias },
+        test: {
+          name: "security",
+          environment: "node",
+          include: [
+            "tests/unit/security/**/*.test.ts",
+            "tests/integration/api/security/**/*.test.ts",
+          ],
+          exclude: ["**/node_modules/**", "**/dist/**"],
+        },
+      },
+      {
+        resolve: { alias },
+        test: {
+          name: "rls",
+          environment: "node",
+          include: ["tests/rls/**/*.test.ts"],
+          exclude: ["**/node_modules/**", "**/dist/**"],
+          setupFiles: ["tests/helpers/rls-env.ts"],
+        },
+      },
+    ],
   },
 });

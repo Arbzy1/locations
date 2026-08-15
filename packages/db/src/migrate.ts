@@ -1,40 +1,24 @@
-import { config } from "dotenv";
+import { loadEnvFiles } from "./load-env.js";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
 import { sql } from "drizzle-orm";
+import { createHttpDb } from "./index.js";
+import { splitSql } from "./split-sql.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-config({ path: resolve(__dirname, "../../../.env") });
-config({ path: resolve(__dirname, "../../../.dev.vars") });
-
-function splitSql(body: string): string[] {
-  const withoutLineComments = body
-    .split("\n")
-    .map((line) => {
-      const idx = line.indexOf("--");
-      return idx >= 0 ? line.slice(0, idx) : line;
-    })
-    .join("\n");
-
-  return withoutLineComments
-    .split(";")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
+const envName = loadEnvFiles();
 
 async function main() {
   const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is required");
+  if (!url) throw new Error(`DATABASE_URL is required (${envName} env files)`);
 
   const dir = resolve(__dirname, "../drizzle");
   const files = readdirSync(dir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
 
-  const db = drizzle(neon(url));
+  const db = createHttpDb(url);
   for (const file of files) {
     // Only apply incremental migrations after init on existing DBs.
     // 0000 is idempotent (IF NOT EXISTS). 0001 adds tenant columns.

@@ -3,21 +3,33 @@ export type SecurityHeaderOpts = {
   isProductionHttps: boolean;
   /** Authenticated API responses must not be shared-cached. */
   noStore: boolean;
+  /** Enforce CSP instead of Report-Only. */
+  enforceCsp?: boolean;
+  /** Extra img-src / connect-src hosts (custom tiles, vector style). */
+  extraCspSources?: string;
 };
 
-const CSP_REPORT_ONLY = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://server.arcgisonline.com",
-  "connect-src 'self'",
-  "font-src 'self' data:",
-  "worker-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "frame-ancestors 'none'",
-  "form-action 'self'",
-].join("; ");
+const IMG_SRC =
+  "img-src 'self' data: blob: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://server.arcgisonline.com https://*.maptiler.com https://*.mapbox.com";
+const CONNECT_SRC =
+  "connect-src 'self' https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://server.arcgisonline.com https://*.maptiler.com https://*.mapbox.com https://router.project-osrm.org https://nominatim.openstreetmap.org";
+
+export function buildCsp(extraCspSources?: string): string {
+  const extra = extraCspSources?.trim() ? ` ${extraCspSources.trim()}` : "";
+  return [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    `${IMG_SRC}${extra}`,
+    `${CONNECT_SRC}${extra}`,
+    "font-src 'self' data:",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+  ].join("; ");
+}
 
 /** Apply baseline security headers onto a Headers object (API or assets). */
 export function applySecurityHeaders(headers: Headers, opts: SecurityHeaderOpts): void {
@@ -29,7 +41,12 @@ export function applySecurityHeaders(headers: Headers, opts: SecurityHeaderOpts)
   );
   headers.set("Cross-Origin-Opener-Policy", "same-origin");
   headers.set("X-Frame-Options", "DENY");
-  headers.set("Content-Security-Policy-Report-Only", CSP_REPORT_ONLY);
+  const csp = buildCsp(opts.extraCspSources);
+  if (opts.enforceCsp) {
+    headers.set("Content-Security-Policy", csp);
+  } else {
+    headers.set("Content-Security-Policy-Report-Only", csp);
+  }
 
   if (opts.isProductionHttps) {
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");

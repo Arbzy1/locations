@@ -1,20 +1,84 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { createDb } from "@locations/db";
-import type { Env } from "./env";
+import { magicLink } from "better-auth/plugins/magic-link";
+import { emailOTP } from "better-auth/plugins/email-otp";
+import {
+  account,
+  createHttpDb,
+  session,
+  user,
+  verification,
+} from "@locations/db";
+import { googleAuthEnabled, type Env } from "./env";
 import { allowedOrigins } from "./cors";
+import { sendEmail, isDemoRecipient } from "./email";
+import type { EmailKind } from "./email";
+import { resolveOpsFlags } from "./ops-flags";
 
-export function createAuth(env: Env) {
-  const db = createDb(env.DATABASE_URL);
+function siteVars(env: Env) {
+  return { siteUrl: env.BETTER_AUTH_URL.replace(/\/$/, "") };
+}
+
+async function sendAuthEmail(
+  env: Env,
+  kind: EmailKind,
+  to: string,
+  vars: { url?: string; otp?: string },
+) {
+  await sendEmail(env, {
+    kind,
+    to,
+    vars: { ...vars, ...siteVars(env) },
+    isDemo: isDemoRecipient(env, to),
+  });
+}
+
+export function createAuth(env: Env, overlay?: { disableSignUp?: boolean }) {
+  const db = createHttpDb(env.DATABASE_URL);
   const secure = env.BETTER_AUTH_URL.startsWith("https://");
+  const disableSignUp = overlay?.disableSignUp ?? env.DISABLE_SIGNUP === "true";
+  const google = googleAuthEnabled(env);
 
   return betterAuth({
-    database: drizzleAdapter(db, { provider: "pg" }),
+    database: drizzleAdapter(db, {
+      provider: "pg",
+      schema: { user, session, account, verification },
+    }),
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
+    ...(google
+      ? {
+          socialProviders: {
+            google: {
+              clientId: env.GOOGLE_CLIENT_ID!.trim(),
+              clientSecret: env.GOOGLE_CLIENT_SECRET!.trim(),
+              disableSignUp,
+            },
+          },
+        }
+      : {}),
+    account: {
+      accountLinking: {
+        enabled: true,
+        trustedProviders: google ? (["google"] as const) : [],
+      },
+    },
     emailAndPassword: {
       enabled: true,
-      disableSignUp: true,
+      disableSignUp,
+      requireEmailVerification: true,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user, url }) => {
+        await sendAuthEmail(env, "password_reset_link", user.email, { url });
+      },
+      onPasswordReset: async ({ user }) => {
+        await sendAuthEmail(env, "password_changed", user.email, {});
+      },
+    },
+    emailVerification: {
+      sendVerificationEmail: async ({ user, url }) => {
+        await sendAuthEmail(env, "verify_email_link", user.email, { url });
+      },
     },
     user: {
       additionalFields: {
@@ -25,7 +89,39 @@ export function createAuth(env: Env) {
           input: false,
         },
       },
+      changeEmail: {
+        enabled: true,
+        sendChangeEmailConfirmation: async ({ user, url }) => {
+          await sendAuthEmail(env, "change_email_verify", user.email, { url });
+        },
+      },
     },
+    plugins: [
+      magicLink({
+        disableSignUp: true,
+        expiresIn: 60 * 5,
+        sendMagicLink: async ({ email, url }) => {
+          await sendAuthEmail(env, "magic_link", email, { url });
+        },
+      }),
+      emailOTP({
+        otpLength: 6,
+        expiresIn: 300,
+        disableSignUp: true,
+        sendVerificationOnSignUp: true,
+        storeOTP: "hashed",
+        allowedAttempts: 3,
+        sendVerificationOTP: async ({ email, otp, type }) => {
+          const kind: EmailKind =
+            type === "sign-in"
+              ? "signin_otp"
+              : type === "forget-password"
+                ? "verify_email_otp"
+                : "verify_email_otp";
+          await sendAuthEmail(env, kind, email, { otp });
+        },
+      }),
+    ],
     trustedOrigins: allowedOrigins(env),
     advanced: {
       useSecureCookies: secure,
@@ -37,6 +133,11 @@ export function createAuth(env: Env) {
       },
     },
   });
+}
+
+export async function createAuthForEnv(env: Env) {
+  const flags = await resolveOpsFlags(env);
+  return createAuth(env, { disableSignUp: flags.signupDisabled });
 }
 
 export type Auth = ReturnType<typeof createAuth>;

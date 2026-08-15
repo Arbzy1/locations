@@ -2,15 +2,16 @@
 
 ## Project overview
 
-Private Google Timeline / location-history explorer: heatmaps, day views, trips, and insights.
+Hosted Google Timeline / location-history explorer: heatmaps, day views, trips, insights, and self-serve accounts.
 
 | Layer | Tech |
 |-------|------|
 | Edge | Cloudflare Workers + static assets (Wrangler) |
 | API | Hono (`apps/api`) |
-| Auth | Better Auth (email/password, invite-only / `disableSignUp`) |
-| DB | Neon Postgres + Drizzle (`packages/db`) |
-| UI | React 19, Vite, Tailwind 4, Leaflet, Recharts (`apps/web`) |
+| Auth | Better Auth (email/password, verified signup; `DISABLE_SIGNUP` kill switch) |
+| Billing | Stripe Checkout, Customer Portal, webhooks |
+| DB | Neon Postgres + Drizzle (`packages/db`) with FORCE RLS |
+| UI | React 19, Vite, Tailwind 4, shadcn/ui, Motion, Leaflet, Recharts (`apps/web`) |
 
 Monorepo (npm workspaces) under this directory:
 
@@ -19,21 +20,23 @@ apps/web/      React frontend
 apps/api/      Worker entry (Hono)
 packages/db/   Schema, migrate, import, user tooling
 scripts/       Setup wizard, rule sync, helpers
+docs/          Product, security, legal, engineering docs
 ```
 
-Tenants are isolated in the app layer (`tenant` column + Drizzle filters). There is **no** Postgres RLS. Demo users map to tenant `"demo"`; everyone else uses their user id (`tenantForUser`).
+Tenants are isolated by `tenant` column **and** Postgres FORCE RLS. Demo users map to tenant `"demo"`; everyone else uses their user id (`tenantForUser`). Worker DB connections use `locations_app` (NOBYPASSRLS) inside `withTenant()`.
 
 ## Code style
 
 - TypeScript throughout; workspace packages are `@locations/web`, `@locations/api`, `@locations/db`.
 - Prefer existing patterns: Hono routes in `apps/api/src/index.ts`, data access in `services.ts`, schema in `packages/db`.
-- Generate Drizzle migrations with `npm run db:generate` - do not hand-write migration SQL.
+- Generate Drizzle migrations with `npm run db:generate`. Custom SQL is allowed only for `FORCE ROW LEVEL SECURITY` and role GRANTs (see `packages/db/drizzle/0003_rls.sql`).
 - Use **npm** only (`npm install`, `npm run …`, `npm run … -w @locations/<pkg>`).
-- Keep Takeout JSON and secrets out of git (`.env`, `.dev.vars`, real data files).
+- Keep Takeout JSON and secrets out of git (`.env`, `.env.staging`, `.env.production`, `.dev.vars`, `.dev.vars.staging`, `.dev.vars.production`, real data files).
+- App chrome uses shadcn primitives + Motion. Do not add a second theme or CSS-in-JS system.
 
 ### No em dashes
 
-<!-- sync:cursor-rule name="no-em-dash" alwaysApply="true" -->
+<!-- sync:cursor-rule name="no-em-dash" order="10" alwaysApply="true" -->
 Never use the Unicode em dash (`—`, U+2014) in prose, comments, commits, docs, UI copy, or chat replies. It reads as generic AI-generated writing.
 
 Also avoid the en dash (`–`, U+2013) unless you are citing a numeric range that already uses it in existing code.
@@ -52,17 +55,17 @@ GOOD: Private explorer - heatmaps, day views, and trips.
 
 ### Password fields
 
-<!-- sync:cursor-rule name="password-input" globs="apps/web/**/*.{tsx,jsx}" -->
+<!-- sync:cursor-rule name="password-input" order="20" globs="apps/web/**/*.{tsx,jsx}" -->
 Never use a bare `<input type="password">` in the web app.
 
-Use [`PasswordInput`](apps/web/src/components/PasswordInput.tsx), which includes a show/hide toggle with **react-icons** (`FaEye` / `FaEyeSlash`).
+Use [`PasswordInput`](apps/web/src/components/auth/PasswordInput.tsx), which wraps the shadcn Input and includes a show/hide toggle with **react-icons** (`FaEye` / `FaEyeSlash`).
 
 ```tsx
 // BAD
 <input type="password" value={password} onChange={...} />
 
 // GOOD
-import PasswordInput from './PasswordInput';
+import PasswordInput from '../auth/PasswordInput';
 
 <PasswordInput
   required
@@ -77,12 +80,24 @@ import PasswordInput from './PasswordInput';
 - Toggle button needs an `aria-label` for show/hide.
 <!-- /sync:cursor-rule -->
 
+### shadcn/ui
+
+<!-- sync:cursor-rule name="shadcn-ui" order="25" globs="apps/web/**/*.{tsx,jsx,css}" -->
+All product chrome uses shadcn primitives in [`apps/web/src/components/ui/`](apps/web/src/components/ui/).
+
+- Use `Button`, `Input`, `Card`, `Sheet`, `Dialog`, `AlertDialog`, `DropdownMenu`, `Tabs`, `Switch`, `Badge`, `Tooltip`, `Toaster` (Sonner), `Label`, `Separator`, `Skeleton`.
+- Compose with `cn()` from [`apps/web/src/lib/utils.ts`](apps/web/src/lib/utils.ts) and CVA variants.
+- Add new primitives with the shadcn CLI (or match existing files in `components/ui/`). Do not invent a parallel button/input system.
+- `window.confirm` / `alert` are not allowed for product flows. Use `AlertDialog` or toasts.
+- Password fields still go through `PasswordInput` (rule 20).
+<!-- /sync:cursor-rule -->
+
 ### UI tooltips
 
-<!-- sync:cursor-rule name="ui-tooltips" globs="apps/web/**/*.{tsx,jsx}" -->
+<!-- sync:cursor-rule name="ui-tooltips" order="30" globs="apps/web/**/*.{tsx,jsx}" -->
 Every interactive control in the web app must have a non-empty `title` tooltip:
 
-- `<button>`, `<input>`, `<select>`, `<textarea>`, `PasswordInput`
+- `<button>`, `<input>`, `<select>`, `<textarea>`, `PasswordInput`, shadcn `Button` / `Switch` / `Input`
 - Custom toggles (`role="switch"` and similar)
 
 Prefer a short action/purpose phrase (e.g. "Toggle heatmap layer", "Minimum trip range in miles").
@@ -96,37 +111,42 @@ Forward `title` through wrappers like `PasswordInput` onto the underlying input.
 
 ### Motion and transitions
 
-<!-- sync:cursor-rule name="ui-motion" globs="apps/web/**/*.{tsx,jsx,css}" -->
-All interactive and mount/unmount UI must feel smooth and deliberately paced - never instant snaps (except where motion would harm usability).
+<!-- sync:cursor-rule name="ui-motion" order="40" globs="apps/web/**/*.{tsx,jsx,css}" -->
+Interactive chrome uses **Motion** (`motion/react`). Do not ship dead controls with only a colour swap.
 
-**Hover and active**
+**Hover, active, release (required on every interactive control)**
 
-- Buttons, links, tabs, chips, toggles, cards, and other interactive elements need CSS transitions on colour, background, border, opacity, shadow, and transform.
-- Prefer Tailwind `transition` / `transition-colors` / `transition-all` with a **slow-ish** duration: about **200-400ms** for hover/active (`duration-300` as the default; `duration-200` minimum; avoid bare instant style changes).
-- Active/pressed states should ease as well (scale or brightness), not hard-cut.
+- Hover: colour, shadow, and a spring scale (~1.02-1.04) or lift (`y: -1` / `-2`). Spring stiffness ~400, damping ~22.
+- Active/pressed: scale ~0.96-0.98 with a snappy spring.
+- Release/rest: spring back to 1 with a short overshoot. Never cut from pressed to rest.
+- Use shared helpers in [`apps/web/src/lib/motion.ts`](apps/web/src/lib/motion.ts) (`hoverSpring`, `pressSpring`, `MotionButton` patterns).
 
-**Entrance and exit**
+**Enter and exit**
 
-- Panels, overlays, menus, toasts, and view swaps that appear or disappear need enter/exit motion (fade, soft slide, or opacity + transform).
-- Entrance and exit should be **slow-ish**: about **300-500ms**, ease-out on enter and ease-in on exit.
-- Prefer CSS (`@keyframes`, `transition`, or a small shared utility class in `index.css`) over heavy animation libraries unless already in the project.
-- Respect `prefers-reduced-motion: reduce`: shorten or disable non-essential motion.
+- Fade + slight `y` or `scale` (0.98 to 1), ~400-500ms, via `AnimatePresence`. No unmount snaps.
+- Lists: stagger 30-50ms; `layout` on reorder/filter.
+- Tab/nav indicator: `layoutId` shared layout pill.
+
+**Do**
+
+- Animate shell chrome: nav, sheets, cards, dialogs, timeline rows, legends, toasts.
+- Keep Leaflet tile pan/zoom and Recharts ticks native (no spring on the map canvas).
 
 **Do not**
 
-- Ship new interactive controls with no hover transition.
-- Use flashy or bouncy motion that fights the calm map-journal aesthetic.
-- Animate layout thrashing (large width/height reflows) when opacity/transform will do.
+- Ship a new control with no hover/active/release spring.
+- Layout-animate `width`/`height` when `transform`/`opacity` will do.
+- Ignore `prefers-reduced-motion: reduce`: then opacity-only, ~80ms, no scale bounce.
 <!-- /sync:cursor-rule -->
 
 ### Dark / light theme
 
-<!-- sync:cursor-rule name="ui-theme" globs="apps/web/**/*.{tsx,jsx,css,html}" -->
-The web app supports dark and light mode via `html[data-theme="dark"|"light"]` and CSS variables in [`apps/web/src/index.css`](apps/web/src/index.css). All UI edits must work in **both** themes.
+<!-- sync:cursor-rule name="ui-theme" order="50" globs="apps/web/**/*.{tsx,jsx,css,html}" -->
+The web app supports dark and light mode via `html[data-theme="dark"|"light"]` and CSS variables in [`apps/web/src/index.css`](apps/web/src/index.css). shadcn tokens (`--background`, `--foreground`, `--primary`, …) are **aliases** of those variables. All UI edits must work in **both** themes.
 
 **Use semantic tokens only**
 
-- Tailwind: `bg-bg`, `bg-surface`, `text-text`, `text-text-muted`, `border-border`, `text-accent`, `bg-accent`, `text-on-accent`, mode colours (`text-walk`, `text-visit`, …).
+- Tailwind: `bg-bg`, `bg-surface`, `text-text`, `text-text-muted`, `border-border`, `text-accent`, `bg-accent`, `text-on-accent`, mode colours (`text-walk`, `text-visit`, …), or shadcn `bg-background` / `text-foreground` / `bg-primary`.
 - Raw CSS / inline styles: `var(--bg)`, `var(--surface)`, `var(--border)`, `var(--text)`, `var(--text-muted)`, `var(--accent)`, `var(--on-accent)`, `var(--visit)`, etc.
 - Primary button label colour is `text-on-accent` / `var(--on-accent)`, not a hardcoded dark hex.
 
@@ -143,7 +163,7 @@ The web app supports dark and light mode via `html[data-theme="dark"|"light"]` a
 
 **Map tiles**
 
-- Default basemap should follow theme (Carto `dark_all` / `light_all`) as in [`Map.tsx`](apps/web/src/components/Map.tsx).
+- Default basemap should follow theme. Prefer env-configured commercial tiles; Carto `dark_all` / `light_all` is the fallback as in [`Map.tsx`](apps/web/src/components/explorer/Map.tsx).
 
 **Toggle**
 
@@ -152,14 +172,14 @@ The web app supports dark and light mode via `html[data-theme="dark"|"light"]` a
 
 ### Mobile layout
 
-<!-- sync:cursor-rule name="ui-mobile" globs="apps/web/**/*.{tsx,jsx,css,html}" -->
+<!-- sync:cursor-rule name="ui-mobile" order="60" globs="apps/web/**/*.{tsx,jsx,css,html}" -->
 The web app uses a hybrid shell: desktop left rail at `lg` (1024px)+, bottom nav below `lg`. Keep both themes correct on every breakpoint.
 
 **Breakpoints**
 
-- Phone: below `md` (768px) - map-first with bottom sheet panels (`MobilePanel`)
-- Tablet: `md` to `lg` - map-first with dismissible left overlay drawer (`MobilePanel`)
-- Desktop: `lg+` - persistent side panel + left icon rail (current desktop layout)
+- Phone: below `md` (768px) - map-first with bottom sheet panels (`Sheet` / `MobilePanel`)
+- Tablet: `md` to `lg` - map-first with dismissible left overlay drawer
+- Desktop: `lg+` - persistent side panel + left icon rail
 
 **Shell**
 
@@ -172,7 +192,7 @@ The web app uses a hybrid shell: desktop left rail at `lg` (1024px)+, bottom nav
 **Map + list views** (Hotspots, Day View)
 
 - Do not use fixed side-by-side panels (`w-80` / `w-96` + map) below `lg` without a mobile path.
-- Below `lg`, use [`MobilePanel`](apps/web/src/components/MobilePanel.tsx) (sheet on phone, drawer on tablet) over a full-bleed map.
+- Below `lg`, use a sheet/drawer over a full-bleed map.
 - Use [`useBreakpoint`](apps/web/src/hooks/useBreakpoint.ts) when CSS alone cannot choose sheet vs drawer.
 
 **Do not**
@@ -183,13 +203,14 @@ The web app uses a hybrid shell: desktop left rail at `lg` (1024px)+, bottom nav
 
 ### Touch targets
 
-<!-- sync:cursor-rule name="ui-touch" globs="apps/web/**/*.{tsx,jsx}" -->
+<!-- sync:cursor-rule name="ui-touch" order="70" globs="apps/web/**/*.{tsx,jsx}" -->
 Interactive controls must be usable with a finger.
 
 **Hit targets**
 
 - Aim for at least **44×44px** (`h-11 w-11` or equivalent padding) for icon buttons, toggles, and primary taps.
 - Sort chips, filter toggles, and nav items on mobile need comfortable tap area, not `p-1` / `py-0.5` alone.
+- Motion scale must not shrink the hit target below 44px.
 
 **No hover-only essential UI**
 
@@ -202,7 +223,7 @@ Hover styles for polish are fine; hover as the only way to reach content is not.
 
 ### Map responsiveness
 
-<!-- sync:cursor-rule name="ui-map-responsive" globs="apps/web/src/components/Map.tsx,apps/web/src/components/**/*View.tsx" -->
+<!-- sync:cursor-rule name="ui-map-responsive" order="80" globs="apps/web/src/components/explorer/Map.tsx,apps/web/src/components/**/*View.tsx" -->
 Leaflet maps must stay usable when the container is small or resizes.
 
 **Controls and legend**
@@ -210,11 +231,16 @@ Leaflet maps must stay usable when the container is small or resizes.
 - Avoid overlapping control clusters on narrow viewports (e.g. heatmap card vs `LayersControl`).
 - Keep legends and overlays compact below `lg` (smaller max-height / max-width).
 - Do not assume a persistent desktop sidebar in map copy or layout hints.
+- Map chrome (legends, layer toggles, sheets) uses Motion + shadcn. Do not spring-animate tile pan/zoom.
 
 **Size invalidation**
 
-- Call `invalidateSize` (or bump `sizeSignal` on [`Map.tsx`](apps/web/src/components/Map.tsx)) when panels open/close, sheets resize, or breakpoints change.
+- Call `invalidateSize` (or bump `sizeSignal` on [`Map.tsx`](apps/web/src/components/explorer/Map.tsx)) when panels open/close, sheets resize, or breakpoints change.
 - Listen for window resize as a baseline.
+
+**Viewport**
+
+- Initial center and heatmap fit come from the tenant’s data, not a hardcoded London/UK bbox.
 
 **Do not**
 
@@ -222,69 +248,211 @@ Leaflet maps must stay usable when the container is small or resizes.
 - Cover most of a phone map with an oversized legend or stacked top-right controls.
 <!-- /sync:cursor-rule -->
 
+### Security catalog
+
+<!-- sync:cursor-rule name="security-catalog" order="90" globs="apps/api/**/*,packages/db/**/*" -->
+When changing API or DB code, review:
+
+- Missing `tenant` (or equivalent) on reads/writes; tenant only from the session (`tenantForUser`)
+- Job/source/billing updates scoped by tenant (never `jobId` alone)
+- `sql.raw` or interpolated SQL
+- Mass assignment / spreading request bodies into updates (especially `role`)
+- Upload routes: size limits, type sniff, zip-bomb caps, server-generated keys, demo block, R2 delete after parse
+- New routes: session middleware, CORS allowlist, entitlements, edge-friendly rate limits
+- Cross-tenant access returns **404**, not 403
+- No secrets in the frontend or `VITE_*` vars
+- No coordinates, place names, or Takeout payloads in logs, emails, or error trackers
+- CSP stays enforcing in production; do not add CDNs that break it
+
+See [docs/security/README.md](docs/security/README.md).
+<!-- /sync:cursor-rule -->
+
+### Row Level Security
+
+<!-- sync:cursor-rule name="rls" order="100" globs="packages/db/**/*,apps/api/**/*" -->
+Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_stats`, `analytics_cache`, `data_sources`, `import_jobs`, `export_jobs`, `subscriptions`, `user_settings`, `place_labels`, `named_trips`, `life_chapters`).
+
+- Worker queries go through `withTenant(db, tenant, fn)` which `BEGIN`s, `set_config('app.tenant', tenant, true)`, runs work, then `COMMIT`.
+- `locations_app` has **NOBYPASSRLS**. Never point Wrangler `DATABASE_URL` at a BYPASSRLS role.
+- Empty GUC matches nothing (fail closed). WITH CHECK rejects inserts whose `tenant` column differs from the GUC.
+- Keep Drizzle `eq(table.tenant, tenant)` **and** RLS. Filters are not optional because RLS exists.
+- `route_cache` / `place_cache` are shared non-PII (OSM only). User-edited labels live on `place_labels` (tenant-scoped).
+- Schema policies via Drizzle `enableRLS()` / `pgPolicy()`. FORCE RLS + GRANTs live in the documented custom migration.
+- New tenant tables need policies, GRANTs, and an RLS leak test.
+<!-- /sync:cursor-rule -->
+
+### Auth lifecycle
+
+<!-- sync:cursor-rule name="auth-lifecycle" order="110" globs="apps/api/**/*,apps/web/**/*.{tsx,ts}" -->
+- Public signup is allowed unless `DISABLE_SIGNUP` is `"true"`.
+- Email must be verified before Timeline import.
+- Provide forgot/reset password, change password, change email (re-verify), change display name.
+- Rotate the session on password or email change.
+- Demo login must not embed a password in the client bundle. Use `POST /api/auth/demo`.
+- `user.role` is server-only (`input: false`). Demo cannot mutate sources or billing.
+- Staff roles (`admin`, `developer`) skip the Stripe import gate and count as entitled on `/api/me`. They still use their own tenant for location reads. Operator APIs (`/api/admin/*`) manage accounts and flags; they do not open another user’s map. Promote with `auth:promote-admin` / `auth:promote-developer`.
+- Delete account wipes Neon tenant rows, R2 prefix, sessions, and the Stripe customer.
+- Password fields use `PasswordInput`.
+<!-- /sync:cursor-rule -->
+
+### Billing
+
+<!-- sync:cursor-rule name="billing" order="120" globs="apps/api/**/*" -->
+- Stripe Checkout Sessions and Customer Portal sessions are created on the server. Never trust a client `priceId` or `customerId`.
+- Webhooks: verify signature on the raw body, reject skew, store `stripe_events.id` for idempotency, re-fetch the subscription from Stripe before granting access.
+- Entitlements (`active` / `trialing`) gate import when `STRIPE_SECRET_KEY` is set. Demo and staff (`admin`, `developer`) skip that gate.
+- Failed payment: read-only grace, then disable import. Do not silently delete Timeline on the first failed charge.
+- Price ids come from env (`STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_YEARLY`).
+<!-- /sync:cursor-rule -->
+
+### Email and privacy
+
+<!-- sync:cursor-rule name="email-privacy" order="130" alwaysApply="true" -->
+- Transactional email only. Never put coordinates, place names, day routes, or Takeout payloads in email.
+- Catalog: `verify_email_link`, `verify_email_otp`, `password_reset_link`, `magic_link`, `signin_otp`, `change_email_verify`, `password_changed`, `email_changed`, `import_ready`, `import_failed`, `subscription_active`, `subscription_past_due`, `subscription_canceled`, `account_deleted`, `monthly_recap`.
+- No marketing, newsletters, activity digests, or "you visited X" mail.
+- Skip send when `RESEND_API_KEY` is unset; do not throw. Demo tenant / `role === "demo"` never send.
+- Log `{ kind, ok }` only, never `to`.
+- Use the provider HTTP API (Resend). No raw SMTP header concatenation.
+- Do not log PII. Error trackers must scrub bodies and query strings.
+- `place_cache` / `route_cache` stay non-PII. User labels are tenant-scoped.
+<!-- /sync:cursor-rule -->
+
+### Import and uploads
+
+<!-- sync:cursor-rule name="import-uploads" order="140" globs="apps/api/**/*,packages/db/**/*" -->
+- Prefer Cloudflare Queue / Workflow consumption over unbounded `waitUntil` for large Takeout files.
+- Size and quota per plan. Sniff JSON. Zip is allowed only with entry count, uncompressed size, and no nested zip.
+- R2 keys are server-generated `uploads/{userId}/{jobId}.json`. Delete the object after success or failure.
+- One active import job per tenant. Demo cannot import.
+- Import progress must include counts (records parsed, visits written), not only `pending` / `processing`.
+<!-- /sync:cursor-rule -->
+
+### Maps and vendors
+
+<!-- sync:cursor-rule name="maps-vendors" order="150" globs="apps/api/**/*,apps/web/src/components/explorer/Map.tsx" -->
+- Tile, routing, and geocode hosts come from env (commercial providers). Public OSRM/Nominatim/OSM tiles are fallbacks for local dev only.
+- API keys stay in Worker secrets, never `VITE_*`.
+- Initial map viewport and clusters are derived from the tenant’s data, not hardcoded UK points.
+- Escape untrusted place names in Leaflet `divIcon` / popup HTML.
+<!-- /sync:cursor-rule -->
+
+### Testing
+
+<!-- sync:cursor-rule name="testing" order="160" alwaysApply="true" -->
+All tests live under [`tests/`](tests/README.md). Do not colocate `*.test.ts` / `*.spec.ts` next to source.
+
+Placement (directory is the classifier):
+
+1. Playwright against a running app -> `tests/e2e/*.spec.ts`
+2. Live Postgres FORCE RLS -> `tests/rls/{isolation,with-check,empty-guc}/`
+3. `app.request()` or webhook HTTP (mocked Stripe/R2/auth) -> `tests/integration/{layer}/{domain}/`
+4. Pure helpers / mocked Drizzle, no HTTP app -> `tests/unit/{api,db,web,scripts}/{domain}/`
+
+Invent a new leaf under the matching kind/layer. Never next to source. Shared harness: `tests/helpers/` (no test files). Synthetic Timeline JSON: `tests/fixtures/timeline/` (never real Takeout; never name a file `Records.json`).
+
+- `npm run test:placement` fails if a test file is outside this tree or in the wrong kind folder. Run it before adding tests.
+- `npm run test:unit` is the default (no network, no DB).
+- `test:integration` covers `app.request()` routes (401, owner 200, cross-tenant 404, demo 403).
+- `test:admin` is the dense `/api/admin` matrix (401, user/demo 404, developer GET vs mutate, last-admin, wipe email, PII scanner).
+- `test:rls` needs `DATABASE_URL` and asserts FORCE RLS even without Drizzle filters. Skip locally if unset; CI must run it.
+- `test:security` runs placement, policy scanners, the API threat matrix, RLS, and `deps:audit`. Not a live pentest. New `/api/*` routes need a catalog row.
+- Every new API route needs positive + unauthenticated + cross-tenant + demo-denied tests under `tests/integration/api/{domain}/`.
+- Schema changes that add tenant tables need an RLS leak test under `tests/rls/isolation/`.
+- Stripe webhook tests cover invalid signature, replay, and entitlement grant/revoke (`tests/integration/api/billing/`).
+- `vi.mock` must use Vitest aliases (`@locations/api/auth`), not `./auth` relative to the test file.
+<!-- /sync:cursor-rule -->
+
+### Documentation
+
+<!-- sync:cursor-rule name="docs" order="170" alwaysApply="true" -->
+User-facing and engineering docs live under [`docs/`](docs/README.md). AGENTS.md is agent-only.
+
+- Product copy: `docs/product/`
+- Architecture: `docs/architecture/`
+- Security: `docs/security/`
+- Legal source: `docs/legal/` (Privacy, Terms, Cookies). Public routes must not drift from these files.
+- Do not leave setup docs pointing at UI that no longer exists.
+<!-- /sync:cursor-rule -->
+
+### Legal copy
+
+<!-- sync:cursor-rule name="legal-copy" order="180" globs="apps/web/**/*" -->
+Signup, login, and the marketing footer must link to Privacy, Terms, and Cookies. Do not ship a signup form without those routes.
+<!-- /sync:cursor-rule -->
+
+### UI interaction
+
+<!-- sync:cursor-rule name="ui-interaction" order="190" globs="apps/web/**/*.{tsx,jsx,css}" -->
+Every interactive element must have hover, active (press), and release/rest Motion springs. See the Motion rule (order 40) and [`apps/web/src/lib/motion.ts`](apps/web/src/lib/motion.ts).
+
+Disabled controls do not bounce. Focus rings stay visible in addition to hover. Keyboard users get the same spring, not hover-only.
+<!-- /sync:cursor-rule -->
+
 ## npm scripts (`<domain>:<action>`)
 
-Public scripts live on the **root** `package.json`. Name every new script `domain:action` (e.g. `db:migrate`, `test:unit`, `rules:sync`).
+Public scripts live on the **root** `package.json`. Name every new script `domain:action` (e.g. `db:migrate:dev`, `test:unit`, `rules:sync`).
 
 | Script | Purpose |
 |--------|---------|
 | `dev:all` | Build web, then run web + API concurrently |
 | `dev:web` / `dev:api` | Single workspace dev server |
 | `build:all` / `build:web` | Production builds |
-| `deploy:prod` / `deploy:preview` | Wrangler deploy / version upload |
-| `db:*` | generate, migrate, import, import-demo, warm-routes |
-| `auth:create-user` / `auth:create-demo` | Invite users |
+| `deploy:staging` / `deploy:prod` / `deploy:both` / `deploy:preview` | Build + Wrangler `--env staging` / `--env production` / both / staging version upload (secrets from local env files) |
+| `db:*` | generate, migrate:dev/staging/prod/all, import, import-demo, warm-routes |
+| `env:merge` / `env:sync` | Fill missing keys from per-env examples / copy secrets `.env*` → `.dev.vars*` |
+| `secrets:generate` / `secrets:rotate` | Fill or rotate `BETTER_AUTH_SECRET` in every `.env*` + `.dev.vars*` pair (or `--env`), then `cf:sync` for staging/prod |
+| `cf:sync` / `cf:sync:staging` / `cf:sync:prod` / `cf:sync:dry` | `wrangler secret bulk` from `.env*.example` keys (minus wrangler.toml vars); prunes unmanaged remote secrets |
+| `auth:create-user` / `auth:create-demo` | Invite / seed users |
+| `auth:promote-admin` / `auth:promote-developer` | Set `user.role` to staff |
 | `setup:project` | Interactive first-time setup |
 | `typecheck:all` / `lint:web` | Quality gates |
-| `rules:sync` | Regenerate tool-specific rule files from `AGENTS.md` (`node scripts/sync-rules.mjs`) |
-| `test:unit` / `test:watch` / `test:e2e` | Vitest / Playwright |
+| `rules:sync` | Regenerate tool-specific rule files from `AGENTS.md` |
+| `test:placement` / `test:unit` / `test:integration` / `test:admin` / `test:rls` / `test:security` / `test:watch` / `test:e2e` / `test:all` / `test:report` | Placement lint, Vitest (including operator admin matrix), security catalog, Playwright, markdown report |
+| `loc` / `loc:report` | Lines-of-code summary / write `reports/loc.md` |
+| `kill:servers` | Free ports 5173 and 8787 |
 | `deps:audit` | `npm audit` (high/critical) |
 
 Edit **this file**, then run `npm run rules:sync`. Do not hand-edit generated tool rule files.
 
 ## Security
 
-Full checklist: [docs/SECURITY.md](docs/SECURITY.md).
+Full catalog: [docs/security/README.md](docs/security/README.md).
 
 Non-negotiables:
 
-- Scope every data query by session `tenant` (`tenantForUser`). Never authorize from a client-supplied user/tenant id.
+- Scope every data query by session `tenant` (`tenantForUser`) **and** RLS GUC.
 - No `sql.raw()` / string-built SQL with user input.
 - Never reflect arbitrary CORS origins; use the allowlist helper.
 - No secrets in the frontend or `VITE_*` vars.
 - Cross-tenant access → **404**; demo role cannot import/mutate sources.
-- Signup stays invite-only.
-
-<!-- sync:cursor-rule name="security-checklist" globs="apps/api/**/*,packages/db/**/*" -->
-When changing API or DB code, review:
-
-- Missing `tenant` (or equivalent) on reads/writes
-- `sql.raw` or interpolated SQL
-- Mass assignment / spreading request bodies into updates
-- Upload routes: size limits, type sniff, server-generated keys, demo block
-- New routes: session middleware, CORS, rate limits for expensive paths
-
-See [docs/SECURITY.md](docs/SECURITY.md).
-<!-- /sync:cursor-rule -->
+- Verified email before import. `DISABLE_SIGNUP` is the waitlist kill switch.
 
 ## Testing
 
-- **Unit/integration:** Vitest (`npm run test:unit`). Prefer `app.request()` and pure helpers; no Worker pool required for the default suite.
-- **E2E:** Playwright (`npm run test:e2e`). Requires the API (or full stack) at `PLAYWRIGHT_BASE_URL` (default `http://127.0.0.1:8787`) - typically `npm run build:web && npm run dev:api` first.
-- There is **no Postgres RLS**. Cover app-level isolation instead: unauthenticated API → 401, `/api/health` public, demo role blocked from import/source mutations, cross-tenant source access denied.
-- Prioritize auth/tenant boundaries and data-mutating routes over UI-only components. Do not chase 100% coverage.
-- No CI pipeline yet; keep scripts runnable locally. Run `npm run deps:audit` before releases.
+- **Home:** [`tests/`](tests/README.md) is the only legal location. `npm run test:placement` enforces it.
+- **Unit:** `npm run test:unit` (`tests/unit/**/*.test.ts`; no external services).
+- **Integration:** `npm run test:integration` (`tests/integration/**/*.test.ts`; `app.request()`, mocked Stripe/R2).
+- **Admin:** `npm run test:admin` (Vitest project `admin`; operator route matrix).
+- **RLS:** `npm run test:rls` (`tests/rls/**/*.test.ts`; real Postgres). Isolation is app-level **and** FORCE RLS.
+- **Security catalog:** `npm run test:security` (scanners, route matrix, RLS, `deps:audit`). Not a live pentest.
+- **E2E:** Playwright (`npm run test:e2e`) against `PLAYWRIGHT_BASE_URL` (default `http://127.0.0.1:8787`); files in `tests/e2e/`.
+- Prioritize auth/tenant boundaries, billing webhooks, imports, and data-mutating routes.
+- CI runs placement, unit, integration, `test:admin`, `test:security`, RLS, e2e, and `deps:audit`.
 
 ## Things not to do
 
 - Do not use the em dash (`—`) anywhere - see **No em dashes** above.
 - Do not use pnpm, yarn, or bun - npm is the standard; do not delete or replace `package-lock.json` with another lockfile.
-- Do not hand-write Drizzle/SQL migrations; use `db:generate`.
+- Do not hand-write Drizzle/SQL migrations except the documented FORCE RLS / GRANT file.
 - Do not hand-edit `CLAUDE.md`, `.windsurfrules`, `CONVENTIONS.md`, `.github/copilot-instructions.md`, or generated `.cursor/rules/*.mdc` - change `AGENTS.md` and run `rules:sync`.
-- Do not drop or weaken `tenant` filters on queries; isolation depends on them.
-- Do not commit Takeout JSON, `.env`, `.dev.vars`, or database credentials.
-- Do not enable public signup (`disableSignUp` stays true); invite via `auth:create-user`.
+- Do not drop or weaken `tenant` filters or RLS policies.
+- Do not commit Takeout JSON, `.env*`, `.dev.vars*`, or database credentials.
+- Do not skip email verification before import; do not embed demo passwords in the client.
 - Do not restructure the monorepo or rename business domains unless explicitly asked.
 - Do not reflect request `Origin` into CORS allow headers; do not skip session checks on new `/api/*` routes.
 - Do not reintroduce desktop-only side-by-side map layouts without a `<lg` mobile path (sheet/drawer).
 - Do not gate essential UI on hover only; touch must reach the same content.
+- Do not ship interactive chrome without hover/active/release Motion springs.
+- Do not colocate `*.test.ts` / `*.spec.ts` next to source; do not put Playwright under `tests/unit/` or Vitest under `tests/e2e/`. See [`tests/README.md`](tests/README.md).
+- Do not put user-edited place names in global `place_cache`.

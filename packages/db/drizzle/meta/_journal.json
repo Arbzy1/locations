@@ -19,5 +19,82 @@
     "when": 1753632200000,
     "tag": "0002_sources",
     "breakpoints": true
+  },
+  {
+    "idx": 3,
+    "version": "7",
+    "when": 1753632300000,
+    "tag": "0003_saas",
+    "breakpoints": true
+  },
+  {
+    "idx": 4,
+    "version": "7",
+    "when": 1753632400000,
+    "tag": "0004_rls",
+    "breakpoints": true
+  },
+  {
+    "idx": 5,
+    "version": "7",
+    "when": 1755210000000,
+    "tag": "0005_import_notify",
+    "breakpoints": true
+  },
+  {
+    "idx": 6,
+    "version": "7",
+    "when": 1755213600000,
+    "tag": "0006_place_meta",
+    "breakpoints": true
+  },
+  {
+    "idx": 7,
+    "version": "7",
+    "when": 1755220000000,
+    "tag": "0007_monthly_recap",
+    "breakpoints": true
+  },
+  {
+    "idx": 8,
+    "version": "7",
+    "when": 1755223600000,
+    "tag": "0008_catalog_pages",
+    "breakpoints": true
+  },
+  {
+    "idx": 9,
+    "version": "7",
+    "when": 1755228000000,
+    "tag": "0009_import_quality",
+    "breakpoints": true
+  },
+  {
+    "idx": 10,
+    "version": "7",
+    "when": 1755232000000,
+    "tag": "0010_export_jobs",
+    "breakpoints": true
+  },
+  {
+    "idx": 11,
+    "version": "7",
+    "when": 1755236000000,
+    "tag": "0011_map_settings",
+    "breakpoints": true
+  },
+  {
+    "idx": 12,
+    "version": "7",
+    "when": 1755240000000,
+    "tag": "0012_rls_grants",
+    "breakpoints": true
+  },
+  {
+    "idx": 13,
+    "version": "7",
+    "when": 1755244000000,
+    "tag": "0013_ops_tables",
+    "breakpoints": true
   }
 ]

@@ -1,5 +1,3 @@
-import type { LatLngBoundsExpression } from 'leaflet';
-
 export interface Visit {
   start: string;
   end: string;
@@ -16,6 +14,7 @@ export interface Visit {
   departed_by?: string | null;
   stop_number?: number;
   total_stops?: number;
+  source_id?: string | null;
 }
 
 export interface RouteStep {
@@ -42,6 +41,7 @@ export interface Activity {
   is_rail?: boolean;
   from_place?: string;
   to_place?: string;
+  source_id?: string | null;
 }
 
 export interface Connector {
@@ -93,8 +93,10 @@ export interface MonthlyStats {
   distance_miles: number;
   visits: number;
   activities: number;
+  days_tracked?: number;
   top_places: [string, number][];
   modes: Record<string, number>;
+  mode_miles?: Record<string, number>;
 }
 
 export interface YearlyStats {
@@ -104,6 +106,9 @@ export interface YearlyStats {
   activities: number;
   days_tracked: number;
   modes: Record<string, number>;
+  drive_miles?: number;
+  transit_miles?: number;
+  mode_miles?: Record<string, number>;
 }
 
 export interface Overview {
@@ -122,11 +127,14 @@ export interface HeatmapPoint {
   count: number;
   /** Most common visit cluster / place label for this cell */
   label?: string;
+  cluster?: string;
   /** Town / city / village guessed from coordinates (Nominatim) */
   settlement?: string | null;
   totalDurationMinutes?: number;
   uniqueDays?: number;
   topTypes?: string[];
+  /** Heat intensity; defaults to `count` when omitted */
+  weight?: number;
 }
 
 /** Named hotspot markers shown on the Hotspots map */
@@ -136,12 +144,109 @@ export interface HotspotLabel {
   label: string;
   count: number;
   rank: number;
+  badge?: string;
+  color?: string;
 }
 
 export interface FunFact {
   label: string;
   value: string;
   description: string;
+  miles?: number;
+  date?: string;
+  minutes?: number;
+}
+
+export interface Streaks {
+  current: number;
+  longest: number;
+  longestGap: number;
+  lastDate: string | null;
+}
+
+export interface PlaceDeltaMonth {
+  month: string;
+  newClusters: string[];
+  returnedClusters: string[];
+}
+
+export interface LapsedPlace {
+  cluster: string;
+  lastDate: string;
+  years: number;
+}
+
+export interface PersonalityTag {
+  id: 'walker' | 'flyer' | 'creature_of_habit';
+  reason: string;
+}
+
+export interface ActivityGuessCount {
+  id: string;
+  label: string;
+  count: number;
+}
+
+export interface CoverageBadge {
+  id: string;
+  label: string;
+  earned: boolean;
+  detail: string;
+}
+
+export interface BadgeSummary {
+  coveragePercent: number;
+  daysWithData: number;
+  spanDays: number;
+  uniquePlaces: number;
+  visitCount: number;
+  badges: CoverageBadge[];
+}
+
+export interface YearInReviewChapter {
+  year: number;
+  distance_miles: number;
+  visits: number;
+  activities: number;
+  days_tracked: number;
+  top_places: [string, number][];
+  modes: Record<string, number>;
+  drive_miles?: number;
+  transit_miles?: number;
+  trips?: MultiDayTrip[];
+  firsts?: { cluster: string; date: string }[];
+  streaks?: { longest: number; current: number };
+}
+
+export interface MultiDayTrip {
+  start: string;
+  end: string;
+  dates: string[];
+  total_miles: number;
+  clusters: string[];
+  name?: string;
+  modes?: string[];
+}
+
+export interface FlightSummary {
+  tagged: number;
+  guessed: number;
+  taggedMiles: number;
+  guessedMiles: number;
+}
+
+export interface TrainHop {
+  date: string;
+  from: string;
+  to: string;
+  miles: number;
+  hops: number;
+}
+
+export interface LowMovementDay {
+  date: string;
+  miles: number;
+  clusters: string[];
 }
 
 export interface RouteProgress {
@@ -157,6 +262,7 @@ export type TabId = 'hotspots' | 'day' | 'trips' | 'insights' | 'settings';
 export interface DataSourceInfo {
   id: string;
   label: string;
+  color?: string | null;
   createdAt: string;
   updatedAt: string;
   visitCount: number;
@@ -170,6 +276,9 @@ export interface ImportJobInfo {
   error: string | null;
   visitCount: number | null;
   activityCount: number | null;
+  parsedCount?: number | null;
+  merge?: boolean;
+  chosenFile?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -181,11 +290,12 @@ export interface ImportStatus {
   sources: DataSourceInfo[];
   latestJob: ImportJobInfo | null;
   recentJobs: ImportJobInfo[];
+  timezoneWarning?: { warn: boolean; skewedShare: number; sampleCount: number };
 }
 
 /** Map pan/zoom target when focusing a timeline segment (bounds or point). */
 export type MapFocusTarget =
-  | { bounds: LatLngBoundsExpression }
+  | { bounds: [number, number][] }
   | { lat: number; lon: number; zoom?: number };
 
 export const MODE_COLORS: Record<string, string> = {

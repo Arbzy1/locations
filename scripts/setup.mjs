@@ -39,7 +39,7 @@ function upsertEnv(key, value) {
 
 async function main() {
   console.log(`
-Locations — setup your own instance
+Locations: setup your own instance
 ===================================
 locations.aden.website is the owner's private invite-only demo.
 Your data stays in YOUR Neon project after this setup.
@@ -107,7 +107,7 @@ Your data stays in YOUR Neon project after this setup.
     /* already installed */
   }
 
-  run("npm run db:migrate");
+  run("npm run db:migrate:dev");
   run("npm run db:import");
   run(`npm run auth:create-user -- "${email}" "${password}" "${name}" admin`);
 
@@ -120,11 +120,13 @@ Local:
   Sign in as ${email}
 
 Deploy your own site (not aden.website):
-  1. Edit wrangler.toml  → change name + BETTER_AUTH_URL + remove/customise the custom domain
+  1. Edit wrangler.toml  → change env names, BETTER_AUTH_URL, and custom domains
   2. npx wrangler login
-  3. npx wrangler secret put DATABASE_URL
-  4. npx wrangler secret put BETTER_AUTH_SECRET
-  5. npm run deploy:prod
+  3. npm run secrets:generate -- --env staging
+  4. npm run cf:sync:staging
+  5. npm run deploy:staging
+     (production: same secrets with --env production, then npm run deploy:prod)
+  See docs/engineering/deploy.md
 
 Importing your real Takeout later:
   set DATA_PATH in .env to your JSON path

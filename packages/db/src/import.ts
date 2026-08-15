@@ -1,4 +1,4 @@
-import { config } from "dotenv";
+import { loadEnvFiles, takeEnvName } from "./load-env.js";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,8 +10,6 @@ import { user } from "./schema.js";
 import { ensureDataSource, importSourceData } from "./timeline-import.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-config({ path: resolve(__dirname, "../../../.env") });
-config({ path: resolve(__dirname, "../../../.dev.vars") });
 
 function parseArgs(argv: string[]) {
   const out: {
@@ -41,10 +39,13 @@ function parseArgs(argv: string[]) {
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is required");
+  const { name, argv } = takeEnvName();
+  loadEnvFiles(name);
 
-  const args = parseArgs(process.argv.slice(2));
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error(`DATABASE_URL is required (${name} env files)`);
+
+  const args = parseArgs(argv);
   const root = resolve(__dirname, "../../..");
   const samplePath = resolve(root, "data/sample-location-history.json");
   const personalDefault = resolve(root, "../location-history.json");
