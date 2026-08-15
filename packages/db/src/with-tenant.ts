@@ -11,6 +11,8 @@ export function tenantGucSql(tenant: string) {
 /**
  * Run `fn` inside a transaction with `app.tenant` set for FORCE RLS.
  * Always keep Drizzle tenant filters as well.
+ * Worker queries must use `createDb` (Pool). The HTTP driver has no tenant GUC;
+ * if `transaction` is missing this falls through for tests only.
  */
 export async function withTenant<T>(
   db: Db,

@@ -49,6 +49,7 @@ export function createServicesMock(overrides: Record<string, unknown> = {}) {
     removeSource: vi.fn(async () => ({ error: "Source not found" as const })),
     getImportStatus: vi.fn(async () => ({})),
     createImportJob: vi.fn(),
+    getActiveImportJob: vi.fn(async () => null),
     previewImport: vi.fn(),
     deleteTenantDateRange: vi.fn(async () => ({ visitCount: 0, activityCount: 0, days: 0 })),
     rewarmRoutes: vi.fn(async () => ({ warmed: 0, remaining: 0, cap: 100 })),

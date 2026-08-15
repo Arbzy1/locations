@@ -28,15 +28,15 @@ All other `/api/*` require a session.
 | PATCH/DELETE | `/api/chapters/:id` | not demo |
 | GET | `/api/import/jobs` | job list without R2 keys |
 | GET | `/api/admin/stats` | staff only; own tenant counts, stuck jobs (id/status/age/counts); others 404 |
-| GET | `/api/search` | `q=` places (cluster, type, labels, tags) and days; hidden omitted; ISO date is exact |
+| GET | `/api/search` | `q=` places (cluster, type, labels, tags) and days; hidden omitted; ISO date is exact; rate-limited |
 | GET | `/api/sources` | |
 | PATCH/DELETE | `/api/sources/:id` | not demo; PATCH `label` and/or allowlisted `color` |
 | GET | `/api/import/status` | includes `chosenFile`, `timezoneWarning` |
 | POST | `/api/import/preview` | not demo; entitlement; no R2 |
-| POST | `/api/import` | not demo; entitlement; `merge`, `skipOverlappingDays` |
-| POST | `/api/billing/checkout` | `{ interval: monthly\|yearly }` |
-| POST | `/api/billing/portal` | |
-| POST | `/api/account/delete` | GDPR wipe |
+| POST | `/api/import` | not demo; entitlement; `merge`, `skipOverlappingDays`; 409 if an import is already running |
+| POST | `/api/billing/checkout` | `{ interval: monthly\|yearly }`; rate-limited |
+| POST | `/api/billing/portal` | rate-limited |
+| POST | `/api/account/delete` | GDPR wipe inside `withTenant`; R2 prefixes paged |
 | GET | `/api/account/export` | JSON summary (overview, sources, settings, labels) |
 | POST | `/api/account/export-pack` | Start GDPR ZIP job; 409 if one is already running |
 | GET | `/api/account/export-pack/:jobId` | Job status (no R2 key) |

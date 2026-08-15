@@ -7,10 +7,22 @@ const LOCAL_ORIGINS = [
   "http://127.0.0.1:8787",
 ] as const;
 
+function isLocalAuthUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === "localhost" || host === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
 /** Exact-match CORS allowlist. Never reflect arbitrary Origin values. */
 export function allowedOrigins(env: Env): string[] {
   const base = env.BETTER_AUTH_URL.replace(/\/$/, "");
-  return Array.from(new Set([base, ...LOCAL_ORIGINS]));
+  if (isLocalAuthUrl(base)) {
+    return Array.from(new Set([base, ...LOCAL_ORIGINS]));
+  }
+  return [base];
 }
 
 /** Returns the origin if allowed, otherwise null (deny). */

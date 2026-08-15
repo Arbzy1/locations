@@ -84,6 +84,7 @@ export async function recordStripeEvent(db: Db, id: string, type: string): Promi
   }
 }
 
+/** Last-resort mapping. Under FORCE RLS this returns nothing without a tenant GUC. Prefer Stripe metadata. */
 export async function tenantForStripeCustomer(db: Db, customerId: string): Promise<string | null> {
   const rows = await db
     .select()

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { extractTimelineJsonFromZip, isZipMagic } from "@locations/api/unzip-takeout";
+import { sniffTimelineJson } from "@locations/api/upload-sniff";
 import { zipSync } from "fflate";
 
 describe("isZipMagic", () => {
@@ -25,6 +26,8 @@ describe("extractTimelineJsonFromZip", () => {
     expect(result.text).toContain("startTime");
     expect(result.chosenPath).toMatch(/Timeline\.json$/i);
     expect(result.candidates.some((n) => /Timeline\.json$/i.test(n))).toBe(true);
+    const sniffed = sniffTimelineJson(new TextEncoder().encode(result.text));
+    expect(sniffed.ok).toBe(true);
   });
 
   it("prefers Timeline.json over Records.json", async () => {

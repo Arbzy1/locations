@@ -96,11 +96,11 @@ export function renderEmail(
       return wrap("Your Locations sign-in code", otp.html, otp.text, vars);
     }
     case "change_email_verify": {
-      const link = cta(vars.url ?? "", "Confirm new email");
+      const link = cta(vars.url ?? "", "Confirm email change");
       return wrap(
-        "Confirm your new Locations email",
-        `<p>Someone asked to use this address on a Locations account.</p>${link.html}`,
-        `Someone asked to use this address on a Locations account.\n${link.text}`,
+        "Confirm a Locations email change",
+        `<p>Someone asked to change the sign-in email on this Locations account. Confirm to continue. We will then send a link to the new address.</p>${link.html}`,
+        `Someone asked to change the sign-in email on this Locations account. Confirm to continue. We will then send a link to the new address.\n${link.text}`,
         vars,
       );
     }

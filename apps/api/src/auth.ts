@@ -2,7 +2,13 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { magicLink } from "better-auth/plugins/magic-link";
 import { emailOTP } from "better-auth/plugins/email-otp";
-import { createHttpDb } from "@locations/db";
+import {
+  account,
+  createHttpDb,
+  session,
+  user,
+  verification,
+} from "@locations/db";
 import type { Env } from "./env";
 import { allowedOrigins } from "./cors";
 import { sendEmail, isDemoRecipient } from "./email";
@@ -32,13 +38,17 @@ export function createAuth(env: Env) {
   const disableSignUp = env.DISABLE_SIGNUP === "true";
 
   return betterAuth({
-    database: drizzleAdapter(db, { provider: "pg" }),
+    database: drizzleAdapter(db, {
+      provider: "pg",
+      schema: { user, session, account, verification },
+    }),
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
     emailAndPassword: {
       enabled: true,
       disableSignUp,
-      requireEmailVerification: !disableSignUp,
+      requireEmailVerification: true,
+      revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }) => {
         await sendAuthEmail(env, "password_reset_link", user.email, { url });
       },
@@ -62,19 +72,8 @@ export function createAuth(env: Env) {
       },
       changeEmail: {
         enabled: true,
-        sendChangeEmailConfirmation: async ({
-          user,
-          newEmail,
-          url,
-        }: {
-          user: { email: string };
-          newEmail: string;
-          url: string;
-        }) => {
-          await sendAuthEmail(env, "change_email_verify", newEmail, { url });
-          if (user.email && user.email !== newEmail) {
-            await sendAuthEmail(env, "email_changed", user.email, {});
-          }
+        sendChangeEmailConfirmation: async ({ user, url }) => {
+          await sendAuthEmail(env, "change_email_verify", user.email, { url });
         },
       },
     },
@@ -91,6 +90,8 @@ export function createAuth(env: Env) {
         expiresIn: 300,
         disableSignUp: true,
         sendVerificationOnSignUp: true,
+        storeOTP: "hashed",
+        allowedAttempts: 3,
         sendVerificationOTP: async ({ email, otp, type }) => {
           const kind: EmailKind =
             type === "sign-in"

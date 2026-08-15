@@ -20,7 +20,7 @@ export default function ForgotPage() {
     setError('');
     setLoading(true);
     try {
-      const result = await authClient.forgetPassword({
+      const result = await authClient.requestPasswordReset({
         email,
         redirectTo: `${window.location.origin}/reset-password`,
       });

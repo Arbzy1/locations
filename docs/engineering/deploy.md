@@ -10,7 +10,7 @@ Named Wrangler environments isolate staging and production. Top-level `wrangler.
 | Queue | `locations-imports-staging` | `locations-imports` |
 | Neon | separate `DATABASE_URL` secret | production `DATABASE_URL` |
 | Stripe | test-mode keys + webhook to staging URL | live keys |
-| CSP | `CSP_ENFORCE=false` | `CSP_ENFORCE=true` |
+| CSP | `CSP_ENFORCE=true` | `CSP_ENFORCE=true` |
 
 Push to `main` deploys staging. Production is a manual promote (`npm run deploy:prod` or the production GitHub Action).
 

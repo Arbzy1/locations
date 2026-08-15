@@ -13,9 +13,9 @@ Stripe still sends its own receipts. We send a separate billing *status* message
 | `password_reset_link` | Forgot password |
 | `magic_link` | Passwordless sign-in link |
 | `signin_otp` | Passwordless 6-digit code |
-| `change_email_verify` | Confirm a new email address |
+| `change_email_verify` | Confirm an email change from the **current** inbox. Better Auth then sends `verify_email_link` to the new address. |
 | `password_changed` | After password change or reset |
-| `email_changed` | Notice to the **old** address |
+| `email_changed` | Catalog notice for a previous address. The 1.6 confirm-then-verify flow uses `change_email_verify` on the current inbox instead. |
 | `import_ready` | Import job finished (visit/activity counts only) |
 | `import_failed` | Import job failed (generic; no file body) |
 | `subscription_active` | Checkout completed (`active` / `trialing`) |

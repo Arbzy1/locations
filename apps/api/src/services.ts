@@ -18,6 +18,7 @@ import {
   user,
   session,
   account,
+  verification,
   makeRouteCacheKey,
   makeCoordPlaceKey,
   makeRailArc,
@@ -1340,6 +1341,21 @@ export async function getImportJob(
   return rows[0] ?? null;
 }
 
+export async function getActiveImportJob(db: ReturnType<typeof createDb>, tenant: TenantId) {
+  const rows = await db
+    .select()
+    .from(importJobs)
+    .where(
+      and(
+        eq(importJobs.tenant, tenant),
+        or(eq(importJobs.status, "pending"), eq(importJobs.status, "processing")),
+      ),
+    )
+    .orderBy(desc(importJobs.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function updateImportJob(
   db: ReturnType<typeof createDb>,
   jobId: string,
@@ -1351,7 +1367,7 @@ export async function updateImportJob(
     parsedCount?: number;
     notifiedAt?: Date;
   },
-  tenant?: TenantId,
+  tenant: TenantId,
 ) {
   await db
     .update(importJobs)
@@ -1368,7 +1384,7 @@ export async function updateImportJob(
       ...(patch.notifiedAt !== undefined ? { notifiedAt: patch.notifiedAt } : {}),
       updatedAt: new Date(),
     })
-    .where(tenant ? and(eq(importJobs.id, jobId), eq(importJobs.tenant, tenant)) : eq(importJobs.id, jobId));
+    .where(and(eq(importJobs.id, jobId), eq(importJobs.tenant, tenant)));
 }
 
 export async function getAccountExportPayload(db: ReturnType<typeof createDb>, tenant: TenantId) {
@@ -1835,6 +1851,7 @@ export async function wipeTenantData(
   db: ReturnType<typeof createDb>,
   tenant: TenantId,
   userId: string,
+  email?: string,
 ) {
   await db.delete(visits).where(eq(visits.tenant, tenant));
   await db.delete(activities).where(eq(activities.tenant, tenant));
@@ -1848,6 +1865,9 @@ export async function wipeTenantData(
   await db.delete(lifeChapters).where(eq(lifeChapters.tenant, tenant));
   await db.delete(userSettings).where(eq(userSettings.tenant, tenant));
   await db.delete(subscriptions).where(eq(subscriptions.tenant, tenant));
+  if (email) {
+    await db.delete(verification).where(eq(verification.identifier, email));
+  }
   await db.delete(session).where(eq(session.userId, userId));
   await db.delete(account).where(eq(account.userId, userId));
   await db.delete(user).where(eq(user.id, userId));

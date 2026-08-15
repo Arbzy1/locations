@@ -2,9 +2,9 @@
 
 ## Auth
 
-Better Auth email/password, plus magic link and email OTP plugins. Signup is enabled unless `DISABLE_SIGNUP=true`. Verification, reset, magic link, OTP, and change-email use Resend (`RESEND_API_KEY`, `EMAIL_FROM`). If the API key is unset, send is skipped and signup still succeeds.
+Better Auth 1.6 email/password, plus magic link and email OTP plugins. Signup is enabled unless `DISABLE_SIGNUP=true`. Email verification is always required (signup kill switch does not turn it off). Verification, reset, magic link, OTP, and change-email use Resend (`RESEND_API_KEY`, `EMAIL_FROM`). If the API key is unset, send is skipped and signup still succeeds. Magic-link `callbackURL` is checked with origin equality against `trustedOrigins` (`BETTER_AUTH_URL`).
 
-Forgot-password links go to `/reset-password`. Settings can change password (other sessions revoked), change email (re-verify), resend verification, list sessions, and revoke a device or all other sessions.
+Forgot-password links go to `/reset-password`. Settings can change password (other sessions revoked), change email (confirm current inbox, then verify the new inbox; other sessions revoked), resend verification, list sessions, and revoke a device or all other sessions. Password reset also revokes existing sessions (`revokeSessionsOnPasswordReset`). Stored email OTPs are hashed.
 
 Demo: `POST /api/auth/demo` signs in with server-side `DEMO_EMAIL` / `DEMO_PASSWORD`. The client must not embed the demo password. Demo never receives email. Demo may list/revoke its own sessions and download the sample GDPR pack.
 

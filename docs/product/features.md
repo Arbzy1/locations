@@ -10,7 +10,7 @@ What the hosted app does today. Nothing here is a roadmap.
 - Heatmap on/off, opacity, and strength
 - Rename a place (saved for your account only)
 - Favourite, colour, and tags on a place
-- Hide a place from Hotspots, search, and Insights (Day View still lists the visits); unhide from Hidden places in the Hotspots panel
+- Hide a place from Hotspots, search, Insights lists, and the place directory (discovery only). Day View, place-history rows, cluster detail, and corridors still list those visits. Hide is not a delete.
 - Home and work guess pins on the Hotspots map when those clusters have coordinates
 - **Day View:** one day on a map plus a chronological timeline; optional source chips colour the timeline and journeys
 - Calendar of days that have data; previous/next day
@@ -55,7 +55,7 @@ What the hosted app does today. Nothing here is a roadmap.
 
 - Command palette from the header (`Ctrl/Cmd+K`). Desktop dialog, bottom sheet on phones
 - Search places (including your labels and tags), ISO dates, months, Explore pages, and `lat,lon` GPS jump
-- Hidden places stay out of search; Day View still lists those visits
+- Hidden places stay out of search, heatmap, and directory lists. Day View and place-history rows still list those visits. Hide is discovery-only, not a privacy wipe.
 - Recent places and named filter presets stay on this device
 - Keyboard: `g` then `h`/`d`/`t`/`i`/`e`/`s` for main pages; `[` / `]` previous/next day
 - Hotspots and Day Trips filters live in the URL so refresh keeps them. Insights is the full import, not a date slice

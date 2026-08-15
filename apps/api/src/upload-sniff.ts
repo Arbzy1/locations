@@ -17,8 +17,8 @@ export type JsonSniffResult =
   | { ok: false; error: string };
 
 /** Decode UTF-8, ensure payload looks like a JSON array/object, reject archives. */
-export function sniffTimelineJson(buffer: ArrayBuffer): JsonSniffResult {
-  const bytes = new Uint8Array(buffer);
+export function sniffTimelineJson(buffer: ArrayBuffer | Uint8Array): JsonSniffResult {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
 
   if (startsWith(bytes, ZIP_LOCAL) || startsWith(bytes, ZIP_EMPTY)) {
     return { ok: false, error: "Zip archives are not supported. Upload Timeline JSON." };

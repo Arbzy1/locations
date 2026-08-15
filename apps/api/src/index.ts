@@ -25,17 +25,18 @@ import {
 } from "./map-tiles";
 import { sniffTimelineJson } from "./upload-sniff";
 import { extractTimelineJsonFromZip, isZipMagic } from "./unzip-takeout";
+import { deleteR2Prefix } from "./r2-prefix";
 import {
   stripeClient,
   priceIdForInterval,
   recordStripeEvent,
   syncSubscriptionFromStripe,
-  tenantForStripeCustomer,
 } from "./billing";
 import {
   configureGeoEndpoints,
   createImportJob,
   ensureDataSource,
+  getActiveImportJob,
   getAnalytics,
   getDay,
   getDays,
@@ -98,10 +99,7 @@ export const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 app.use("*", async (c, next) => {
   await next();
-  const noStore =
-    c.req.path.startsWith("/api/") &&
-    c.req.path !== "/api/health" &&
-    !c.req.path.startsWith("/api/auth");
+  const noStore = c.req.path.startsWith("/api/") && c.req.path !== "/api/health";
   applySecurityHeaders(c.res.headers, {
     isProductionHttps: isProductionHttps(c.env.BETTER_AUTH_URL, c.req.url),
     noStore,
@@ -163,6 +161,13 @@ app.all("/api/auth/*", async (c) => {
       );
     }
   }
+  if (res.ok && c.req.method === "POST" && c.req.path.endsWith("/change-email")) {
+    try {
+      await auth.api.revokeOtherSessions({ headers: c.req.raw.headers });
+    } catch {
+      /* ignore */
+    }
+  }
   return res;
 });
 
@@ -193,9 +198,16 @@ app.use("/api/*", async (c, next) => {
   return next();
 });
 
-async function deleteR2Prefix(bucket: R2Bucket, prefix: string) {
-  const listed = await bucket.list({ prefix });
-  await Promise.all(listed.objects.map((o) => bucket.delete(o.key)));
+async function rejectIfLimited(
+  c: { header: (name: string, value: string) => void; json: (body: unknown, status: 429) => Response },
+  key: string,
+  limit: number,
+  windowMs: number,
+) {
+  const limited = rateLimit({ key, limit, windowMs });
+  if (limited.ok) return null;
+  c.header("Retry-After", String(limited.retryAfterSec));
+  return c.json({ error: "Too many requests. Try again later." }, 429);
 }
 
 function isErrorResult(value: unknown): value is { error: string } {
@@ -251,10 +263,14 @@ async function readTimelineUpload(
   if (name.endsWith(".zip") || isZipMagic(bytes)) {
     try {
       const extracted = await extractTimelineJsonFromZip(bytes);
+      const sniffed = sniffTimelineJson(new TextEncoder().encode(extracted.text));
+      if (!sniffed.ok) {
+        return { ok: false, status: 400, error: sniffed.error };
+      }
       return {
         ok: true,
         value: {
-          jsonText: extracted.text,
+          jsonText: sniffed.text,
           chosenPath: extracted.chosenPath,
           candidates: extracted.candidates,
         },
@@ -519,11 +535,25 @@ app.post("/api/routes/rewarm", async (c) => {
 });
 
 app.get("/api/place/:placeId", async (c) => {
+  const user = c.get("user")!;
+  const ip = clientIp(c.req.raw.headers);
+  const limited = await rejectIfLimited(c, `place:${user.id}:${ip}`, 30, 60_000);
+  if (limited) return limited;
   const db = getDb(c.env);
   const lat = Number(c.req.query("lat") ?? 0);
   const lon = Number(c.req.query("lon") ?? 0);
-  if (!lat && !lon) return c.json({ name: "Unknown", address: "" });
-  return c.json(await resolveCoords(db, lat, lon));
+  if (
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lon) ||
+    Math.abs(lat) > 90 ||
+    Math.abs(lon) > 180 ||
+    (!lat && !lon)
+  ) {
+    return c.json({ name: "Unknown", address: "" });
+  }
+  const qLat = Math.round(lat * 1e5) / 1e5;
+  const qLon = Math.round(lon * 1e5) / 1e5;
+  return c.json(await resolveCoords(db, qLat, qLon));
 });
 
 app.get("/api/sources", async (c) => {
@@ -647,7 +677,6 @@ app.post("/api/import/preview", async (c) => {
   const chosenPath = uploaded.value.chosenPath
     ? zipBasename(uploaded.value.chosenPath)
     : null;
-  console.log(JSON.stringify({ kind: "import-preview", chosenPath }));
 
   try {
     const preview = await withTenant(db, tenant, async (tx) => {
@@ -701,6 +730,11 @@ app.post("/api/import", async (c) => {
   }
   const quota = quotaForEntitled(Boolean(c.env.STRIPE_SECRET_KEY) ? entitled : true);
 
+  const activeImport = await withTenant(db, tenant, (tx) => getActiveImportJob(tx, tenant));
+  if (activeImport) {
+    return c.json({ error: "An import is already running", jobId: activeImport.id }, 409);
+  }
+
   let form: FormData;
   try {
     form = await c.req.formData();
@@ -753,8 +787,6 @@ app.post("/api/import", async (c) => {
     httpMetadata: { contentType: "application/json" },
   });
 
-  console.log(JSON.stringify({ kind: "import", chosenPath: chosenFile }));
-
   await withTenant(db, tenant, (tx) =>
     createImportJob(tx, {
       id: jobId,
@@ -788,6 +820,10 @@ app.post("/api/import", async (c) => {
 });
 
 app.get("/api/search", async (c) => {
+  const user = c.get("user")!;
+  const ip = clientIp(c.req.raw.headers);
+  const limited = await rejectIfLimited(c, `search:${user.id}:${ip}`, 60, 60_000);
+  if (limited) return limited;
   const q = c.req.query("q") ?? "";
   const db = getDb(c.env);
   const tenant = c.get("tenant");
@@ -1160,7 +1196,7 @@ app.post("/api/account/delete", async (c) => {
     to: user.email,
     role: user.role,
   });
-  await wipeTenantData(db, tenant, user.id);
+  await withTenant(db, tenant, (tx) => wipeTenantData(tx, tenant, user.id, user.email));
   return c.json({ ok: true });
 });
 
@@ -1217,13 +1253,16 @@ app.patch("/api/places/labels", async (c) => {
 app.post("/api/billing/checkout", async (c) => {
   const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
+  const user = c.get("user")!;
+  const ip = clientIp(c.req.raw.headers);
+  const limited = await rejectIfLimited(c, `checkout:${user.id}:${ip}`, 10, 60 * 60_000);
+  if (limited) return limited;
   const stripe = stripeClient(c.env);
   if (!stripe) return c.json({ error: "Billing is not configured" }, 503);
   const body = (await c.req.json().catch(() => null)) as { interval?: "monthly" | "yearly" } | null;
   const interval = body?.interval === "yearly" ? "yearly" : "monthly";
   const priceId = priceIdForInterval(c.env, interval);
   if (!priceId) return c.json({ error: "Price is not configured" }, 503);
-  const user = c.get("user")!;
   const tenant = c.get("tenant");
   const db = getDb(c.env);
   const existing = await withTenant(db, tenant, (tx) => getSubscription(tx, tenant));
@@ -1245,6 +1284,10 @@ app.post("/api/billing/checkout", async (c) => {
 app.post("/api/billing/portal", async (c) => {
   const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
+  const user = c.get("user")!;
+  const ip = clientIp(c.req.raw.headers);
+  const limited = await rejectIfLimited(c, `portal:${user.id}:${ip}`, 10, 60 * 60_000);
+  if (limited) return limited;
   const stripe = stripeClient(c.env);
   if (!stripe) return c.json({ error: "Billing is not configured" }, 503);
   const tenant = c.get("tenant");
@@ -1275,10 +1318,22 @@ app.post("/api/billing/webhook", async (c) => {
   const fresh = await recordStripeEvent(db, event.id, event.type);
   if (!fresh) return c.json({ received: true, duplicate: true });
 
-  const obj = event.data.object as { customer?: string; id?: string; metadata?: { tenant?: string } };
-  let tenant = obj.metadata?.tenant;
-  if (!tenant && obj.customer) {
-    tenant = (await tenantForStripeCustomer(db, String(obj.customer))) ?? undefined;
+  const obj = event.data.object as {
+    customer?: string;
+    id?: string;
+    subscription?: string;
+    metadata?: { tenant?: string };
+    client_reference_id?: string;
+  };
+  let tenant = obj.metadata?.tenant || obj.client_reference_id;
+  if (!tenant && event.type.startsWith("customer.subscription") && obj.id) {
+    const sub = await stripe.subscriptions.retrieve(obj.id);
+    tenant = sub.metadata?.tenant;
+    if (tenant) {
+      await withTenant(db, tenant, (tx) => syncSubscriptionFromStripe(tx, c.env, sub, tenant!));
+      await sendBillingNotice(c.env, db, tenant, event.type, sub.status, event.id);
+    }
+    return c.json({ received: true });
   }
   if (event.type.startsWith("customer.subscription") && tenant && obj.id) {
     const sub = await stripe.subscriptions.retrieve(obj.id);

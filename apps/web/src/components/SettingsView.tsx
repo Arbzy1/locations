@@ -293,7 +293,7 @@ export default function SettingsView() {
         setError(result.error.message || 'Could not change email');
         return;
       }
-      setAccountMsg('Check the new inbox to confirm the email change.');
+      setAccountMsg('Check your current inbox to confirm, then the new inbox. Other sessions were signed out.');
     } catch {
       setError('Unable to change email.');
     } finally {

@@ -39,18 +39,35 @@ export async function extractTimelineJsonFromZip(
   const { unzipSync } = await import("fflate");
   const raw = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   let files: Record<string, Uint8Array>;
+  let jsonSeen = 0;
+  let declared = 0;
+  let tooMany = false;
+  let tooBig = false;
   try {
     files = unzipSync(raw, {
       filter: (file) => {
-        if (file.originalSize > MAX_UNCOMPRESSED) return false;
+        if (tooMany || tooBig) return false;
         const name = file.name.toLowerCase();
         if (name.endsWith(".zip") || name.endsWith(".gz")) return false;
-        return name.endsWith(".json");
+        if (!name.endsWith(".json")) return false;
+        jsonSeen += 1;
+        if (jsonSeen > MAX_ZIP_ENTRIES) {
+          tooMany = true;
+          return false;
+        }
+        declared += file.originalSize;
+        if (file.originalSize > MAX_UNCOMPRESSED || declared > MAX_UNCOMPRESSED) {
+          tooBig = true;
+          return false;
+        }
+        return true;
       },
     });
   } catch {
     throw new Error("Could not read zip. Export Timeline JSON or a simple Takeout zip.");
   }
+  if (tooMany) throw new Error("Zip has too many JSON files.");
+  if (tooBig) throw new Error("Uncompressed zip is too large.");
 
   const names = Object.keys(files);
   if (names.length === 0) {

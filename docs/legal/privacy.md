@@ -20,7 +20,7 @@ Contract (providing the service) and legitimate interests (security, fraud). Pre
 
 ## Retention
 
-Active account: until you delete it. Import files: deleted after parse or via R2 lifecycle. Export packs: deleted after download. Backups: limited TTL on Neon.
+Active account: until you delete it. Account delete runs inside the tenant GUC (FORCE RLS) so Timeline rows, labels, jobs, and settings are actually erased, then auth rows and verification tokens. Import files: deleted after parse or via R2 lifecycle (prefix delete pages until empty). Export packs: deleted after download. Backups: limited TTL on Neon.
 
 ## Your rights
 
