@@ -11,7 +11,7 @@ import {
 import { EXPLORE_LINKS, isCatalogPath, type ExploreLink } from '../lib/paths';
 import { useSession } from '../lib/auth';
 
-export default function ExploreMenu({ compact }: { compact?: boolean }) {
+export default function ExploreMenu({ compact, expanded }: { compact?: boolean; expanded?: boolean }) {
   const location = useLocation();
   const active = isCatalogPath(location.pathname);
   const { data: session } = useSession();
@@ -39,20 +39,22 @@ export default function ExploreMenu({ compact }: { compact?: boolean }) {
         <Button
           type="button"
           variant="ghost"
-          size={compact ? 'default' : 'icon'}
+          size={compact || expanded ? 'default' : 'icon'}
           title="Explore more pages"
           aria-label="Explore more pages"
           aria-current={active ? 'page' : undefined}
           className={
             compact
               ? `h-11 min-w-0 flex-1 flex-col gap-0.5 px-1 text-[10px] font-normal ${active ? 'bg-accent/20 text-accent' : ''}`
-              : active
-                ? 'bg-accent/20 text-accent'
-                : ''
+              : expanded
+                ? `h-11 w-full justify-start gap-2 px-3 font-normal ${active ? 'bg-accent/20 text-accent' : ''}`
+                : active
+                  ? 'bg-accent/20 text-accent'
+                  : ''
           }
         >
           <Compass size={18} />
-          {compact && <span>Explore</span>}
+          {(compact || expanded) && <span className={expanded ? 'truncate text-sm' : undefined}>Explore</span>}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={compact ? 'end' : 'start'} side={compact ? 'top' : 'right'} className="max-h-[70vh] overflow-y-auto">

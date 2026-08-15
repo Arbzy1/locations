@@ -1,5 +1,6 @@
 export const RECENT_PLACES_KEY = "locations-recent-places";
 export const FILTER_PRESETS_KEY = "locations-filter-presets";
+export const NAV_EXPANDED_KEY = "locations-nav-expanded";
 
 export type RecentPlace = { cluster: string; label: string; at: number };
 export type FilterPreset = { name: string; path: string };
@@ -14,6 +15,22 @@ function readJson<T>(key: string, fallback: T): T {
     return JSON.parse(raw) as T;
   } catch {
     return fallback;
+  }
+}
+
+export function loadNavExpanded(): boolean {
+  try {
+    return localStorage.getItem(NAV_EXPANDED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveNavExpanded(expanded: boolean): void {
+  try {
+    localStorage.setItem(NAV_EXPANDED_KEY, expanded ? "1" : "0");
+  } catch {
+    /* ignore */
   }
 }
 

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { TabId } from './types';
@@ -10,6 +11,9 @@ import {
 } from './hooks/useApi';
 import { useSession, signOut } from './lib/auth';
 import { UnitsProvider } from './lib/units';
+import { loadNavExpanded, saveNavExpanded } from './lib/nav-memory';
+import { interactiveMotion, reducedInteractiveMotion } from './lib/motion';
+import { cn } from './lib/utils';
 import HotspotsView from './components/HotspotsView';
 import DayView from './components/DayView';
 import DayTripsView from './components/DayTripsView';
@@ -43,6 +47,8 @@ import {
   Settings,
   Upload,
   MoreHorizontal,
+  PanelLeft,
+  PanelLeftClose,
 } from 'lucide-react';
 
 const queryClient = new QueryClient({
@@ -125,33 +131,65 @@ function EmptyDataState({
   );
 }
 
+const RAIL_COLLAPSED = 56;
+const RAIL_EXPANDED = 208;
+
+function RailLabel({ show, children }: { show: boolean; children: React.ReactNode }) {
+  const reduce = useReducedMotion();
+  return (
+    <AnimatePresence initial={false}>
+      {show && (
+        <motion.span
+          initial={reduce ? { opacity: 0 } : { opacity: 0, x: -6 }}
+          animate={reduce ? { opacity: 1 } : { opacity: 1, x: 0 }}
+          exit={reduce ? { opacity: 0 } : { opacity: 0, x: -4 }}
+          transition={reduce ? { duration: 0.08 } : { duration: 0.2 }}
+          className="min-w-0 truncate whitespace-nowrap text-sm"
+        >
+          {children}
+        </motion.span>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function NavTabButton({
   tab,
   active,
   onSelect,
   compact,
+  expanded,
 }: {
   tab: { id: TabId; label: string; icon: React.ReactNode };
   active: boolean;
   onSelect: () => void;
   compact?: boolean;
+  expanded?: boolean;
 }) {
+  const reduce = useReducedMotion();
+  const motionProps = reduce ? reducedInteractiveMotion : interactiveMotion;
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onSelect}
-      className={`flex items-center justify-center rounded-lg transition-colors duration-300 ease-ui ${
-        compact ? 'h-11 min-w-0 flex-1 flex-col gap-0.5 px-1 text-[10px]' : 'h-11 w-11'
-      } ${
-        active ? 'bg-accent/20 text-accent' : 'text-text-muted hover:bg-bg/50 hover:text-text'
-      }`}
+      className={cn(
+        'flex items-center rounded-lg transition-colors duration-300 ease-ui',
+        compact
+          ? 'h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 px-1 text-[10px]'
+          : expanded
+            ? 'h-11 w-full justify-start gap-2 px-3'
+            : 'h-11 w-11 justify-center',
+        active ? 'bg-accent/20 text-accent' : 'text-text-muted hover:bg-bg/50 hover:text-text',
+      )}
       title={tab.label}
       aria-label={tab.label}
       aria-current={active ? 'page' : undefined}
+      {...motionProps}
     >
       {tab.icon}
       {compact && <span className="truncate">{tab.label.split(' ')[0]}</span>}
-    </button>
+      <RailLabel show={!!expanded}>{tab.label}</RailLabel>
+    </motion.button>
   );
 }
 
@@ -162,6 +200,9 @@ function AppContent() {
   const activeTab = tabFromPath(location.pathname);
   const dayViewDate = params.date ?? '';
   const [moreOpen, setMoreOpen] = useState(false);
+  const [navExpanded, setNavExpanded] = useState(loadNavExpanded);
+  const reduceMotion = useReducedMotion();
+  const navReady = useRef(false);
   const { data: routeProgress } = useRouteProgress();
   const { data: overview, isLoading: overviewLoading } = useOverview();
   const { data: importStatus } = useImportStatus({
@@ -194,23 +235,44 @@ function AppContent() {
     }
   }, [isDemo, overviewLoading, importing, hasData, location.pathname, navigate]);
 
+  useEffect(() => {
+    if (!navReady.current) {
+      navReady.current = true;
+      return;
+    }
+    const delay = reduceMotion ? 80 : 450;
+    const id = window.setTimeout(() => window.dispatchEvent(new Event('resize')), delay);
+    return () => window.clearTimeout(id);
+  }, [navExpanded, reduceMotion]);
+
+  const toggleNav = () => {
+    setNavExpanded((current) => {
+      const next = !current;
+      saveNavExpanded(next);
+      return next;
+    });
+  };
+
   const handleSelectDate = (date: string) => {
     selectTab('day', date);
   };
 
+  const signOutTitle = session?.user?.email ? `Sign out (${session.user.email})` : 'Sign out';
   const signOutButton = (
     <Button
       type="button"
       variant="ghost"
-      size="icon"
+      size={navExpanded ? 'default' : 'icon'}
       onClick={() => {
         queryClient.clear();
         void signOut();
       }}
-      title={session?.user?.email ? `Sign out (${session.user.email})` : 'Sign out'}
+      title={signOutTitle}
       aria-label="Sign out"
+      className={navExpanded ? 'h-11 w-full justify-start gap-2 px-3' : undefined}
     >
       <LogOut size={16} />
+      <RailLabel show={navExpanded}>Sign out</RailLabel>
     </Button>
   );
 
@@ -238,13 +300,28 @@ function AppContent() {
         </div>
       )}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="hidden w-14 shrink-0 flex-col items-center gap-1 border-r border-border bg-surface py-4 lg:flex">
+        <motion.aside
+          className={cn(
+            'hidden shrink-0 flex-col gap-1 overflow-hidden border-r border-border bg-surface py-4 lg:flex',
+            navExpanded ? 'items-stretch px-2' : 'items-center',
+          )}
+          initial={false}
+          animate={{ width: navExpanded ? RAIL_EXPANDED : RAIL_COLLAPSED }}
+          transition={
+            reduceMotion
+              ? { duration: 0.08 }
+              : { type: 'spring', stiffness: 400, damping: 28 }
+          }
+        >
           <Link
             to="/hotspots"
-            className="mb-4 font-display text-lg font-bold tracking-tight text-accent"
+            className={cn(
+              'mb-4 font-display font-bold tracking-tight text-accent',
+              navExpanded ? 'px-3 text-base' : 'text-lg',
+            )}
             title="Locations"
           >
-            L
+            {navExpanded ? 'Locations' : 'L'}
           </Link>
 
           {TABS.map((tab) => (
@@ -253,33 +330,63 @@ function AppContent() {
               tab={tab}
               active={!exploring && activeTab === tab.id}
               onSelect={() => selectTab(tab.id)}
+              expanded={navExpanded}
             />
           ))}
-          <ExploreMenu />
+          <ExploreMenu expanded={navExpanded} />
+          <Button
+            type="button"
+            variant="ghost"
+            size={navExpanded ? 'default' : 'icon'}
+            onClick={toggleNav}
+            title={navExpanded ? 'Collapse navigation' : 'Expand navigation'}
+            aria-label={navExpanded ? 'Collapse navigation' : 'Expand navigation'}
+            aria-expanded={navExpanded}
+            className={navExpanded ? 'h-11 w-full justify-start gap-2 px-3' : 'h-11 w-11'}
+          >
+            {navExpanded ? <PanelLeftClose size={16} /> : <PanelLeft size={16} />}
+            <RailLabel show={navExpanded}>Collapse</RailLabel>
+          </Button>
 
-          <div className="mt-auto flex flex-col items-center gap-2">
-            <ThemeToggle className="h-11 w-11" />
+          <div
+            className={cn(
+              'mt-auto flex flex-col gap-2',
+              navExpanded ? 'items-stretch' : 'items-center',
+            )}
+          >
+            <ThemeToggle className={navExpanded ? undefined : 'h-11 w-11'} showLabel={navExpanded} />
             {!isDemo && (
               <Button
                 type="button"
                 variant="ghost"
-                size="icon"
+                size={navExpanded ? 'default' : 'icon'}
                 onClick={() => selectTab('settings')}
-                className={activeTab === 'settings' ? 'bg-accent/20 text-accent' : ''}
+                className={cn(
+                  navExpanded && 'h-11 w-full justify-start gap-2 px-3',
+                  activeTab === 'settings' ? 'bg-accent/20 text-accent' : '',
+                )}
                 title="Settings"
                 aria-label="Settings"
               >
                 <Settings size={16} />
+                <RailLabel show={navExpanded}>Settings</RailLabel>
               </Button>
             )}
             {routeProgress && routeProgress.percent < 100 && (
-              <div title={`Routes cached: ${routeProgress.percent}%`}>
+              <div
+                className={cn(
+                  'flex items-center text-xs text-text-muted',
+                  navExpanded ? 'h-11 gap-2 px-3' : 'h-11 w-11 justify-center',
+                )}
+                title={`Routes cached: ${routeProgress.percent}%`}
+              >
                 <Loader2 size={16} className="animate-spin text-accent" />
+                <RailLabel show={navExpanded}>Routes {routeProgress.percent}%</RailLabel>
               </div>
             )}
             {signOutButton}
           </div>
-        </div>
+        </motion.aside>
 
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div className="flex items-center gap-3 border-b border-border px-4 py-2">
