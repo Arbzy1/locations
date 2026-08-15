@@ -24,6 +24,7 @@ Worker connections use a transactional driver. Each authenticated request:
 ## Roles
 
 - App URL should be a role **without** BYPASSRLS (`locations_app` when you can create it on Neon).
+- `0012_rls_grants.sql` GRANTs tenant tables to `locations_app`. `npm run test:rls` loads `.env` / `.dev.vars` and, if the URL is a BYPASSRLS owner, SET ROLE to `locations_app` for leak tests.
 - Migrations may use a privileged role. Documented SQL: `packages/db/drizzle/0003_rls.sql`.
 
 ## Shared caches

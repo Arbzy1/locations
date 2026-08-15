@@ -82,5 +82,12 @@
     "when": 1755236000000,
     "tag": "0011_map_settings",
     "breakpoints": true
+  },
+  {
+    "idx": 12,
+    "version": "7",
+    "when": 1755240000000,
+    "tag": "0012_rls_grants",
+    "breakpoints": true
   }
 ]

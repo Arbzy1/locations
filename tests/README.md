@@ -71,7 +71,7 @@ Tiny synthetic Timeline JSON only: [`fixtures/timeline/`](fixtures/timeline/). N
 | `npm run test:placement` | Fail if tests live outside this tree |
 | `npm run test:unit` | `tests/unit/**/*.test.ts` |
 | `npm run test:integration` | `tests/integration/**/*.test.ts` |
-| `npm run test:rls` | `tests/rls/**/*.test.ts` (skipIf without `DATABASE_URL`) |
+| `npm run test:rls` | `tests/rls/**/*.test.ts` (loads `.env` / `.dev.vars`; skipIf without `DATABASE_URL`) |
 | `npm run test:e2e` | Playwright `tests/e2e` |
 | `npm run test:all` | All Vitest projects |
 | `npm run test:report` | unit + integration markdown report |

@@ -1,19 +1,32 @@
-import { neon } from "@neondatabase/serverless";
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import {
+  prepareRlsAppRole,
+  rlsDatabaseUrl,
+  rlsSql,
+  rlsTransaction,
+} from "@tests/helpers/rls-env";
 
-const url = process.env.DATABASE_URL;
+const url = rlsDatabaseUrl();
 
 describe.skipIf(!url)("WITH CHECK rejects cross-tenant inserts", () => {
-  it("rejects a place_labels insert whose tenant differs from the GUC", async () => {
-    const sql = neon(url!);
-    const roleRows = await sql`SELECT rolbypassrls AS bypass FROM pg_roles WHERE rolname = current_user`;
-    if (Boolean(roleRows[0]?.bypass)) return;
-    await sql`SELECT set_config('app.tenant', 'rls-check-a', true)`;
+  it("rejects a place_labels insert whose tenant differs from the GUC", async ({ skip }) => {
+    const sql = rlsSql();
+    if ((await prepareRlsAppRole(sql)) === "unavailable") {
+      skip();
+      return;
+    }
+    const tenantA = `rls-check-a-${randomUUID()}`;
+    const tenantB = `rls-check-b-${randomUUID()}`;
+    const placeKey = `rls-check-${randomUUID()}`;
     await expect(
-      sql`
-        INSERT INTO place_labels (tenant, place_key, label, hidden, favourite)
-        VALUES ('rls-check-b', 'probe', 'probe', false, false)
-      `,
-    ).rejects.toThrow();
+      rlsTransaction(sql, [
+        sql`SELECT set_config('app.tenant', ${tenantA}, true)`,
+        sql`
+          INSERT INTO place_labels (tenant, place_key, label, hidden, favourite)
+          VALUES (${tenantB}, ${placeKey}, 'probe', false, false)
+        `,
+      ]),
+    ).rejects.toThrow(/row-level security policy/i);
   });
 });

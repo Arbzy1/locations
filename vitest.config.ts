@@ -42,6 +42,7 @@ export default defineConfig({
           environment: "node",
           include: ["tests/rls/**/*.test.ts"],
           exclude: ["**/node_modules/**", "**/dist/**"],
+          setupFiles: ["tests/helpers/rls-env.ts"],
         },
       },
     ],

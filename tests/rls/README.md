@@ -1,6 +1,8 @@
 # rls
 
-Live Postgres FORCE RLS. Needs `DATABASE_URL`. Skip locally if unset; CI must run it.
+Live Postgres FORCE RLS. Loads `DATABASE_URL` from the environment, then `.env` / `.dev.vars` (same as `db:migrate`). Skip if still unset; CI must set the secret and run it.
+
+Leak and WITH CHECK assertions run as `locations_app` (NOBYPASSRLS). If `DATABASE_URL` is a BYPASSRLS owner, tests GRANT that role and `SET LOCAL ROLE` for those cases. Skip only when the URL is missing or `locations_app` does not exist.
 
 `npm run test:rls` runs `tests/rls/**/*.test.ts`.
 

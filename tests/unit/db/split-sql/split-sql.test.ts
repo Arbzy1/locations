@@ -44,4 +44,12 @@ ALTER TABLE visits ENABLE ROW LEVEL SECURITY;
     expect(doBlocks[1]).toContain("locations_app");
     expect(parts.length).toBe(23);
   });
+
+  it("keeps 0012_rls_grants.sql as one DO block", () => {
+    const body = readFileSync(resolve(drizzleDir, "0012_rls_grants.sql"), "utf8");
+    const parts = splitSql(body);
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toContain("GRANT SELECT, INSERT, UPDATE, DELETE");
+    expect(parts[0]).toContain("locations_app");
+  });
 });

@@ -11,6 +11,9 @@ import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const reportsDir = join(root, "reports");
+// Relative path: `cwd` is repo root. An absolute `--outputFile=...` breaks on
+// Windows when the repo path contains a space (`Location History`).
+const jsonRel = "reports/vitest.json";
 const jsonPath = join(reportsDir, "vitest.json");
 const mdPath = join(reportsDir, "test-report.md");
 
@@ -27,7 +30,8 @@ const result = spawnSync(
     "integration",
     "--reporter=default",
     "--reporter=json",
-    `--outputFile=${jsonPath}`,
+    "--outputFile",
+    jsonRel,
   ],
   {
     cwd: root,

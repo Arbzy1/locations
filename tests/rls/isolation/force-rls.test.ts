@@ -1,7 +1,13 @@
-import { neon } from "@neondatabase/serverless";
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import {
+  prepareRlsAppRole,
+  rlsDatabaseUrl,
+  rlsSql,
+  rlsTransaction,
+} from "@tests/helpers/rls-env";
 
-const url = process.env.DATABASE_URL;
+const url = rlsDatabaseUrl();
 
 const TENANT_TABLES = [
   "visits",
@@ -20,7 +26,7 @@ const TENANT_TABLES = [
 
 describe.skipIf(!url)("FORCE RLS (live DATABASE_URL)", () => {
   it("marks tenant tables FORCE ROW LEVEL SECURITY", async () => {
-    const sql = neon(url!);
+    const sql = rlsSql();
     const rows = await sql`
       SELECT c.relname AS name, c.relforcerowsecurity AS forced
       FROM pg_class c
@@ -38,16 +44,34 @@ describe.skipIf(!url)("FORCE RLS (live DATABASE_URL)", () => {
     }
   });
 
-  it("uses a NOBYPASSRLS role or fails closed on an empty GUC", async () => {
-    const sql = neon(url!);
-    const roleRows = await sql`SELECT rolbypassrls AS bypass FROM pg_roles WHERE rolname = current_user`;
-    const bypass = Boolean(roleRows[0]?.bypass);
-    if (bypass) {
-      expect(bypass).toBe(true);
+  it("hides other-tenant rows without a Drizzle tenant filter", async ({ skip }) => {
+    const sql = rlsSql();
+    if ((await prepareRlsAppRole(sql)) === "unavailable") {
+      skip();
       return;
     }
-    await sql`SELECT set_config('app.tenant', '', true)`;
-    const counts = await sql`SELECT count(*)::int AS n FROM visits`;
-    expect(Number(counts[0]?.n ?? -1)).toBe(0);
+    const tenantA = `rls-a-${randomUUID()}`;
+    const tenantB = `rls-b-${randomUUID()}`;
+    const placeKey = `rls-probe-${randomUUID()}`;
+    try {
+      await rlsTransaction(sql, [
+        sql`SELECT set_config('app.tenant', ${tenantA}, true)`,
+        sql`
+          INSERT INTO place_labels (tenant, place_key, label, hidden, favourite)
+          VALUES (${tenantA}, ${placeKey}, 'probe', false, false)
+        `,
+      ]);
+      const results = await rlsTransaction(sql, [
+        sql`SELECT set_config('app.tenant', ${tenantB}, true)`,
+        sql`SELECT tenant FROM place_labels WHERE place_key = ${placeKey}`,
+      ]);
+      const visible = results[results.length - 1] as { tenant: string }[];
+      expect(visible).toEqual([]);
+    } finally {
+      await rlsTransaction(sql, [
+        sql`SELECT set_config('app.tenant', ${tenantA}, true)`,
+        sql`DELETE FROM place_labels WHERE tenant = ${tenantA} AND place_key = ${placeKey}`,
+      ]);
+    }
   });
 });

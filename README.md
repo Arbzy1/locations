@@ -101,7 +101,7 @@ Full list: [docs/product/features.md](docs/product/features.md).
 | `npm run test:placement` | Fail if tests live outside `tests/` |
 | `npm run test:unit` | Vitest unit project |
 | `npm run test:integration` | Vitest integration project |
-| `npm run test:rls` | RLS leak tests (skips without `DATABASE_URL`) |
+| `npm run test:rls` | RLS leak tests (loads `.env` / `.dev.vars`; skips if `DATABASE_URL` is still unset) |
 | `npm run test:e2e` | Playwright (requires API at `:8787`) |
 | `npm run rules:sync` | Regenerate AI tool rule files from `AGENTS.md` |
 

@@ -7,7 +7,7 @@ All tests live under [`tests/`](../../tests/README.md). Placement map and decisi
 | `npm run test:placement` | Fail if a test file is outside `tests/` or in the wrong kind folder |
 | `npm run test:unit` | `tests/unit/**/*.test.ts` (pure helpers, no DB/network) |
 | `npm run test:integration` | `tests/integration/**/*.test.ts` (`app.request()` API boundaries) |
-| `npm run test:rls` | `tests/rls/**/*.test.ts` (real Postgres FORCE RLS; needs `DATABASE_URL`) |
+| `npm run test:rls` | `tests/rls/**/*.test.ts` (real Postgres FORCE RLS; loads `.env` / `.dev.vars`) |
 | `npm run test:e2e` | Playwright (`tests/e2e/00`–`70`) |
 | `npm run test:all` | All Vitest projects (rls skipped if no DB) |
 | `npm run test:report` | unit + integration, writes `reports/test-report.md` |
