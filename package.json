@@ -55,9 +55,9 @@
     "loc:report": "node scripts/loc.mjs --report",
     "kill:servers": "node scripts/kill-servers.mjs",
     "deps:audit": "npm audit --audit-level=high",
-    "git:merge-master": "node scripts/merge-master-into-branches.mjs",
-    "git:merge-master:preview": "node scripts/merge-master-into-branches.mjs --preview",
-    "git:merge-master:fetch": "node scripts/merge-master-into-branches.mjs --fetch"
+    "git:merge-master": "node scripts/merge-master-into-branches.mjs --push",
+    "git:merge-master:preview": "node scripts/merge-master-into-branches.mjs --preview --push",
+    "git:merge-master:fetch": "node scripts/merge-master-into-branches.mjs --fetch --push"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",

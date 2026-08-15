@@ -46,13 +46,13 @@ function parseArgs(argv) {
 Options:
   --base, -b <name>  Base branch to merge from (default: master)
   --fetch, -f        git fetch origin before merging
-  --push, -p         push each successfully updated branch
+  --push, -p         push each successfully updated branch to origin
   --preview, -n      print actions only
 
 Examples:
   npm run git:merge-master
   npm run git:merge-master:preview
-  node scripts/merge-master-into-branches.mjs --fetch --push
+  npm run git:merge-master:fetch
 `);
       process.exit(0);
     } else {
@@ -121,7 +121,9 @@ function main() {
   for (const branch of targets) {
     console.log(`\n=== ${branch} ===`);
     if (opts.dryRun) {
-      console.log(`Would: checkout ${branch} && merge ${base}`);
+      console.log(
+        `Would: checkout ${branch} && merge ${base}${opts.push ? ` && push origin ${branch}` : ""}`,
+      );
       results.push({ branch, ok: true, dryRun: true });
       continue;
     }
