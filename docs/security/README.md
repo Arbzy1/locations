@@ -46,6 +46,10 @@ Keep Drizzle tenant filters **and** FORCE RLS. Full classes:
 
 - Worker `DATABASE_URL` must be `locations_app` (NOBYPASSRLS) with table GRANTs. A BYPASSRLS owner URL makes Drizzle filters the only barrier. `npm run test:rls` checks FORCE flags and fail-closed empty GUC when the connected role cannot bypass RLS.
 
+## Automated catalog (`npm run test:security`)
+
+Encodes this catalog as failing checks: static policy scanners, a complete API threat matrix, FORCE RLS leak tests, privacy/XSS assertions, and `npm audit --audit-level=high`. It is not a live pentest. Out of scope: WAF dashboard config, live Stripe charges, staging/prod traffic, WebAuthn.
+
 ## Process
 
 - MFA on GitHub, Cloudflare, Neon, Stripe. Pen test before paid GA.

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EMAIL_KINDS } from "@locations/api/email/kinds";
 import { escapeHtml, renderEmail } from "@locations/api/email/templates";
-import { sendEmail } from "@locations/api/email/send";
+import { sendEmail, sendEmailSafe } from "@locations/api/email/send";
 import type { Env } from "@locations/api/env";
 
 const env = {
@@ -122,5 +122,26 @@ describe("sendEmail", () => {
     expect(body.to).toEqual(["person@example.com"]);
     expect(body.tags[0].value).toBe("import_ready");
     expect(body.subject).toContain("import");
+  });
+
+  it("throws when Resend returns 4xx", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("bad", { status: 422 })));
+    await expect(
+      sendEmail(
+        { ...env, RESEND_API_KEY: "re_test" },
+        { kind: "import_ready", to: "person@example.com" },
+      ),
+    ).rejects.toThrow(/Email send failed: 422/);
+  });
+});
+
+describe("sendEmailSafe", () => {
+  it("maps HTTP failures to failed without throwing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 500 })));
+    const result = await sendEmailSafe(
+      { ...env, RESEND_API_KEY: "re_test" },
+      { kind: "import_failed", to: "person@example.com" },
+    );
+    expect(result).toBe("failed");
   });
 });

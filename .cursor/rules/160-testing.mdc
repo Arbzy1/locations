@@ -22,6 +22,7 @@ Invent a new leaf under the matching kind/layer. Never next to source. Shared ha
 - `npm run test:unit` is the default (no network, no DB).
 - `test:integration` covers `app.request()` routes (401, owner 200, cross-tenant 404, demo 403).
 - `test:rls` needs `DATABASE_URL` and asserts FORCE RLS even without Drizzle filters. Skip locally if unset; CI must run it.
+- `test:security` runs placement, policy scanners, the API threat matrix, RLS, and `deps:audit`. Not a live pentest. New `/api/*` routes need a catalog row.
 - Every new API route needs positive + unauthenticated + cross-tenant + demo-denied tests under `tests/integration/api/{domain}/`.
 - Schema changes that add tenant tables need an RLS leak test under `tests/rls/isolation/`.
 - Stripe webhook tests cover invalid signature, replay, and entitlement grant/revoke (`tests/integration/api/billing/`).

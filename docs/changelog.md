@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+`npm run test:security` encodes the security catalog: route matrix, policy scanners, FORCE RLS leaks, privacy/XSS, and `npm audit`. Not a live pentest.
+
 Account delete wipes Timeline under FORCE RLS (`withTenant`), pages R2 prefixes until empty, and clears verification tokens. Password reset and email change revoke other sessions. One active import per tenant (409). In-app rate limits on search, billing, and reverse-geocode; Cloudflare WAF remains the hard edge control. Staging CSP is enforcing. Production/staging `workers_dev` hostnames are off. Better Auth upgraded to 1.6 (hashed email OTPs, two-step email change).
 
 Public marketing pages outside the app shell (landing, pricing, status, changelog), a skippable scripted demo tour, staff stuck-import list and tenant-wipe runbook, and env feature flags (`globe`, `demoTour`, `landing`). `GET /api/health` reports Worker and database separately. Activity guesses from dwell, hour, and place type (not an LLM) plus coverage percent and visit badges; existing tenants see those after the next import.

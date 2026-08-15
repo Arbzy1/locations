@@ -42,6 +42,11 @@ export async function prepareRlsAppRole(sql: NeonSql): Promise<AppRoleMode> {
     await sql`GRANT locations_app TO CURRENT_USER`;
     await sql`GRANT USAGE ON SCHEMA public TO locations_app`;
     await sql`GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE place_labels TO locations_app`;
+    try {
+      await sql`GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE named_trips TO locations_app`;
+    } catch {
+      /* older DBs may lack this GRANT until 0012+ is applied */
+    }
     appRoleMode = "set-role";
     return appRoleMode;
   } catch {

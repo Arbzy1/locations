@@ -62,4 +62,59 @@ describe("Better Auth 1.6 config", () => {
     });
     expect(JSON.stringify(sendEmail.mock.calls)).not.toContain("new@example.com");
   });
+
+  it("disables public signup when DISABLE_SIGNUP is true", () => {
+    const auth = createAuth(testEnv({ DISABLE_SIGNUP: "true" }));
+    expect(auth.options.emailAndPassword?.disableSignUp).toBe(true);
+  });
+
+  it("maps Better Auth send callbacks to catalog kinds", async () => {
+    sendEmail.mockClear();
+    const auth = createAuth(testEnv());
+    const options = auth.options;
+    const user = { email: "a@example.com" } as never;
+    const url = "http://127.0.0.1:8787/verify";
+
+    await options.emailVerification?.sendVerificationEmail?.({ user, url, token: "t" }, undefined);
+    await options.emailAndPassword?.sendResetPassword?.({ user, url, token: "t" }, undefined);
+    await options.emailAndPassword?.onPasswordReset?.({ user }, undefined);
+
+    const plugins = (options.plugins ?? []) as Array<{
+      id?: string;
+      options?: {
+        sendMagicLink?: (ctx: { email: string; url: string }) => Promise<void>;
+        sendVerificationOTP?: (ctx: {
+          email: string;
+          otp: string;
+          type: string;
+        }) => Promise<void>;
+      };
+    }>;
+    const magic = plugins.find((p) => p.id === "magic-link" || p.options?.sendMagicLink);
+    const otp = plugins.find((p) => p.id === "email-otp" || p.options?.sendVerificationOTP);
+    await magic?.options?.sendMagicLink?.({ email: "a@example.com", url });
+    await otp?.options?.sendVerificationOTP?.({
+      email: "a@example.com",
+      otp: "123456",
+      type: "sign-in",
+    });
+    await otp?.options?.sendVerificationOTP?.({
+      email: "a@example.com",
+      otp: "654321",
+      type: "email-verification",
+    });
+
+    const kinds = sendEmail.mock.calls.map((call) => (call[1] as { kind: string }).kind);
+    expect(kinds).toEqual(
+      expect.arrayContaining([
+        "verify_email_link",
+        "password_reset_link",
+        "password_changed",
+        "magic_link",
+        "signin_otp",
+        "verify_email_otp",
+      ]),
+    );
+    expect(kinds).not.toContain("email_changed");
+  });
 });

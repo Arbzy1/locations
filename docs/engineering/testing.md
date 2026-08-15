@@ -8,6 +8,7 @@ All tests live under [`tests/`](../../tests/README.md). Placement map and decisi
 | `npm run test:unit` | `tests/unit/**/*.test.ts` (pure helpers, no DB/network) |
 | `npm run test:integration` | `tests/integration/**/*.test.ts` (`app.request()` API boundaries) |
 | `npm run test:rls` | `tests/rls/**/*.test.ts` (real Postgres FORCE RLS; loads `.env` / `.dev.vars`) |
+| `npm run test:security` | Placement + policy scanners + API threat matrix + RLS + `deps:audit`. Not a live pentest. |
 | `npm run test:e2e` | Playwright (`tests/e2e/00`–`70`) |
 | `npm run test:all` | All Vitest projects (rls skipped if no DB) |
 | `npm run test:report` | unit + integration, writes `reports/test-report.md` |
@@ -15,4 +16,6 @@ All tests live under [`tests/`](../../tests/README.md). Placement map and decisi
 
 Fixtures: `tests/fixtures/timeline/`. Never commit real Takeout. Do not name a fixture `Records.json`.
 
-Every new route: 401, owner 200, other-tenant 404, demo 403 on writes, under `tests/integration/api/{domain}/`.
+Every new route: 401, owner 200, other-tenant 404, demo 403 on writes, under `tests/integration/api/{domain}/`. Also add a row to `tests/helpers/api-route-catalog.ts` so `npm run test:security` stays complete.
+
+Vendor HTTP (mocked Stripe, Resend, Better Auth glue, R2, queues, `/api/health` Neon ping) lives under `tests/integration/api/{billing,auth,email,import,health,places}/`. OSRM/Nominatim `fetch` helpers are unit tests in `tests/unit/api/geo/`. Live Neon isolation stays in `tests/rls/`.

@@ -23,7 +23,7 @@ export default defineConfig({
           name: "unit",
           environment: "node",
           include: ["tests/unit/**/*.test.ts"],
-          exclude: ["**/node_modules/**", "**/dist/**"],
+          exclude: ["**/node_modules/**", "**/dist/**", "tests/unit/security/**"],
         },
       },
       {
@@ -32,6 +32,18 @@ export default defineConfig({
           name: "integration",
           environment: "node",
           include: ["tests/integration/**/*.test.ts"],
+          exclude: ["**/node_modules/**", "**/dist/**", "tests/integration/api/security/**"],
+        },
+      },
+      {
+        resolve: { alias },
+        test: {
+          name: "security",
+          environment: "node",
+          include: [
+            "tests/unit/security/**/*.test.ts",
+            "tests/integration/api/security/**/*.test.ts",
+          ],
           exclude: ["**/node_modules/**", "**/dist/**"],
         },
       },

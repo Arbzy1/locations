@@ -112,6 +112,7 @@ export function requestApp(
   path: string,
   init?: RequestInit,
   env: Env = testEnv(),
+  executionCtx: ExecutionContext = testExecutionCtx(),
 ) {
-  return app.request(path, init, env, testExecutionCtx());
+  return app.request(path, init, env, executionCtx);
 }

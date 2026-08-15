@@ -324,6 +324,7 @@ Invent a new leaf under the matching kind/layer. Never next to source. Shared ha
 - `npm run test:unit` is the default (no network, no DB).
 - `test:integration` covers `app.request()` routes (401, owner 200, cross-tenant 404, demo 403).
 - `test:rls` needs `DATABASE_URL` and asserts FORCE RLS even without Drizzle filters. Skip locally if unset; CI must run it.
+- `test:security` runs placement, policy scanners, the API threat matrix, RLS, and `deps:audit`. Not a live pentest. New `/api/*` routes need a catalog row.
 - Every new API route needs positive + unauthenticated + cross-tenant + demo-denied tests under `tests/integration/api/{domain}/`.
 - Schema changes that add tenant tables need an RLS leak test under `tests/rls/isolation/`.
 - Stripe webhook tests cover invalid signature, replay, and entitlement grant/revoke (`tests/integration/api/billing/`).
@@ -368,7 +369,7 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 | `setup:project` | Interactive first-time setup |
 | `typecheck:all` / `lint:web` | Quality gates |
 | `rules:sync` | Regenerate tool-specific rule files from `AGENTS.md` |
-| `test:placement` / `test:unit` / `test:integration` / `test:rls` / `test:watch` / `test:e2e` / `test:all` / `test:report` | Placement lint, Vitest, Playwright, markdown report |
+| `test:placement` / `test:unit` / `test:integration` / `test:rls` / `test:security` / `test:watch` / `test:e2e` / `test:all` / `test:report` | Placement lint, Vitest, security catalog, Playwright, markdown report |
 | `loc` / `loc:report` | Lines-of-code summary / write `reports/loc.md` |
 | `kill:servers` | Free ports 5173 and 8787 |
 | `deps:audit` | `npm audit` (high/critical) |
@@ -394,9 +395,10 @@ Non-negotiables:
 - **Unit:** `npm run test:unit` (`tests/unit/**/*.test.ts`; no external services).
 - **Integration:** `npm run test:integration` (`tests/integration/**/*.test.ts`; `app.request()`, mocked Stripe/R2).
 - **RLS:** `npm run test:rls` (`tests/rls/**/*.test.ts`; real Postgres). Isolation is app-level **and** FORCE RLS.
+- **Security catalog:** `npm run test:security` (scanners, route matrix, RLS, `deps:audit`). Not a live pentest.
 - **E2E:** Playwright (`npm run test:e2e`) against `PLAYWRIGHT_BASE_URL` (default `http://127.0.0.1:8787`); files in `tests/e2e/`.
 - Prioritize auth/tenant boundaries, billing webhooks, imports, and data-mutating routes.
-- CI runs placement, unit, integration, RLS, e2e, and `deps:audit`.
+- CI runs placement, unit, integration, `test:security`, RLS, e2e, and `deps:audit`.
 
 ## Things not to do
 
