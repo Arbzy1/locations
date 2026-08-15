@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatSessionTime, summarizeUserAgent } from "@locations/web/lib/sessions";
+import { formatSessionTime, summarizeUserAgent } from "@locations/web/lib/settings/sessions";
 
 describe("summarizeUserAgent", () => {
   it("labels Chrome on Windows", () => {

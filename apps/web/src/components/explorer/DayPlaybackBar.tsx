@@ -1,7 +1,7 @@
 import { Pause, Play, Sun, Sunset } from 'lucide-react';
 import { Button } from '../ui/button';
 import { formatTime } from '../../utils/format';
-import { PLAYBACK_SPEEDS, type PlaybackSpeed } from '../../lib/dayPlayback';
+import { PLAYBACK_SPEEDS, type PlaybackSpeed } from '../../lib/explorer/dayPlayback';
 import { cn } from '../../lib/utils';
 
 interface Props {

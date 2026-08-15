@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
-import { EXPLORE_LINKS, isCatalogPath, type ExploreLink } from '../../lib/paths';
+import { EXPLORE_LINKS, isCatalogPath, type ExploreLink } from '../../lib/nav/paths';
 import { useSession } from '../../lib/auth';
 
 export default function ExploreMenu({ compact, expanded }: { compact?: boolean; expanded?: boolean }) {

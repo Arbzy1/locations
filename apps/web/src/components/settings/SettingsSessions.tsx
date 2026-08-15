@@ -8,7 +8,7 @@ import {
   revokeOtherDeviceSessions,
   summarizeUserAgent,
   type DeviceSession,
-} from "../../lib/sessions";
+} from "../../lib/settings/sessions";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card, CardTitle } from "../ui/card";

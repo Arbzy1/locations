@@ -4,6 +4,7 @@ import CatalogPage from './CatalogPage';
 import MapView from '../explorer/Map';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { EjectField } from '../ui/eject-field';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useDayData, useDays } from '../../hooks/useApi';
 import type { Visit } from '../../types';
@@ -32,12 +33,15 @@ export function ComparePage() {
     const data = which === 'a' ? dayA.data : dayB.data;
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-2">
-        <Input
-          type="date"
-          title={which === 'a' ? 'First date' : 'Second date'}
-          value={date}
-          onChange={(e) => setDate(which, e.target.value)}
-        />
+        <EjectField label={which === 'a' ? 'First date' : 'Second date'} htmlFor={`compare-${which}`}>
+          <Input
+            id={`compare-${which}`}
+            type="date"
+            title={which === 'a' ? 'First date' : 'Second date'}
+            value={date}
+            onChange={(e) => setDate(which, e.target.value)}
+          />
+        </EjectField>
         <div className="h-64 min-h-0 flex-1 overflow-hidden rounded-lg border border-border">
           <MapView compact sizeSignal={sizeSignal} visits={data?.visits ?? []} activities={data?.activities ?? []} />
         </div>
@@ -93,18 +97,21 @@ export function ReplayPage() {
 
   return (
     <CatalogPage title="Time-lapse" description="Playback of one imported day. Map tiles stay native.">
-      <Input
-        type="date"
-        title="Replay date"
-        value={date}
-        onChange={(e) => {
-          const next = new URLSearchParams(params);
-          next.set('date', e.target.value);
-          setParams(next);
-          setIndex(0);
-          setPlaying(false);
-        }}
-      />
+      <EjectField label="Replay date" htmlFor="replay-date">
+        <Input
+          id="replay-date"
+          type="date"
+          title="Replay date"
+          value={date}
+          onChange={(e) => {
+            const next = new URLSearchParams(params);
+            next.set('date', e.target.value);
+            setParams(next);
+            setIndex(0);
+            setPlaying(false);
+          }}
+        />
+      </EjectField>
       <div className="h-64 overflow-hidden rounded-lg border border-border">
           <MapView compact sizeSignal={index} visits={shown} activities={data?.activities ?? []} />
       </div>

@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "../../lib/auth";
-import { adminJson } from "../../lib/admin-api";
+import { adminJson } from "../../lib/admin/admin-api";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { EjectField } from "../ui/eject-field";
 import { Dialog, DialogContent } from "../ui/dialog";
 import { AdminCard, AdminError, AdminSection } from "./AdminSection";
 import {
@@ -115,45 +116,56 @@ export function AdminUsersPage() {
   return (
     <AdminSection title="Users" description="Email, role, and verification. Open a card for counts, not maps.">
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <Input
-          value={q}
-          onChange={(e) => setFilter("q", e.target.value)}
-          placeholder="Search email prefix"
-          title="Search accounts by email prefix"
-        />
-        <select
-          className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
-          title="Filter by role"
-          value={role}
-          onChange={(e) => setFilter("role", e.target.value)}
-        >
-          <option value="">All roles</option>
-          <option value="user">user</option>
-          <option value="admin">admin</option>
-          <option value="developer">developer</option>
-          <option value="demo">demo</option>
-        </select>
-        <select
-          className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
-          title="Filter by verification"
-          value={verified}
-          onChange={(e) => setFilter("verified", e.target.value)}
-        >
-          <option value="">Any verification</option>
-          <option value="true">Verified</option>
-          <option value="false">Unverified</option>
-        </select>
-        <select
-          className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
-          title="Filter by billing"
-          value={billing}
-          onChange={(e) => setFilter("billing", e.target.value)}
-        >
-          <option value="">Any billing</option>
-          <option value="active">Entitled</option>
-          <option value="past_due">Past due</option>
-          <option value="none">None</option>
-        </select>
+        <EjectField label="Search email prefix" htmlFor="admin-users-q">
+          <Input
+            id="admin-users-q"
+            value={q}
+            onChange={(e) => setFilter("q", e.target.value)}
+            title="Search accounts by email prefix"
+          />
+        </EjectField>
+        <EjectField label="Role" htmlFor="admin-users-role">
+          <select
+            id="admin-users-role"
+            className="h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
+            title="Filter by role"
+            value={role}
+            onChange={(e) => setFilter("role", e.target.value)}
+          >
+            <option value="">All roles</option>
+            <option value="user">user</option>
+            <option value="admin">admin</option>
+            <option value="developer">developer</option>
+            <option value="demo">demo</option>
+          </select>
+        </EjectField>
+        <EjectField label="Verification" htmlFor="admin-users-verified">
+          <select
+            id="admin-users-verified"
+            className="h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
+            title="Filter by verification"
+            value={verified}
+            onChange={(e) => setFilter("verified", e.target.value)}
+          >
+            <option value="">Any verification</option>
+            <option value="true">Verified</option>
+            <option value="false">Unverified</option>
+          </select>
+        </EjectField>
+        <EjectField label="Billing" htmlFor="admin-users-billing">
+          <select
+            id="admin-users-billing"
+            className="h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
+            title="Filter by billing"
+            value={billing}
+            onChange={(e) => setFilter("billing", e.target.value)}
+          >
+            <option value="">Any billing</option>
+            <option value="active">Entitled</option>
+            <option value="past_due">Past due</option>
+            <option value="none">None</option>
+          </select>
+        </EjectField>
       </div>
       {isAdmin && (
         <AdminCard title="Invite">
@@ -161,22 +173,34 @@ export function AdminUsersPage() {
             Creates a credential account and sends a password reset. The password is never shown. Cannot invite admin or demo.
           </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <Input
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="email@example.com"
-              title="Invite email"
-            />
-            <Input value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Name (optional)" title="Invite display name" />
-            <select
-              className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
-              title="Invite role"
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value)}
-            >
-              <option value="user">user</option>
-              <option value="developer">developer</option>
-            </select>
+            <EjectField label="Email" htmlFor="invite-email" className="min-w-0 sm:flex-1">
+              <Input
+                id="invite-email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                title="Invite email"
+              />
+            </EjectField>
+            <EjectField label="Name (optional)" htmlFor="invite-name" className="min-w-0 sm:flex-1">
+              <Input
+                id="invite-name"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                title="Invite display name"
+              />
+            </EjectField>
+            <EjectField label="Invite role" htmlFor="invite-role">
+              <select
+                id="invite-role"
+                className="h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
+                title="Invite role"
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value)}
+              >
+                <option value="user">user</option>
+                <option value="developer">developer</option>
+              </select>
+            </EjectField>
             <Button type="button" title="Send invite" disabled={invite.isPending || !inviteEmail.includes("@")} onClick={() => invite.mutate()}>
               Invite
             </Button>
@@ -403,16 +427,19 @@ export function AdminUserDetailPage() {
       {isAdmin && (
         <AdminCard title="Actions">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <select
-              className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
-              title="Set account role"
-              value={role || data.role}
-              onChange={(e) => setRole(e.target.value)}
-            >
-              <option value="user">user</option>
-              <option value="admin">admin</option>
-              <option value="developer">developer</option>
-            </select>
+            <EjectField label="Account role" htmlFor="admin-user-role">
+              <select
+                id="admin-user-role"
+                className="h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
+                title="Set account role"
+                value={role || data.role}
+                onChange={(e) => setRole(e.target.value)}
+              >
+                <option value="user">user</option>
+                <option value="admin">admin</option>
+                <option value="developer">developer</option>
+              </select>
+            </EjectField>
             <Button type="button" title="Save role" onClick={() => roleMut.mutate()} disabled={roleMut.isPending}>
               Save role
             </Button>
@@ -480,13 +507,14 @@ export function AdminUserDetailPage() {
             Type the account email to confirm. This deletes Timeline rows, uploads, export packs, sessions, and the
             Stripe customer. It does not open their map.
           </p>
-          <Input
-            className="mt-3"
-            value={wipeEmail}
-            onChange={(e) => setWipeEmail(e.target.value)}
-            placeholder={data.email}
-            title="Type the account email to confirm wipe"
-          />
+          <EjectField label="Account email" htmlFor="wipe-email" className="mt-3">
+            <Input
+              id="wipe-email"
+              value={wipeEmail}
+              onChange={(e) => setWipeEmail(e.target.value)}
+              title="Type the account email to confirm wipe"
+            />
+          </EjectField>
           <div className="mt-4 flex gap-2">
             <Button type="button" variant="outline" title="Cancel wipe" onClick={() => setWipeOpen(false)}>
               Cancel

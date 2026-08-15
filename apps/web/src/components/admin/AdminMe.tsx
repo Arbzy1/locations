@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAdminStats } from "../../hooks/useApi";
 import { useSession } from "../../lib/auth";
-import { adminJson } from "../../lib/admin-api";
+import { adminJson } from "../../lib/admin/admin-api";
 import { Button } from "../ui/button";
 import { AdminCard, AdminError, AdminSection } from "./AdminSection";
 import { AdminSkeletonList, AdminStat, AdminStatus, AdminTable, jobStatus } from "./AdminUi";

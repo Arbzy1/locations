@@ -5,7 +5,7 @@ import { Button } from "../ui/button";
 import { Card, CardTitle } from "../ui/card";
 import { useImportStatus, useSources } from "../../hooks/useApi";
 import { useUnits } from "../../lib/units";
-import type { SettingsSection } from "../../lib/settings-section";
+import type { SettingsSection } from "../../lib/settings/settings-section";
 
 type Props = {
   name?: string;

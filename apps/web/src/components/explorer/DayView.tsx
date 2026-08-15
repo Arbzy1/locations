@@ -18,10 +18,10 @@ import {
   PLAYBACK_SPEEDS,
   DEFAULT_PLAYBACK_SPEED,
   type PlaybackSpeed,
-} from '../../lib/dayPlayback';
+} from '../../lib/explorer/dayPlayback';
 import { sunTimes } from '../../utils/sunTimes';
-import { isTypingTarget } from '../../lib/command-query';
-import { sourceTokenVar } from '../../lib/hotspots';
+import { isTypingTarget } from '../../lib/nav/command-query';
+import { sourceTokenVar } from '../../lib/explorer/hotspots';
 import { Button } from '../ui/button';
 import {
   ChevronDown,

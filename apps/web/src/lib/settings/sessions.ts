@@ -1,4 +1,4 @@
-import { authClient } from "./auth";
+import { authClient } from "../auth";
 
 export type DeviceSession = {
   id: string;

@@ -1,7 +1,8 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { adminJson } from "../../lib/admin-api";
+import { adminJson } from "../../lib/admin/admin-api";
 import { Button } from "../ui/button";
+import { EjectField } from "../ui/eject-field";
 import { AdminCard, AdminError, AdminSection } from "./AdminSection";
 import { AdminLoadMore, AdminSkeletonList, AdminTable } from "./AdminUi";
 
@@ -74,23 +75,26 @@ export function AdminAuditPage() {
   return (
     <AdminSection title="Audit" description="Staff actions. Meta is ids, counts, and flag keys only. CSV is the loaded page, not a new API.">
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
-          title="Filter audit actions"
-          value={action}
-          onChange={(e) => {
-            const next = new URLSearchParams(params);
-            if (e.target.value) next.set("action", e.target.value);
-            else next.delete("action");
-            setParams(next);
-          }}
-        >
-          {ACTIONS.map((value) => (
-            <option key={value || "all"} value={value}>
-              {value || "All actions"}
-            </option>
-          ))}
-        </select>
+        <EjectField label="Filter audit actions" htmlFor="admin-audit-action">
+          <select
+            id="admin-audit-action"
+            className="h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
+            title="Filter audit actions"
+            value={action}
+            onChange={(e) => {
+              const next = new URLSearchParams(params);
+              if (e.target.value) next.set("action", e.target.value);
+              else next.delete("action");
+              setParams(next);
+            }}
+          >
+            {ACTIONS.map((value) => (
+              <option key={value || "all"} value={value}>
+                {value || "All actions"}
+              </option>
+            ))}
+          </select>
+        </EjectField>
         <Button
           type="button"
           variant="outline"

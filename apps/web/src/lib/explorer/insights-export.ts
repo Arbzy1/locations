@@ -1,5 +1,5 @@
-import type { FunFact, MonthlyStats, Streaks, YearlyStats } from '../types';
-import { formatMilesOrKm, type DistanceUnit } from '../utils/format';
+import type { FunFact, MonthlyStats, Streaks, YearlyStats } from '../../types';
+import { formatMilesOrKm, type DistanceUnit } from '../../utils/format';
 
 function csvCell(value: string | number | null | undefined): string {
   const s = value == null ? '' : String(value);

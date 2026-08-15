@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatFunFact, isGridCluster, multiDayTripLabel } from '@locations/web/lib/trips';
+import { formatFunFact, isGridCluster, multiDayTripLabel } from '@locations/web/lib/explorer/trips';
 
 describe('multiDayTripLabel', () => {
   it('hides grid cells and hidden places', () => {

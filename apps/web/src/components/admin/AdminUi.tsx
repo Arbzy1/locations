@@ -3,10 +3,10 @@ import { cn } from "../../lib/utils";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Skeleton } from "../ui/skeleton";
-import type { AdminTone } from "../../lib/admin-status";
+import type { AdminTone } from "../../lib/admin/admin-status";
 
-export type { AdminTone } from "../../lib/admin-status";
-export { roleStatus, billingStatus, jobStatus, boolStatus, sourceStatus } from "../../lib/admin-status";
+export type { AdminTone } from "../../lib/admin/admin-status";
+export { roleStatus, billingStatus, jobStatus, boolStatus, sourceStatus } from "../../lib/admin/admin-status";
 
 const TONE_TEXT: Record<AdminTone, string> = {
   neutral: "text-text",

@@ -5,7 +5,7 @@ import {
   jobStatus,
   roleStatus,
   sourceStatus,
-} from "@locations/web/lib/admin-status";
+} from "@locations/web/lib/admin/admin-status";
 import { adminPageLabel } from "@locations/web/components/admin/adminNav";
 
 describe("admin status labels", () => {

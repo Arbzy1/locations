@@ -6,7 +6,7 @@ import {
   sourceTokenVar,
   toggleChip,
   uniqueTopTypes,
-} from '@locations/web/lib/hotspots';
+} from '@locations/web/lib/explorer/hotspots';
 
 const home = {
   lat: 51.5,

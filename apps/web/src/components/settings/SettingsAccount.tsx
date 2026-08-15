@@ -3,7 +3,7 @@ import { authClient, useSession } from "../../lib/auth";
 import { Button } from "../ui/button";
 import { Card, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
-import { Label } from "../ui/label";
+import { EjectField } from "../ui/eject-field";
 import PasswordInput from "../auth/PasswordInput";
 import SettingsSessions from "./SettingsSessions";
 
@@ -126,14 +126,14 @@ export default function SettingsAccount({ currentToken, onMessage, onError }: Pr
         <Card>
           <CardTitle className="text-base">Display name</CardTitle>
           <p className="mt-1 mb-4 text-sm text-text-muted">Shown in the app chrome for this account.</p>
-          <Label htmlFor="display-name">Display name</Label>
-          <Input
-            id="display-name"
-            title="Your display name"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            className="mb-3"
-          />
+          <EjectField label="Display name" htmlFor="display-name" className="mb-3">
+            <Input
+              id="display-name"
+              title="Your display name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+          </EjectField>
           <Button
             type="button"
             variant="outline"
@@ -152,15 +152,15 @@ export default function SettingsAccount({ currentToken, onMessage, onError }: Pr
               ? "Verified. Changing email requires confirmation on both inboxes."
               : "Not verified. Verify before importing Timeline data."}
           </p>
-          <Label htmlFor="new-email">New email</Label>
-          <Input
-            id="new-email"
-            type="email"
-            title="New account email (requires re-verification)"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            className="mb-3"
-          />
+          <EjectField label="New email" htmlFor="new-email" className="mb-3">
+            <Input
+              id="new-email"
+              type="email"
+              title="New account email (requires re-verification)"
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+            />
+          </EjectField>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -191,28 +191,26 @@ export default function SettingsAccount({ currentToken, onMessage, onError }: Pr
             Changing password signs out other sessions.
           </p>
           <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <Label htmlFor="current-password">Current password</Label>
+            <EjectField label="Current password" htmlFor="current-password">
               <PasswordInput
                 id="current-password"
                 autoComplete="current-password"
                 title="Current password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                wrapperClassName="mb-0"
+                wrapperClassName=""
               />
-            </div>
-            <div>
-              <Label htmlFor="settings-new-password">New password</Label>
+            </EjectField>
+            <EjectField label="New password" htmlFor="settings-new-password">
               <PasswordInput
                 id="settings-new-password"
                 autoComplete="new-password"
                 title="New password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                wrapperClassName="mb-0"
+                wrapperClassName=""
               />
-            </div>
+            </EjectField>
           </div>
           <Button
             type="button"

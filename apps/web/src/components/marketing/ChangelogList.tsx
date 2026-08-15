@@ -1,4 +1,4 @@
-import { CHANGELOG_ENTRIES } from '../../lib/changelog';
+import { CHANGELOG_ENTRIES } from '../../lib/marketing/changelog';
 
 export default function ChangelogList() {
   return (

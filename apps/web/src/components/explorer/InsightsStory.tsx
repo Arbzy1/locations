@@ -11,7 +11,7 @@ import { Flame, Footprints, Sparkles } from 'lucide-react';
 import StatCard from '../shell/StatCard';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Label } from '../ui/label';
+import { EjectField } from '../ui/eject-field';
 import {
   useHourOfWeek,
   useLapsedPlaces,
@@ -24,14 +24,14 @@ import { MODE_LABELS } from '../../types';
 import { formatMilesOrKm, type DistanceUnit } from '../../utils/format';
 import { useUnits } from '../../lib/units';
 import { useTheme } from '../../lib/theme';
-import { currentMonthYm, isStreaks } from '../../lib/year-review';
+import { currentMonthYm, isStreaks } from '../../lib/explorer/year-review';
 import {
   loadDismissedPersonality,
   saveDismissedPersonality,
   visiblePersonality,
-} from '../../lib/personality';
-import { WALK_GOAL_KEY, loadWalkGoal, saveWalkGoal, walkProgress, type WalkGoal } from '../../lib/walk-goal';
-import { isGridCluster } from '../../lib/trips';
+} from '../../lib/explorer/personality';
+import { WALK_GOAL_KEY, loadWalkGoal, saveWalkGoal, walkProgress, type WalkGoal } from '../../lib/explorer/walk-goal';
+import { isGridCluster } from '../../lib/explorer/trips';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MODE_CSS: Record<string, string> = {
@@ -167,26 +167,32 @@ export function InsightsStory({
         <div className="rounded-lg border border-border bg-bg p-4">
           <h3 className="mb-3 text-sm font-semibold text-text-muted">Compare two years</h3>
           <div className="mb-3 flex flex-wrap gap-2">
-            <select
-              title="First year to compare"
-              className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
-              value={yearA}
-              onChange={(e) => setPickedA(Number(e.target.value))}
-            >
-              {years.map((y) => (
-                <option key={`a-${y}`} value={y}>{y}</option>
-              ))}
-            </select>
-            <select
-              title="Second year to compare"
-              className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
-              value={yearB}
-              onChange={(e) => setPickedB(Number(e.target.value))}
-            >
-              {years.map((y) => (
-                <option key={`b-${y}`} value={y}>{y}</option>
-              ))}
-            </select>
+            <EjectField label="First year" htmlFor="compare-year-a">
+              <select
+                id="compare-year-a"
+                title="First year to compare"
+                className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
+                value={yearA}
+                onChange={(e) => setPickedA(Number(e.target.value))}
+              >
+                {years.map((y) => (
+                  <option key={`a-${y}`} value={y}>{y}</option>
+                ))}
+              </select>
+            </EjectField>
+            <EjectField label="Second year" htmlFor="compare-year-b">
+              <select
+                id="compare-year-b"
+                title="Second year to compare"
+                className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
+                value={yearB}
+                onChange={(e) => setPickedB(Number(e.target.value))}
+              >
+                {years.map((y) => (
+                  <option key={`b-${y}`} value={y}>{y}</option>
+                ))}
+              </select>
+            </EjectField>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <YearCompareCard row={rowA} unit={unit} />
@@ -384,17 +390,15 @@ function WalkGoalCard({
         Walk goal this month
       </h3>
       <div className="mb-3 flex flex-wrap items-end gap-2">
-        <div>
-          <Label htmlFor="walk-goal">Target ({unit})</Label>
+        <EjectField label={`Target (${unit})`} htmlFor="walk-goal" className="w-28">
           <Input
             id="walk-goal"
             title="Monthly walking target"
             inputMode="decimal"
             value={targetInput}
             onChange={(e) => setTargetInput(e.target.value)}
-            className="w-28"
           />
-        </div>
+        </EjectField>
         <Button
           type="button"
           title="Save walk goal on this device"

@@ -5,10 +5,11 @@ import { formatDate, formatMilesOrKm } from '../../utils/format';
 import { useUnits } from '../../lib/units';
 import { MODE_COLORS, MODE_LABELS } from '../../types';
 import type { DayTrip } from '../../types';
-import { multiDayTripLabel } from '../../lib/trips';
+import { multiDayTripLabel } from '../../lib/explorer/trips';
 import { Button } from '../ui/button';
+import { EjectField } from '../ui/eject-field';
 import FilterPresets from './FilterPresets';
-import { parseDayTripsQuery, serializeDayTripsQuery } from '../../lib/view-search-params';
+import { parseDayTripsQuery, serializeDayTripsQuery } from '../../lib/nav/view-search-params';
 import {
   Compass,
   Filter,
@@ -199,20 +200,20 @@ export default function DayTripsView({ onSelectDate }: Props) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex min-h-11 items-center gap-1.5">
-          <Filter size={12} className="text-text-muted" />
+        <EjectField label="Year" htmlFor="day-trips-year">
           <select
+            id="day-trips-year"
             value={yearFilter}
             onChange={(e) => patchQuery({ year: e.target.value })}
             title="Filter day trips by year"
-            className="min-h-11 rounded border border-border bg-bg px-2 py-1 text-xs text-text"
+            className="h-11 min-w-32 rounded-lg border border-border bg-bg px-2 text-xs text-text"
           >
             <option value="all">All Years</option>
             {years.map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-        </div>
+        </EjectField>
 
         <div className="flex min-h-11 items-center gap-1.5">
           <span className="text-xs text-text-muted">Range:</span>
@@ -228,14 +229,16 @@ export default function DayTripsView({ onSelectDate }: Props) {
           <span className="w-10 text-xs text-text-muted">{minRange}mi</span>
         </div>
 
-        <input
-          type="text"
-          placeholder="Search places..."
-          value={clusterFilter}
-          onChange={(e) => patchQuery({ q: e.target.value })}
-          title="Filter trips by place name"
-          className="min-h-11 min-w-0 flex-1 rounded border border-border bg-bg px-2 py-1 text-xs text-text"
-        />
+        <EjectField label="Search places" htmlFor="day-trips-search" className="min-w-0 flex-1">
+          <input
+            id="day-trips-search"
+            type="text"
+            value={clusterFilter}
+            onChange={(e) => patchQuery({ q: e.target.value })}
+            title="Filter trips by place name"
+            className="h-11 w-full rounded-lg border border-border bg-bg px-2 text-xs text-text"
+          />
+        </EjectField>
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-1">

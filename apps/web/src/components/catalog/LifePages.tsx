@@ -4,13 +4,14 @@ import CatalogPage from './CatalogPage';
 import MapView from '../explorer/Map';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { EjectField } from '../ui/eject-field';
 import {
   useCachedAnalytics,
   useChapters,
   useHeatmap,
   useInvalidateLocationQueries,
 } from '../../hooks/useApi';
-import { placePath } from '../../lib/paths';
+import { placePath } from '../../lib/nav/paths';
 import { useSession } from '../../lib/auth';
 import type { ActivityGuessCount, BadgeSummary } from '../../types';
 
@@ -124,9 +125,15 @@ export function ChaptersPage() {
         <p className="text-sm text-text-muted">Demo accounts cannot save chapters.</p>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Input title="Chapter name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-          <Input title="Start date" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-          <Input title="End date" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+          <EjectField label="Chapter name" htmlFor="chapter-name" className="min-w-0 flex-1">
+            <Input id="chapter-name" title="Chapter name" value={name} onChange={(e) => setName(e.target.value)} />
+          </EjectField>
+          <EjectField label="Start date" htmlFor="chapter-start">
+            <Input id="chapter-start" title="Start date" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+          </EjectField>
+          <EjectField label="End date" htmlFor="chapter-end">
+            <Input id="chapter-end" title="End date" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+          </EjectField>
           <Button type="button" title="Save chapter" disabled={!name.trim() || !start || !end} onClick={() => void save()}>
             Save
           </Button>

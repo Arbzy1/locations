@@ -3,7 +3,7 @@ import {
   activityPopupHtml,
   connectorPopupHtml,
   visitPopupHtml,
-} from "@locations/web/lib/mapPopups";
+} from "@locations/web/lib/map/mapPopups";
 import type { Activity, Connector, Visit } from "@locations/web/types";
 
 const xss = `<img onerror="alert(1)" src=x><script>alert(1)</script>`;

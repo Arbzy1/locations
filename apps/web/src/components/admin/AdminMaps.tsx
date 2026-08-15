@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { adminJson } from "../../lib/admin-api";
+import { adminJson } from "../../lib/admin/admin-api";
 import { Button } from "../ui/button";
 import { AdminCard, AdminError, AdminSection } from "./AdminSection";
 import { AdminDl, AdminSkeletonList, AdminStatus, boolStatus } from "./AdminUi";

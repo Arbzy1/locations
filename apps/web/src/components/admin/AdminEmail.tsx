@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useSession } from "../../lib/auth";
-import { adminJson } from "../../lib/admin-api";
+import { adminJson } from "../../lib/admin/admin-api";
 import { Button } from "../ui/button";
 import { AdminCard, AdminError, AdminSection } from "./AdminSection";
 import { AdminEmpty, AdminSkeletonList, AdminStat, AdminStatus, boolStatus } from "./AdminUi";

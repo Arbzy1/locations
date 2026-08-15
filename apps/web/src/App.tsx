@@ -11,7 +11,7 @@ import {
 } from './hooks/useApi';
 import { useSession, signOut } from './lib/auth';
 import { UnitsProvider } from './lib/units';
-import { loadNavExpanded, saveNavExpanded } from './lib/nav-memory';
+import { loadNavExpanded, saveNavExpanded } from './lib/nav/nav-memory';
 import { interactiveMotion, reducedInteractiveMotion } from './lib/motion';
 import { cn } from './lib/utils';
 import HotspotsView from './components/explorer/HotspotsView';
@@ -37,8 +37,8 @@ import { Toaster } from './components/ui/sonner';
 import ExploreMenu from './components/shell/ExploreMenu';
 import CatalogRouter from './components/catalog/CatalogRouter';
 import ImportCutIn from './components/ImportCutIn';
-import { isCatalogPath, catalogTitle } from './lib/paths';
-import { shouldFireImportCutIn, type ImportCutInJob } from './lib/import-cut-in';
+import { isCatalogPath, catalogTitle } from './lib/nav/paths';
+import { shouldFireImportCutIn, type ImportCutInJob } from './lib/explorer/import-cut-in';
 import { adminPageLabel } from './components/admin/adminNav';
 import {
   Flame,

@@ -1,7 +1,7 @@
-import type { Activity, Connector, Visit } from '../types';
-import { MODE_LABELS } from '../types';
-import { formatTime, formatDistance, formatDuration, type DistanceUnit } from '../utils/format';
-import { continuesPastDate, startedBeforeDate, UNKNOWN_MOVEMENT_HINT } from './dayPlayback';
+import type { Activity, Connector, Visit } from '../../types';
+import { MODE_LABELS } from '../../types';
+import { formatTime, formatDistance, formatDuration, type DistanceUnit } from '../../utils/format';
+import { continuesPastDate, startedBeforeDate, UNKNOWN_MOVEMENT_HINT } from '../explorer/dayPlayback';
 import { escapeHtml } from './escapeHtml';
 import { lookaroundLinksHtml } from './mapLinks';
 

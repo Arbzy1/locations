@@ -9,7 +9,7 @@ import {
   positionAt,
   segmentAt,
   startedBeforeDate,
-} from '@locations/web/lib/dayPlayback';
+} from '@locations/web/lib/explorer/dayPlayback';
 
 const visit = (over: Partial<Visit> = {}): Visit => ({
   start: '2024-06-15T10:00:00.000Z',

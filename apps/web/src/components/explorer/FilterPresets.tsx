@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { EjectField } from '../ui/eject-field';
 import {
   deleteFilterPreset,
   loadFilterPresets,
   saveFilterPreset,
-} from '../../lib/nav-memory';
-import { hasSavableFilters } from '../../lib/view-search-params';
+} from '../../lib/nav/nav-memory';
+import { hasSavableFilters } from '../../lib/nav/view-search-params';
 
 export default function FilterPresets() {
   const location = useLocation();
@@ -35,13 +36,14 @@ export default function FilterPresets() {
       </div>
       {savable && (
         <div className="flex gap-2">
-          <Input
-            title="Name for this filter preset"
-            placeholder="Preset name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="h-11"
-          />
+          <EjectField label="Preset name" htmlFor="filter-preset-name" className="min-w-0 flex-1">
+            <Input
+              id="filter-preset-name"
+              title="Name for this filter preset"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </EjectField>
           <Button
             type="button"
             variant="outline"

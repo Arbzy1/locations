@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { haversineMeters, pathLengthMeters } from "@locations/web/lib/mapMeasure";
-import { spiderfyOffsets } from "@locations/web/lib/mapSpiderfy";
-import { mapillaryUrl, streetViewUrl } from "@locations/web/lib/mapLinks";
-import { expandRasterTiles } from "@locations/web/lib/mapStyle";
+import { haversineMeters, pathLengthMeters } from "@locations/web/lib/map/mapMeasure";
+import { spiderfyOffsets } from "@locations/web/lib/map/mapSpiderfy";
+import { mapillaryUrl, streetViewUrl } from "@locations/web/lib/map/mapLinks";
+import { expandRasterTiles } from "@locations/web/lib/map/mapStyle";
 
 describe("map measure", () => {
   it("returns ~0 for identical points and sums a path", () => {

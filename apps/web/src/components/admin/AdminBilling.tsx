@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { adminJson } from "../../lib/admin-api";
+import { adminJson } from "../../lib/admin/admin-api";
 import { AdminCard, AdminError, AdminSection } from "./AdminSection";
 import { AdminBars, AdminLoadMore, AdminSkeletonList, AdminStatus, AdminTable, billingStatus } from "./AdminUi";
 

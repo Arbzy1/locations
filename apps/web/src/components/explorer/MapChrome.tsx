@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Layers, Bookmark, Ruler, Box } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
+import { EjectField } from '../ui/eject-field';
 import { Switch } from '../ui/switch';
 import { Sheet, SheetContent } from '../ui/sheet';
 import {
@@ -10,8 +11,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
-import type { BasemapId } from '../../lib/mapStyle';
-import type { MapBookmark } from '../../lib/mapBookmarks';
+import type { BasemapId } from '../../lib/map/mapStyle';
+import type { MapBookmark } from '../../lib/map/mapBookmarks';
 
 export type MapChromeProps = {
   isNarrow: boolean;
@@ -42,20 +43,19 @@ export type MapChromeProps = {
 function ChromeFields(props: MapChromeProps) {
   return (
     <div className="space-y-4 text-left">
-      <div>
-        <Label htmlFor="map-basemap">Basemap</Label>
+      <EjectField label="Basemap" htmlFor="map-basemap">
         <select
           id="map-basemap"
           title="Choose basemap"
           value={props.basemap}
           onChange={(e) => props.onBasemap(e.target.value as BasemapId)}
-          className="mt-1 h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
+          className="h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
         >
           <option value="auto">Auto (theme)</option>
           <option value="street">Street</option>
           <option value="satellite">Satellite</option>
         </select>
-      </div>
+      </EjectField>
 
       {props.hasVectorStyle && (
         <div className="flex items-center justify-between gap-3">

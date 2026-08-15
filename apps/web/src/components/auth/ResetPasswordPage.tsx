@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { authClient } from '../../lib/auth';
 import PasswordInput from './PasswordInput';
 import { Button } from '../ui/button';
-import { Label } from '../ui/label';
+import { EjectField } from '../ui/eject-field';
 import AuthShell from './AuthShell';
 
 export default function ResetPasswordPage() {
@@ -51,15 +51,17 @@ export default function ResetPasswordPage() {
         </p>
       ) : (
         <form onSubmit={onSubmit}>
-          <Label htmlFor="new-password">New password</Label>
-          <PasswordInput
-            id="new-password"
-            required
-            autoComplete="new-password"
-            title="Choose a new password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <EjectField label="New password" htmlFor="new-password" className="mb-4">
+            <PasswordInput
+              id="new-password"
+              required
+              autoComplete="new-password"
+              title="Choose a new password"
+              wrapperClassName=""
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </EjectField>
           {error ? <p className="mb-3 text-sm text-train">{error}</p> : null}
           <Button type="submit" className="w-full" title="Save new password" disabled={loading}>
             {loading ? 'Saving…' : 'Save password'}

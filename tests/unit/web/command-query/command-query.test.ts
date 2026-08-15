@@ -4,7 +4,7 @@ import {
   isTypingTarget,
   parseCommandQuery,
   parseGps,
-} from "@locations/web/lib/command-query";
+} from "@locations/web/lib/nav/command-query";
 
 describe("parseGps", () => {
   it("parses comma and space pairs", () => {

@@ -23,7 +23,7 @@ import type {
   ImportStatus,
 } from '../types';
 import { useSession } from '../lib/auth';
-import { pickLatestYearReview } from '../lib/year-review';
+import { pickLatestYearReview } from '../lib/explorer/year-review';
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { credentials: 'include' });

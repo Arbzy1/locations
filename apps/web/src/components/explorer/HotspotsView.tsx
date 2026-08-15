@@ -14,17 +14,18 @@ import MapView from './Map';
 import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from '../shell/MobilePanel';
 import { Flame, EyeOff, Eye, Star } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { placePath } from '../../lib/paths';
+import { placePath } from '../../lib/nav/paths';
 import { formatDuration } from '../../utils/format';
 import type { HeatmapPoint, HotspotLabel, MapFocusTarget } from '../../types';
 import { Input } from '../ui/input';
+import { EjectField } from '../ui/eject-field';
 import { Button } from '../ui/button';
 import FilterPresets from './FilterPresets';
 import {
   parseHotspotsQuery,
   serializeHotspotsQuery,
   type HotspotsQuery,
-} from '../../lib/view-search-params';
+} from '../../lib/nav/view-search-params';
 import {
   PLACE_COLOR_TOKENS,
   filterAndRankPlaces,
@@ -36,7 +37,7 @@ import {
   uniqueLabelTags,
   uniqueTopTypes,
   type PlaceLabelMeta,
-} from '../../lib/hotspots';
+} from '../../lib/explorer/hotspots';
 
 type HotspotArea = HeatmapPoint & {
   label: string;
@@ -151,11 +152,14 @@ function AreaDetails({
       {canEdit && (
         <>
           <div className="mt-3 flex gap-2">
-            <Input
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              title="Custom name for this place"
-            />
+            <EjectField label="Place name" htmlFor={`place-name-${placeKey}`} className="min-w-0 flex-1">
+              <Input
+                id={`place-name-${placeKey}`}
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                title="Custom name for this place"
+              />
+            </EjectField>
             <Button
               type="button"
               size="sm"
@@ -229,18 +233,20 @@ function AreaDetails({
               ))}
             </div>
             <div className="flex gap-2">
-              <Input
-                value={tagDraft}
-                onChange={(e) => setTagDraft(e.target.value)}
-                title="Add a short tag for this place"
-                placeholder="Add tag"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addTag();
-                  }
-                }}
-              />
+              <EjectField label="Add tag" htmlFor={`place-tag-${placeKey}`} className="min-w-0 flex-1">
+                <Input
+                  id={`place-tag-${placeKey}`}
+                  value={tagDraft}
+                  onChange={(e) => setTagDraft(e.target.value)}
+                  title="Add a short tag for this place"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addTag();
+                    }
+                  }}
+                />
+              </EjectField>
               <Button type="button" size="sm" title="Add tag" disabled={saving} onClick={addTag}>
                 Add
               </Button>
@@ -425,20 +431,26 @@ export default function HotspotsView() {
         Tap a row for details and to zoom the map. Tags mark top spots on the map.
       </p>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <input
-          type="date"
-          title="Heatmap start date"
-          value={from}
-          onChange={(e) => patchFilters({ from: e.target.value })}
-          className="h-11 rounded-lg border border-border bg-bg px-2 text-xs text-text"
-        />
-        <input
-          type="date"
-          title="Heatmap end date"
-          value={to}
-          onChange={(e) => patchFilters({ to: e.target.value })}
-          className="h-11 rounded-lg border border-border bg-bg px-2 text-xs text-text"
-        />
+        <EjectField label="From" htmlFor="hotspot-from">
+          <input
+            id="hotspot-from"
+            type="date"
+            title="Heatmap start date"
+            value={from}
+            onChange={(e) => patchFilters({ from: e.target.value })}
+            className="h-11 w-full rounded-lg border border-border bg-bg px-2 text-xs text-text"
+          />
+        </EjectField>
+        <EjectField label="To" htmlFor="hotspot-to">
+          <input
+            id="hotspot-to"
+            type="date"
+            title="Heatmap end date"
+            value={to}
+            onChange={(e) => patchFilters({ to: e.target.value })}
+            className="h-11 w-full rounded-lg border border-border bg-bg px-2 text-xs text-text"
+          />
+        </EjectField>
       </div>
       <FilterPresets />
       <div className="mt-3 flex gap-2">

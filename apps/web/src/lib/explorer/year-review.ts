@@ -1,4 +1,4 @@
-import type { Streaks, YearInReviewChapter } from '../types';
+import type { Streaks, YearInReviewChapter } from '../../types';
 
 export function pickLatestYearReview(data: unknown): YearInReviewChapter | null {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null;

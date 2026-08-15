@@ -1,8 +1,9 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "../../lib/auth";
-import { adminJson } from "../../lib/admin-api";
+import { adminJson } from "../../lib/admin/admin-api";
 import { Button } from "../ui/button";
+import { EjectField } from "../ui/eject-field";
 import { AdminCard, AdminError, AdminSection } from "./AdminSection";
 import { AdminLoadMore, AdminSkeletonList, AdminStat, AdminStatus, AdminTable, jobStatus } from "./AdminUi";
 
@@ -53,21 +54,24 @@ export function AdminImportsPage() {
   return (
     <AdminSection title="Imports" description="Job ids, status, and sanitized errors. Unlocking a stuck job clears the one-active 409. The user must re-upload. No requeue.">
       <AdminStat loading={list.isPending} value={stuckCount} label="Stuck (sampled)" tone={stuckCount > 0 ? "danger" : "ok"} />
-      <select
-        className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
-        title="Filter import jobs"
-        value={status}
-        onChange={(e) => {
-          const next = new URLSearchParams(params);
-          if (e.target.value === "all") next.delete("status");
-          else next.set("status", e.target.value);
-          setParams(next);
-        }}
-      >
-        <option value="all">All recent</option>
-        <option value="stuck">Stuck</option>
-        <option value="error">Error</option>
-      </select>
+      <EjectField label="Filter import jobs" htmlFor="admin-imports-status">
+        <select
+          id="admin-imports-status"
+          className="h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
+          title="Filter import jobs"
+          value={status}
+          onChange={(e) => {
+            const next = new URLSearchParams(params);
+            if (e.target.value === "all") next.delete("status");
+            else next.set("status", e.target.value);
+            setParams(next);
+          }}
+        >
+          <option value="all">All recent</option>
+          <option value="stuck">Stuck</option>
+          <option value="error">Error</option>
+        </select>
+      </EjectField>
       <AdminCard>
         {list.isPending ? (
           <AdminSkeletonList rows={5} />

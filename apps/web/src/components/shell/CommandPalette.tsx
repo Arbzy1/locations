@@ -5,16 +5,17 @@ import { Dialog, DialogContent } from '../ui/dialog';
 import { Sheet, SheetContent } from '../ui/sheet';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { EjectField } from '../ui/eject-field';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useDays, usePlaceLabels, useSearch } from '../../hooks/useApi';
-import { EXPLORE_LINKS, placePath } from '../../lib/paths';
+import { EXPLORE_LINKS, placePath } from '../../lib/nav/paths';
 import {
   chordTarget,
   isPasswordField,
   isTypingTarget,
   parseCommandQuery,
-} from '../../lib/command-query';
-import { gpsHotspotsPath, hasSavableFilters } from '../../lib/view-search-params';
+} from '../../lib/nav/command-query';
+import { gpsHotspotsPath, hasSavableFilters } from '../../lib/nav/view-search-params';
 import {
   deleteFilterPreset,
   loadFilterPresets,
@@ -23,7 +24,7 @@ import {
   saveFilterPreset,
   type FilterPreset,
   type RecentPlace,
-} from '../../lib/nav-memory';
+} from '../../lib/nav/nav-memory';
 
 type Row = {
   id: string;
@@ -329,15 +330,20 @@ export default function CommandPalette() {
 
   const body = (
     <div className="flex max-h-[min(70dvh,28rem)] flex-col">
-      <Input
-        ref={inputRef}
-        value={saving ? presetName : q}
-        onChange={(e) => (saving ? setPresetName(e.target.value) : setQ(e.target.value))}
-        onKeyDown={onBoxKey}
-        title={saving ? 'Preset name' : 'Search places, dates, and pages'}
-        placeholder={saving ? 'Name this filter preset' : 'Search places, dates, pages…'}
-        autoComplete="off"
-      />
+      <EjectField
+        label={saving ? 'Preset name' : 'Search places, dates, pages'}
+        htmlFor="command-palette-q"
+      >
+        <Input
+          id="command-palette-q"
+          ref={inputRef}
+          value={saving ? presetName : q}
+          onChange={(e) => (saving ? setPresetName(e.target.value) : setQ(e.target.value))}
+          onKeyDown={onBoxKey}
+          title={saving ? 'Preset name' : 'Search places, dates, and pages'}
+          autoComplete="off"
+        />
+      </EjectField>
       {saving ? (
         <p className="mt-2 text-xs text-text-muted">Enter saves. Escape cancels. Stored on this device only.</p>
       ) : (

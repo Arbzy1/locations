@@ -4,6 +4,7 @@ import CatalogPage from './CatalogPage';
 import MapView from '../explorer/Map';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { EjectField } from '../ui/eject-field';
 import {
   useCluster,
   useClusterVisits,
@@ -11,9 +12,9 @@ import {
   useCorridorDetail,
   useHeatmap,
 } from '../../hooks/useApi';
-import { corridorPath, placePath } from '../../lib/paths';
-import { parseCoverageRange } from '../../lib/view-search-params';
-import { rememberRecentPlace } from '../../lib/nav-memory';
+import { corridorPath, placePath } from '../../lib/nav/paths';
+import { parseCoverageRange } from '../../lib/nav/view-search-params';
+import { rememberRecentPlace } from '../../lib/nav/nav-memory';
 import { formatDuration, formatTime } from '../../utils/format';
 import { MODE_LABELS } from '../../types';
 
@@ -24,23 +25,27 @@ export function PlacesDirectory() {
   return (
     <CatalogPage title="Place directory" description="Every named cluster in your imported Timeline. Hidden places are omitted here; Day View still lists those visits.">
       <div className="flex flex-wrap gap-2">
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          title="Filter places by name"
-          placeholder="Filter places"
-          className="max-w-sm"
-        />
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value)}
-          title="Sort places"
-          className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
-        >
-          <option value="visits">Most visits</option>
-          <option value="duration">Most time</option>
-          <option value="name">Name</option>
-        </select>
+        <EjectField label="Filter places" htmlFor="places-filter" className="max-w-sm min-w-0 flex-1">
+          <Input
+            id="places-filter"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            title="Filter places by name"
+          />
+        </EjectField>
+        <EjectField label="Sort" htmlFor="places-sort">
+          <select
+            id="places-sort"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            title="Sort places"
+            className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
+          >
+            <option value="visits">Most visits</option>
+            <option value="duration">Most time</option>
+            <option value="name">Name</option>
+          </select>
+        </EjectField>
       </div>
       <ul className="divide-y divide-border rounded-lg border border-border bg-bg">
         {(data?.clusters ?? []).map((c) => (

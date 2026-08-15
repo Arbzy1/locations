@@ -4,6 +4,7 @@ import CatalogPage from './CatalogPage';
 import MapView from '../explorer/Map';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { EjectField } from '../ui/eject-field';
 import {
   useCachedAnalytics,
   useDays,
@@ -16,7 +17,7 @@ import {
 import { formatMilesOrKm } from '../../utils/format';
 import { useUnits } from '../../lib/units';
 import { MODE_LABELS } from '../../types';
-import { placePath, tripPath } from '../../lib/paths';
+import { placePath, tripPath } from '../../lib/nav/paths';
 import { useSession } from '../../lib/auth';
 
 export function TripStoryPage() {
@@ -76,9 +77,15 @@ export function TripBuilderPage() {
         <p className="text-sm text-text-muted">Demo accounts cannot save named trips.</p>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Input title="Trip name" placeholder="Trip name" value={name} onChange={(e) => setName(e.target.value)} />
-          <Input title="Start date" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-          <Input title="End date" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+          <EjectField label="Trip name" htmlFor="trip-name" className="min-w-0 flex-1">
+            <Input id="trip-name" title="Trip name" value={name} onChange={(e) => setName(e.target.value)} />
+          </EjectField>
+          <EjectField label="Start date" htmlFor="trip-start">
+            <Input id="trip-start" title="Start date" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+          </EjectField>
+          <EjectField label="End date" htmlFor="trip-end">
+            <Input id="trip-end" title="End date" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+          </EjectField>
           <Button type="button" title="Save named trip" disabled={!name.trim() || !start || !end} onClick={() => void save()}>
             Save
           </Button>

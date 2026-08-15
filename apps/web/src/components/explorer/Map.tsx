@@ -18,11 +18,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUnits } from '../../lib/units';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useSession } from '../../lib/auth';
-import { escapeHtml } from '../../lib/escapeHtml';
+import { escapeHtml } from '../../lib/map/escapeHtml';
 import { Dialog, DialogContent } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
-import { Label } from '../ui/label';
+import { EjectField } from '../ui/eject-field';
 import {
   CARTO_DARK,
   CARTO_LIGHT,
@@ -30,14 +30,14 @@ import {
   rasterStyle,
   resolveRasterTemplate,
   type BasemapId,
-} from '../../lib/mapStyle';
-import { dashClass, extendBounds, getArrowPoints, lineCoords, toLngLat } from '../../lib/mapGeometry';
-import { activityPopupHtml, connectorPopupHtml, getJourneyColor, visitPopupHtml } from '../../lib/mapPopups';
-import { pathLengthMeters } from '../../lib/mapMeasure';
-import { spiderfyOffsets } from '../../lib/mapSpiderfy';
-import { lookaroundLinksHtml } from '../../lib/mapLinks';
-import type { MapBookmark } from '../../lib/mapBookmarks';
-import { MAX_MAP_BOOKMARKS } from '../../lib/mapBookmarks';
+} from '../../lib/map/mapStyle';
+import { dashClass, extendBounds, getArrowPoints, lineCoords, toLngLat } from '../../lib/map/mapGeometry';
+import { activityPopupHtml, connectorPopupHtml, getJourneyColor, visitPopupHtml } from '../../lib/map/mapPopups';
+import { pathLengthMeters } from '../../lib/map/mapMeasure';
+import { spiderfyOffsets } from '../../lib/map/mapSpiderfy';
+import { lookaroundLinksHtml } from '../../lib/map/mapLinks';
+import type { MapBookmark } from '../../lib/map/mapBookmarks';
+import { MAX_MAP_BOOKMARKS } from '../../lib/map/mapBookmarks';
 import MapChrome from './MapChrome';
 
 type FC = {
@@ -1102,15 +1102,15 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       <Dialog open={bookmarkOpen} onOpenChange={setBookmarkOpen}>
         <DialogContent title="Save this map view">
           <h2 className="mb-3 text-sm font-semibold">Save this map view</h2>
-          <Label htmlFor="bookmark-name">Name</Label>
-          <Input
-            id="bookmark-name"
-            title="Name for this saved view"
-            value={bookmarkName}
-            onChange={(e) => setBookmarkName(e.target.value)}
-            maxLength={40}
-            className="mb-3"
-          />
+          <EjectField label="Name" htmlFor="bookmark-name" className="mb-3">
+            <Input
+              id="bookmark-name"
+              title="Name for this saved view"
+              value={bookmarkName}
+              onChange={(e) => setBookmarkName(e.target.value)}
+              maxLength={40}
+            />
+          </EjectField>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" title="Cancel saving view" onClick={() => setBookmarkOpen(false)}>
               Cancel

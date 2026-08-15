@@ -4,7 +4,7 @@ import { authClient, signUp, continueWithGoogle } from '../../lib/auth';
 import PasswordInput from './PasswordInput';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Label } from '../ui/label';
+import { EjectField } from '../ui/eject-field';
 import AuthShell from './AuthShell';
 import GoogleButton from './GoogleButton';
 import { usePublicConfig } from '../../hooks/useApi';
@@ -97,16 +97,16 @@ export default function SignupPage() {
           <p className="text-sm text-walk">
             Check your inbox for a verification link, or enter the 6-digit code we sent.
           </p>
-          <Label htmlFor="otp">Verification code</Label>
-          <Input
-            id="otp"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            title="Six-digit email verification code"
-            value={otp}
-            onChange={(e) => setOtp(e.target.value)}
-            className="mb-2"
-          />
+          <EjectField label="Verification code" htmlFor="otp" className="mb-2">
+            <Input
+              id="otp"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              title="Six-digit email verification code"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+            />
+          </EjectField>
           {otpError ? <p className="text-sm text-train">{otpError}</p> : null}
           <Button
             type="button"
@@ -131,31 +131,31 @@ export default function SignupPage() {
             </>
           ) : null}
           <form onSubmit={onSubmit}>
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" title="Display name" value={name} onChange={(e) => setName(e.target.value)} />
-            <Label htmlFor="email" className="mt-3">
-              Email
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              required
-              autoComplete="email"
-              title="Account email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <Label htmlFor="password" className="mt-3">
-              Password
-            </Label>
-            <PasswordInput
-              id="password"
-              required
-              autoComplete="new-password"
-              title="Choose a password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <EjectField label="Name" htmlFor="name">
+              <Input id="name" title="Display name" value={name} onChange={(e) => setName(e.target.value)} />
+            </EjectField>
+            <EjectField label="Email" htmlFor="email">
+              <Input
+                id="email"
+                type="email"
+                required
+                autoComplete="email"
+                title="Account email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </EjectField>
+            <EjectField label="Password" htmlFor="password" className="mb-4">
+              <PasswordInput
+                id="password"
+                required
+                autoComplete="new-password"
+                title="Choose a password"
+                wrapperClassName=""
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </EjectField>
             {error ? <p className="mb-3 text-sm text-train">{error}</p> : null}
             <Button type="submit" className="w-full" title="Create account" disabled={loading || googleLoading}>
               {loading ? 'Creating…' : 'Sign up'}

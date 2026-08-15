@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { DistanceUnit } from '../utils/format';
 import { useSession } from './auth';
-import type { MapBookmark } from './mapBookmarks';
+import type { MapBookmark } from './map/mapBookmarks';
 
 type MeResponse = {
   settings?: {

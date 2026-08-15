@@ -7,7 +7,7 @@ import {
   parseHotspotsQuery,
   serializeDayTripsQuery,
   serializeHotspotsQuery,
-} from "@locations/web/lib/view-search-params";
+} from "@locations/web/lib/nav/view-search-params";
 
 describe("hotspots query params", () => {
   it("round-trips filters and maps duration to dwell", () => {

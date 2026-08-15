@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useSession } from "../../lib/auth";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
-import { DEVELOPER_SAFE_CHECKS, summarizeCheckBody, type DeveloperCheck } from "../../lib/admin-checks";
-import { adminJson } from "../../lib/admin-api";
+import { DEVELOPER_SAFE_CHECKS, summarizeCheckBody, type DeveloperCheck } from "../../lib/admin/admin-checks";
+import { adminJson } from "../../lib/admin/admin-api";
 import { AdminCard, AdminSection } from "./AdminSection";
 import { AdminStatus } from "./AdminUi";
 

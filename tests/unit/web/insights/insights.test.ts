@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { pickLatestYearReview, currentMonthYm } from '@locations/web/lib/year-review';
-import { visiblePersonality } from '@locations/web/lib/personality';
-import { walkProgress } from '@locations/web/lib/walk-goal';
-import { insightsCsv } from '@locations/web/lib/insights-export';
+import { pickLatestYearReview, currentMonthYm } from '@locations/web/lib/explorer/year-review';
+import { visiblePersonality } from '@locations/web/lib/explorer/personality';
+import { walkProgress } from '@locations/web/lib/explorer/walk-goal';
+import { insightsCsv } from '@locations/web/lib/explorer/insights-export';
 
 describe('pickLatestYearReview', () => {
   it('reads a map of years and a single chapter', () => {

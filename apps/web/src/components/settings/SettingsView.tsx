@@ -10,7 +10,7 @@ import {
   parseSettingsSection,
   settingsSectionSearch,
   type SettingsSection,
-} from "../../lib/settings-section";
+} from "../../lib/settings/settings-section";
 import { Badge } from "../ui/badge";
 import SettingsNav from "./SettingsNav";
 import SettingsOverview from "./SettingsOverview";

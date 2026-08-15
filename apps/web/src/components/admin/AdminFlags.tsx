@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "../../lib/auth";
-import { adminJson } from "../../lib/admin-api";
+import { adminJson } from "../../lib/admin/admin-api";
 import { Switch } from "../ui/switch";
 import { Button } from "../ui/button";
 import { AlertDialog, AlertDialogContent } from "../ui/alert-dialog";

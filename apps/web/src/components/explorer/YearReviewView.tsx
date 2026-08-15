@@ -10,8 +10,8 @@ import { useUnits } from '../../lib/units';
 import { MODE_COLORS, MODE_LABELS } from '../../types';
 import type { MultiDayTrip } from '../../types';
 import { enterMotion } from '../../lib/motion';
-import { downloadElementPng } from '../../lib/insights-export';
-import { isGridCluster, multiDayTripLabel } from '../../lib/trips';
+import { downloadElementPng } from '../../lib/explorer/insights-export';
+import { isGridCluster, multiDayTripLabel } from '../../lib/explorer/trips';
 
 export default function YearReviewView() {
   const { year: yearParam } = useParams();

@@ -4,7 +4,7 @@ import {
   importCutInCopy,
   prefersImportCutInReducedMotion,
   type ImportCutInJob,
-} from "../lib/import-cut-in";
+} from "../lib/explorer/import-cut-in";
 import "../import-cut-in.css";
 
 type Props = {
@@ -100,7 +100,7 @@ export default function ImportCutIn({ job, onHostSplit, onDone }: Props) {
         <span className="import-cut-in__shard import-cut-in__shard--3" />
         <div className="import-cut-in__body">
           <p className="import-cut-in__eyebrow">{copy.eyebrow}</p>
-          <p className="import-cut-in__headline">{copy.headline}</p>
+          <p className="import-cut-in__headline font-display">{copy.headline}</p>
           <p className="import-cut-in__meta">{copy.meta}</p>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import type { PlaceRankBy } from "./hotspots";
+import type { PlaceRankBy } from "../explorer/hotspots";
 
 export type HotspotsQuery = {
   from: string;

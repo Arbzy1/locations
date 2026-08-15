@@ -6,7 +6,7 @@ import { Play } from 'lucide-react';
 import PasswordInput from './PasswordInput';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Label } from '../ui/label';
+import { EjectField } from '../ui/eject-field';
 import AuthShell from './AuthShell';
 import GoogleButton from './GoogleButton';
 import { usePublicConfig } from '../../hooks/useApi';
@@ -163,26 +163,28 @@ export default function LoginPage() {
       </div>
 
       <form onSubmit={onSubmit}>
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          required
-          autoComplete="email"
-          title="Your account email address"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="mb-4"
-        />
-        <Label htmlFor="password">Password</Label>
-        <PasswordInput
-          id="password"
-          required
-          autoComplete="current-password"
-          title="Your account password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <EjectField label="Email" htmlFor="email" className="mb-4">
+          <Input
+            id="email"
+            type="email"
+            required
+            autoComplete="email"
+            title="Your account email address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </EjectField>
+        <EjectField label="Password" htmlFor="password" className="mb-4">
+          <PasswordInput
+            id="password"
+            required
+            autoComplete="current-password"
+            title="Your account password"
+            wrapperClassName=""
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </EjectField>
         {error ? (
           <p className="mb-4 rounded-lg border border-train/30 bg-train/10 px-3 py-2 text-sm text-train">{error}</p>
         ) : null}
@@ -230,15 +232,16 @@ export default function LoginPage() {
           </Button>
           {otpSent ? (
             <>
-              <Label htmlFor="signin-otp">Sign-in code</Label>
-              <Input
-                id="signin-otp"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                title="Six-digit sign-in code from email"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-              />
+              <EjectField label="Sign-in code" htmlFor="signin-otp">
+                <Input
+                  id="signin-otp"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  title="Six-digit sign-in code from email"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                />
+              </EjectField>
               <Button
                 type="button"
                 title="Verify sign-in code"

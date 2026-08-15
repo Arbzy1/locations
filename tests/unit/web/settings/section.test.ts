@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseSettingsSection,
   settingsSectionSearch,
-} from "@locations/web/lib/settings-section";
+} from "@locations/web/lib/settings/settings-section";
 
 describe("parseSettingsSection", () => {
   it("defaults to overview", () => {

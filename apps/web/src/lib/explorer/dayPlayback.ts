@@ -1,4 +1,4 @@
-import type { Activity, Connector, RouteStep, Visit } from '../types';
+import type { Activity, Connector, RouteStep, Visit } from '../../types';
 
 export type PlaybackKind = 'visit' | 'activity' | 'unknown';
 

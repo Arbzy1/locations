@@ -7,7 +7,7 @@ import {
   continuesPastDate,
   startedBeforeDate,
   UNKNOWN_MOVEMENT_HINT,
-} from '../../lib/dayPlayback';
+} from '../../lib/explorer/dayPlayback';
 import { cn } from '../../lib/utils';
 import {
   MapPin,

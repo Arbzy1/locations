@@ -1,4 +1,4 @@
-import type { DistanceUnit } from '../utils/format';
+import type { DistanceUnit } from '../../utils/format';
 
 export const WALK_GOAL_KEY = 'locations-walk-goal';
 

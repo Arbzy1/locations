@@ -1,0 +1,115 @@
+/* SPX-150 Label Ejection motion, host tokens for chrome. */
+
+.le-field {
+  --le-focus: 180ms;
+  --le-blur: 140ms;
+  box-sizing: border-box;
+  position: relative;
+  padding-top: 1.35rem;
+  overflow: visible;
+}
+
+.le-field *,
+.le-field *::before,
+.le-field *::after {
+  box-sizing: border-box;
+}
+
+.le-field__box {
+  position: relative;
+}
+
+.le__label {
+  position: absolute;
+  left: 0.7rem;
+  top: 50%;
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+  width: max-content;
+  max-width: calc(100% - 3.25rem);
+  height: 22px;
+  margin: -11px 0 0;
+  padding: 0 0.45rem;
+  transform: translateY(0) scale(1);
+  transform-origin: left center;
+  cursor: text;
+  transition: transform var(--le-blur) linear;
+}
+
+.le__back {
+  position: absolute;
+  inset: 0;
+  height: 22px;
+  background: var(--accent);
+  transform: rotate(-3deg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--le-blur) linear;
+}
+
+.le__text {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  color: var(--text-muted);
+  font: 800 0.62rem/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: color var(--le-blur) linear;
+}
+
+.le-field:focus-within .le__label,
+.le-field.is-filled .le__label {
+  animation: le-eject var(--le-focus) linear both;
+  transition: none;
+}
+
+.le-field:focus-within .le__back,
+.le-field.is-filled .le__back {
+  opacity: 1;
+}
+
+.le-field:focus-within .le__text,
+.le-field.is-filled .le__text {
+  color: var(--on-accent);
+}
+
+@keyframes le-eject {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-20px) scale(0.82);
+  }
+  100% {
+    transform: translateY(-34px) scale(0.72);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .le__label,
+  .le__back,
+  .le__text {
+    transition: none !important;
+    animation: none !important;
+  }
+
+  .le-field:focus-within .le__label,
+  .le-field.is-filled .le__label {
+    transform: translateY(-34px) scale(0.72);
+  }
+}
+
+[data-force-reduced-motion="true"] .le__label,
+[data-force-reduced-motion="true"] .le__back,
+[data-force-reduced-motion="true"] .le__text {
+  transition: none !important;
+  animation: none !important;
+}
+
+[data-force-reduced-motion="true"] .le-field:focus-within .le__label,
+[data-force-reduced-motion="true"] .le-field.is-filled .le__label {
+  transform: translateY(-34px) scale(0.72);
+}

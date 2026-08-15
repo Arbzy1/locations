@@ -6,6 +6,7 @@ import { Button } from "../ui/button";
 import { Card, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { EjectField } from "../ui/eject-field";
 import { Switch } from "../ui/switch";
 
 type Props = {
@@ -60,26 +61,26 @@ export default function SettingsDisplay({ onError, onMessage }: Props) {
       <Card>
         <CardTitle className="text-base">Units and timezone</CardTitle>
         <p className="mt-1 mb-4 text-sm text-text-muted">Used on maps, Insights, and day views.</p>
-        <Label htmlFor="unit">Distance unit</Label>
-        <select
-          id="unit"
-          title="Miles or kilometres"
-          value={distanceUnit}
-          onChange={(e) => setDistanceUnit(e.target.value as DistanceUnit)}
-          className="mb-3 h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
-        >
-          <option value="mi">Miles</option>
-          <option value="km">Kilometres</option>
-        </select>
-        <Label htmlFor="tz">Timezone (IANA)</Label>
-        <Input
-          id="tz"
-          title="IANA timezone such as Europe/London"
-          value={tz}
-          onChange={(e) => setTz(e.target.value)}
-          placeholder="Europe/London"
-          className="mb-4"
-        />
+        <EjectField label="Distance unit" htmlFor="unit" className="mb-3">
+          <select
+            id="unit"
+            title="Miles or kilometres"
+            value={distanceUnit}
+            onChange={(e) => setDistanceUnit(e.target.value as DistanceUnit)}
+            className="h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
+          >
+            <option value="mi">Miles</option>
+            <option value="km">Kilometres</option>
+          </select>
+        </EjectField>
+        <EjectField label="Timezone (IANA)" htmlFor="tz" className="mb-4">
+          <Input
+            id="tz"
+            title="IANA timezone such as Europe/London"
+            value={tz}
+            onChange={(e) => setTz(e.target.value)}
+          />
+        </EjectField>
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <Label htmlFor="monthly-recap">Monthly recap email</Label>
@@ -110,24 +111,22 @@ export default function SettingsDisplay({ onError, onMessage }: Props) {
               : ""}
             . Used for Auto basemap when no vector style is configured.
           </p>
-          <Label htmlFor="tile-dark">Dark raster URL</Label>
-          <Input
-            id="tile-dark"
-            title="Custom dark basemap tile URL"
-            value={tileDark}
-            onChange={(e) => setTileDark(e.target.value)}
-            placeholder="https://tiles.example.com/{z}/{x}/{y}.png"
-            className="mb-3"
-          />
-          <Label htmlFor="tile-light">Light raster URL</Label>
-          <Input
-            id="tile-light"
-            title="Custom light basemap tile URL"
-            value={tileLight}
-            onChange={(e) => setTileLight(e.target.value)}
-            placeholder="https://tiles.example.com/{z}/{x}/{y}.png"
-            className="mb-4"
-          />
+          <EjectField label="Dark raster URL" htmlFor="tile-dark" className="mb-3">
+            <Input
+              id="tile-dark"
+              title="Custom dark basemap tile URL"
+              value={tileDark}
+              onChange={(e) => setTileDark(e.target.value)}
+            />
+          </EjectField>
+          <EjectField label="Light raster URL" htmlFor="tile-light" className="mb-4">
+            <Input
+              id="tile-light"
+              title="Custom light basemap tile URL"
+              value={tileLight}
+              onChange={(e) => setTileLight(e.target.value)}
+            />
+          </EjectField>
           <Button type="button" title="Save custom map tiles" onClick={() => void savePrefs(true)}>
             Save map tiles
           </Button>

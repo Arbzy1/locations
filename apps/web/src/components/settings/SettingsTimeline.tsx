@@ -3,11 +3,11 @@ import { Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import type { DataSourceInfo } from "../../types";
 import { useImportStatus, useInvalidateLocationQueries, useSources } from "../../hooks/useApi";
 import { useSession } from "../../lib/auth";
-import { PLACE_COLOR_TOKENS, sourceTokenVar } from "../../lib/hotspots";
+import { PLACE_COLOR_TOKENS, sourceTokenVar } from "../../lib/explorer/hotspots";
 import { Button } from "../ui/button";
 import { Card, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
-import { Label } from "../ui/label";
+import { EjectField } from "../ui/eject-field";
 import { Dialog, DialogContent } from "../ui/dialog";
 import { AlertDialog, AlertDialogContent } from "../ui/alert-dialog";
 import ImportDropZone, { TIMEZONE_SKEW_COPY } from "../explorer/ImportDropZone";
@@ -195,14 +195,14 @@ export default function SettingsTimeline({ onMessage, onError }: Props) {
           </div>
           {!reuploadSourceId && (
             <div>
-              <Label htmlFor="src-label">Label (Google account name)</Label>
-              <Input
-                id="src-label"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="e.g. personal@gmail.com"
-                title="Label for this Google account / Timeline source"
-              />
+              <EjectField label="Label (Google account name)" htmlFor="src-label">
+                <Input
+                  id="src-label"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  title="Label for this Google account / Timeline source"
+                />
+              </EjectField>
             </div>
           )}
           <ImportDropZone
@@ -256,12 +256,15 @@ export default function SettingsTimeline({ onMessage, onError }: Props) {
                     void onRename(source);
                   }}
                 >
-                  <Input
-                    autoFocus
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    title="New label for this Timeline source"
-                  />
+                  <EjectField label="New label" htmlFor={`rename-${source.id}`} className="min-w-0 flex-1">
+                    <Input
+                      id={`rename-${source.id}`}
+                      autoFocus
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      title="New label for this Timeline source"
+                    />
+                  </EjectField>
                   <Button type="submit" title="Save the new source label">
                     Save
                   </Button>
@@ -344,8 +347,7 @@ export default function SettingsTimeline({ onMessage, onError }: Props) {
             kept.
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="range-from">From</Label>
+            <EjectField label="From" htmlFor="range-from">
               <Input
                 id="range-from"
                 type="date"
@@ -353,9 +355,8 @@ export default function SettingsTimeline({ onMessage, onError }: Props) {
                 value={rangeFrom}
                 onChange={(e) => setRangeFrom(e.target.value)}
               />
-            </div>
-            <div>
-              <Label htmlFor="range-to">To</Label>
+            </EjectField>
+            <EjectField label="To" htmlFor="range-to">
               <Input
                 id="range-to"
                 type="date"
@@ -363,17 +364,17 @@ export default function SettingsTimeline({ onMessage, onError }: Props) {
                 value={rangeTo}
                 onChange={(e) => setRangeTo(e.target.value)}
               />
-            </div>
+            </EjectField>
           </div>
           <div className="mt-3">
-            <Label htmlFor="range-source">Source (optional)</Label>
-            <select
-              id="range-source"
-              title="Limit delete to one Timeline source"
-              value={rangeSourceId}
-              onChange={(e) => setRangeSourceId(e.target.value)}
-              className="h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
-            >
+            <EjectField label="Source (optional)" htmlFor="range-source">
+              <select
+                id="range-source"
+                title="Limit delete to one Timeline source"
+                value={rangeSourceId}
+                onChange={(e) => setRangeSourceId(e.target.value)}
+                className="h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
+              >
               <option value="">All sources</option>
               {sources?.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -381,6 +382,7 @@ export default function SettingsTimeline({ onMessage, onError }: Props) {
                 </option>
               ))}
             </select>
+            </EjectField>
           </div>
           <Button
             type="button"

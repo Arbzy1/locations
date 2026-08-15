@@ -1,5 +1,5 @@
-import type { FunFact, MultiDayTrip } from '../types';
-import { formatDuration, formatMilesOrKm, type DistanceUnit } from '../utils/format';
+import type { FunFact, MultiDayTrip } from '../../types';
+import { formatDuration, formatMilesOrKm, type DistanceUnit } from '../../utils/format';
 
 const GRID_CLUSTER = /^\d+\.\d+°[NS] \d+\.\d+°[EW]$/;
 

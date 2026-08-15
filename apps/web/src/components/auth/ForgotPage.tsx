@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { authClient } from '../../lib/auth';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Label } from '../ui/label';
+import { EjectField } from '../ui/eject-field';
 import AuthShell from './AuthShell';
 
 export default function ForgotPage() {
@@ -43,16 +43,16 @@ export default function ForgotPage() {
         <p className="text-sm text-walk">If that email exists, we sent a reset link.</p>
       ) : (
         <form onSubmit={onSubmit}>
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            required
-            title="Account email for password reset"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="mb-4"
-          />
+          <EjectField label="Email" htmlFor="email" className="mb-4">
+            <Input
+              id="email"
+              type="email"
+              required
+              title="Account email for password reset"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </EjectField>
           {error ? <p className="mb-3 text-sm text-train">{error}</p> : null}
           <Button type="submit" className="w-full" title="Send reset link" disabled={loading}>
             {loading ? 'Sending…' : 'Send reset link'}

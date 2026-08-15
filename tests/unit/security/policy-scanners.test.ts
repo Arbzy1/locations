@@ -56,7 +56,7 @@ describe("policy scanners", { timeout: 20_000 }, () => {
 
   it("escapes Map popup HTML", () => {
     const map = readFileSync(join(root, "apps/web/src/components/explorer/Map.tsx"), "utf8");
-    const popups = readFileSync(join(root, "apps/web/src/lib/mapPopups.ts"), "utf8");
+    const popups = readFileSync(join(root, "apps/web/src/lib/map/mapPopups.ts"), "utf8");
     const lines = [...map.split("\n"), ...popups.split("\n")];
     const unsafe: string[] = [];
     for (const line of lines) {

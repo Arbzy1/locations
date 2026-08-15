@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { importCutInCopy, shouldFireImportCutIn } from "@locations/web/lib/import-cut-in";
+import { importCutInCopy, shouldFireImportCutIn } from "@locations/web/lib/explorer/import-cut-in";
 
 describe("importCutInCopy", () => {
   it("uses Timeline wording and visit counts", () => {

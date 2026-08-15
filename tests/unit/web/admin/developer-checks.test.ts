@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEVELOPER_SAFE_CHECKS, responseFailsPrivacy, summarizeCheckBody } from "@locations/web/lib/admin-checks";
+import { DEVELOPER_SAFE_CHECKS, responseFailsPrivacy, summarizeCheckBody } from "@locations/web/lib/admin/admin-checks";
 
 describe("developer check catalog", () => {
   it("only lists GET-safe admin and public URLs", () => {
