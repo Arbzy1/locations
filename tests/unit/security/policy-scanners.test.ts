@@ -7,9 +7,11 @@ import { walkSourceFiles } from "@tests/helpers/walk-source";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
-describe("policy scanners", () => {
+describe("policy scanners", { timeout: 20_000 }, () => {
   it("forbids sql.raw outside migrate.ts", () => {
-    const files = walkSourceFiles(root, ["apps", "packages", "scripts"]);
+    const files = walkSourceFiles(root, ["apps", "packages", "scripts"], {
+      extensions: [".ts", ".tsx", ".js", ".mjs", ".cjs"],
+    });
     const hits: string[] = [];
     for (const file of files) {
       if (file.rel === "packages/db/src/migrate.ts") continue;

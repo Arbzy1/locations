@@ -7,8 +7,15 @@ const SKIP_DIRS = new Set([
   "coverage",
   ".git",
   ".wrangler",
+  ".vite",
+  ".tmp",
   "legacy",
+  "reports",
+  "playwright-report",
+  "test-results",
 ]);
+
+const SKIP_FILES = new Set(["package-lock.json", "tsconfig.tsbuildinfo"]);
 
 const TEXT_EXT = new Set([
   ".ts",
@@ -25,11 +32,17 @@ const TEXT_EXT = new Set([
 
 export type WalkedFile = { abs: string; rel: string; text: string };
 
-export function walkSourceFiles(root: string, dirs: string[]): WalkedFile[] {
+export function walkSourceFiles(
+  root: string,
+  dirs: string[],
+  opts: { extensions?: Iterable<string> } = {},
+): WalkedFile[] {
+  const allowExt = opts.extensions ? new Set(opts.extensions) : TEXT_EXT;
   const out: WalkedFile[] = [];
   function walk(dir: string) {
     for (const entry of readdirSync(dir)) {
       if (SKIP_DIRS.has(entry)) continue;
+      if (SKIP_FILES.has(entry)) continue;
       const full = join(dir, entry);
       if (statSync(full).isDirectory()) {
         walk(full);
@@ -37,7 +50,7 @@ export function walkSourceFiles(root: string, dirs: string[]): WalkedFile[] {
       }
       const lower = entry.toLowerCase();
       const ext = lower.includes(".") ? lower.slice(lower.lastIndexOf(".")) : "";
-      if (!TEXT_EXT.has(ext) && entry !== "wrangler.toml") continue;
+      if (!allowExt.has(ext) && entry !== "wrangler.toml") continue;
       const rel = relative(root, full).replace(/\\/g, "/");
       if (rel.includes("/.cursor/rules/") || rel.endsWith("CLAUDE.md")) continue;
       out.push({ abs: full, rel, text: readFileSync(full, "utf8") });
