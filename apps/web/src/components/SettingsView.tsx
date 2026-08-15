@@ -1,1082 +1,189 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useSearchParams } from "react-router-dom";
+import { Settings } from "lucide-react";
+import { useSession } from "../lib/auth";
+import { useUnits } from "../lib/units";
+import { enterMotion } from "../lib/motion";
+import { useBreakpoint } from "../hooks/useBreakpoint";
 import {
-  Loader2,
-  Upload,
-  Trash2,
-  Pencil,
-  RefreshCw,
-  Settings,
-  User,
-  CreditCard,
-  Ruler,
-  Download,
-  ShieldAlert,
-  Lock,
-  Map as MapIcon,
-} from 'lucide-react';
-import type { DataSourceInfo } from '../types';
-import { useImportStatus, useInvalidateLocationQueries, usePublicConfig, useSources } from '../hooks/useApi';
-import { authClient, useSession } from '../lib/auth';
-import { useUnits } from '../lib/units';
-import type { DistanceUnit } from '../utils/format';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Switch } from './ui/switch';
-import { Dialog, DialogContent } from './ui/dialog';
-import { AlertDialog, AlertDialogContent } from './ui/alert-dialog';
-import PasswordInput from './PasswordInput';
-import SettingsSessions from './SettingsSessions';
-import ImportDropZone, { TIMEZONE_SKEW_COPY } from './ImportDropZone';
-import { PLACE_COLOR_TOKENS, sourceTokenVar } from '../lib/hotspots';
+  parseSettingsSection,
+  settingsSectionSearch,
+  type SettingsSection,
+} from "../lib/settings-section";
+import { Badge } from "./ui/badge";
+import SettingsNav from "./SettingsNav";
+import SettingsOverview from "./SettingsOverview";
+import SettingsAccount from "./SettingsAccount";
+import SettingsBilling from "./SettingsBilling";
+import SettingsDisplay from "./SettingsDisplay";
+import SettingsTimeline from "./SettingsTimeline";
+import SettingsPrivacy from "./SettingsPrivacy";
+
+function initials(name?: string, email?: string) {
+  const src = (name || email || "?").trim();
+  const parts = src.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+  }
+  return src.slice(0, 2).toUpperCase() || "?";
+}
 
 export default function SettingsView() {
-  const { data: session, refetch: refetchSession } = useSession();
-  const { data: sources, isLoading } = useSources();
-  const { unit, timezone, monthlyRecapEnabled, mapTileDarkUrl, mapTileLightUrl, entitlements } = useUnits();
-  const { data: publicConfig } = usePublicConfig();
-  const [poll, setPoll] = useState(false);
-  const { data: importStatus } = useImportStatus({ poll });
-  const invalidate = useInvalidateLocationQueries();
+  const { data: session } = useSession();
+  const { entitlements } = useUnits();
+  const { isDesktop } = useBreakpoint();
+  const reduce = useReducedMotion();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-  const [label, setLabel] = useState('');
-  const [reuploadSourceId, setReuploadSourceId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [renameId, setRenameId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
-  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(unit);
-  const [tz, setTz] = useState(timezone ?? '');
-  const [recapEnabled, setRecapEnabled] = useState(monthlyRecapEnabled);
-  const [tileDark, setTileDark] = useState(mapTileDarkUrl ?? '');
-  const [tileLight, setTileLight] = useState(mapTileLightUrl ?? '');
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteSource, setDeleteSource] = useState<DataSourceInfo | null>(null);
-  const [rangeFrom, setRangeFrom] = useState('');
-  const [rangeTo, setRangeTo] = useState('');
-  const [rangeSourceId, setRangeSourceId] = useState('');
-  const [rangeOpen, setRangeOpen] = useState(false);
-  const [rewarmBusy, setRewarmBusy] = useState(false);
-  const [rewarmMsg, setRewarmMsg] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [accountBusy, setAccountBusy] = useState(false);
-  const [accountMsg, setAccountMsg] = useState('');
-  const [exportBusy, setExportBusy] = useState(false);
-  const [packBusy, setPackBusy] = useState(false);
+  const user = session?.user as
+    | { email?: string; name?: string; emailVerified?: boolean; role?: string }
+    | undefined;
+  const currentToken = (session as { session?: { token?: string } } | null | undefined)?.session
+    ?.token;
 
-  const latest = importStatus?.latestJob;
-  const user = session?.user as { email?: string; name?: string; emailVerified?: boolean; role?: string } | undefined;
-  const isDemo = user?.role === 'demo';
-  const currentToken = (session as { session?: { token?: string } } | null | undefined)?.session?.token;
+  const section = useMemo(
+    () => parseSettingsSection(searchParams, typeof window === "undefined" ? "" : window.location.hash),
+    [searchParams],
+  );
+
+  const setSection = useCallback(
+    (next: SettingsSection) => {
+      setMessage("");
+      setError("");
+      setSearchParams(settingsSectionSearch(next, searchParams), { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
 
   useEffect(() => {
-    setDistanceUnit(unit);
-    setTz(timezone ?? '');
-    setRecapEnabled(monthlyRecapEnabled);
-    setTileDark(mapTileDarkUrl ?? '');
-    setTileLight(mapTileLightUrl ?? '');
-  }, [unit, timezone, monthlyRecapEnabled, mapTileDarkUrl, mapTileLightUrl]);
+    if (section !== "data") return;
+    if (window.location.hash !== "#timeline-upload") return;
+    document.getElementById("timeline-upload")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [section]);
 
-  useEffect(() => {
-    if (user?.name) setDisplayName(user.name);
-  }, [user?.name]);
-
-  useEffect(() => {
-    if (latest?.status === 'ready') {
-      setPoll(false);
-      setBusy(false);
-      invalidate();
-      setLabel('');
-      setReuploadSourceId(null);
-    } else if (latest?.status === 'error') {
-      setPoll(false);
-      setBusy(false);
-      setError(latest.error || 'Import failed');
-    }
-  }, [latest?.status, latest?.error, latest?.id, invalidate]);
-
-  const onRename = async (source: DataSourceInfo) => {
-    const next = renameValue.trim();
-    if (!next || next === source.label) {
-      setRenameId(null);
-      return;
-    }
-    setError('');
-    const res = await fetch(`/api/sources/${source.id}`, {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: next }),
-    });
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    if (!res.ok) {
-      setError(body.error || 'Rename failed');
-      return;
-    }
-    setRenameId(null);
-    invalidate();
-  };
-
-  const onDelete = async (source: DataSourceInfo) => {
-    setError('');
-    const res = await fetch(`/api/sources/${source.id}`, {
-      method: 'DELETE',
-      credentials: 'include',
-    });
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    if (!res.ok) {
-      setError(body.error || 'Delete failed');
-      return;
-    }
-    setDeleteSource(null);
-    invalidate();
-  };
-
-  const patchSourceColor = async (source: DataSourceInfo, color: string | null) => {
-    setError('');
-    const res = await fetch(`/api/sources/${source.id}`, {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ color }),
-    });
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    if (!res.ok) {
-      setError(body.error || 'Could not update colour');
-      return;
-    }
-    invalidate();
-  };
-
-  const deleteRange = async () => {
-    setError('');
-    const params = new URLSearchParams({ from: rangeFrom, to: rangeTo });
-    if (rangeSourceId) params.set('sourceId', rangeSourceId);
-    const res = await fetch(`/api/days?${params.toString()}`, {
-      method: 'DELETE',
-      credentials: 'include',
-    });
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    if (!res.ok) {
-      setError(body.error || 'Could not delete that date range');
-      return;
-    }
-    setRangeOpen(false);
-    invalidate();
-  };
-
-  const rewarm = async () => {
-    setRewarmBusy(true);
-    setRewarmMsg('');
-    setError('');
-    try {
-      const res = await fetch('/api/routes/rewarm', { method: 'POST', credentials: 'include' });
-      const body = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        warmed?: number;
-        remaining?: number;
-      };
-      if (!res.ok) throw new Error(body.error || 'Rewarm failed');
-      setRewarmMsg(`Warmed ${body.warmed ?? 0} routes. ${body.remaining ?? 0} remaining.`);
-      invalidate();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setRewarmBusy(false);
-    }
-  };
-
-  const savePrefs = async () => {
-    setError('');
-    const res = await fetch('/api/account/settings', {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        distanceUnit,
-        timezone: tz || null,
-        monthlyRecapEnabled: recapEnabled,
-        ...(publicConfig?.customTiles
-          ? { mapTileDarkUrl: tileDark, mapTileLightUrl: tileLight }
-          : {}),
-      }),
-    });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      setError(body.error || 'Could not save preferences');
-      return;
-    }
-    invalidate();
-  };
-
-  const startCheckout = async (interval: 'monthly' | 'yearly') => {
-    setError('');
-    const res = await fetch('/api/billing/checkout', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ interval }),
-    });
-    const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-    if (!res.ok || !body.url) {
-      setError(body.error || 'Billing is not available');
-      return;
-    }
-    window.location.assign(body.url);
-  };
-
-  const openPortal = async () => {
-    setError('');
-    const res = await fetch('/api/billing/portal', {
-      method: 'POST',
-      credentials: 'include',
-    });
-    const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
-    if (!res.ok || !body.url) {
-      setError(body.error || 'No billing account');
-      return;
-    }
-    window.location.assign(body.url);
-  };
-
-  const deleteAccount = async () => {
-    setError('');
-    const res = await fetch('/api/account/delete', {
-      method: 'POST',
-      credentials: 'include',
-    });
-    if (!res.ok) {
-      setError('Could not delete account');
-      return;
-    }
-    window.location.assign('/');
-  };
-
-  const changePassword = async () => {
-    setAccountMsg('');
-    setError('');
-    setAccountBusy(true);
-    try {
-      const result = await authClient.changePassword({
-        currentPassword,
-        newPassword,
-        revokeOtherSessions: true,
-      });
-      if (result.error) {
-        setError(result.error.message || 'Could not change password');
-        return;
-      }
-      setCurrentPassword('');
-      setNewPassword('');
-      setAccountMsg('Password updated. Other sessions were signed out.');
-    } catch {
-      setError('Unable to change password.');
-    } finally {
-      setAccountBusy(false);
-    }
-  };
-
-  const changeEmail = async () => {
-    setAccountMsg('');
-    setError('');
-    if (!newEmail.trim()) {
-      setError('Enter a new email');
-      return;
-    }
-    setAccountBusy(true);
-    try {
-      const result = await authClient.changeEmail({ newEmail: newEmail.trim() });
-      if (result.error) {
-        setError(result.error.message || 'Could not change email');
-        return;
-      }
-      setAccountMsg('Check your current inbox to confirm, then the new inbox. Other sessions were signed out.');
-    } catch {
-      setError('Unable to change email.');
-    } finally {
-      setAccountBusy(false);
-    }
-  };
-
-  const changeDisplayName = async () => {
-    setAccountMsg('');
-    setError('');
-    const next = displayName.trim();
-    if (!next) {
-      setError('Enter a display name');
-      return;
-    }
-    setAccountBusy(true);
-    try {
-      const result = await authClient.updateUser({ name: next });
-      if (result.error) {
-        setError(result.error.message || 'Could not update name');
-        return;
-      }
-      await refetchSession();
-      setAccountMsg('Display name updated.');
-    } catch {
-      setError('Unable to update display name.');
-    } finally {
-      setAccountBusy(false);
-    }
-  };
-
-  const downloadBlob = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const exportData = async () => {
-    setError('');
-    setExportBusy(true);
-    try {
-      const res = await fetch('/api/account/export', { credentials: 'include' });
-      if (!res.ok) {
-        throw new Error('Could not export data');
-      }
-      const blob = await res.blob();
-      const stamp = new Date().toISOString().slice(0, 10);
-      downloadBlob(blob, `locations-export-${stamp}.json`);
-      setAccountMsg('Summary download started.');
-    } catch {
-      setError('Unable to export data.');
-    } finally {
-      setExportBusy(false);
-    }
-  };
-
-  const downloadPackFile = async (jobId: string) => {
-    const fileRes = await fetch(`/api/account/export-pack/${jobId}/file`, { credentials: 'include' });
-    if (!fileRes.ok) {
-      const body = (await fileRes.json().catch(() => ({}))) as { error?: string };
-      throw new Error(body.error || 'Could not download pack');
-    }
-    const blob = await fileRes.blob();
-    const stamp = new Date().toISOString().slice(0, 10);
-    downloadBlob(blob, `locations-gdpr-pack-${stamp}.zip`);
-    setAccountMsg('GDPR pack download started.');
-  };
-
-  const exportPack = async () => {
-    setError('');
-    setPackBusy(true);
-    try {
-      const start = await fetch('/api/account/export-pack', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      const started = (await start.json().catch(() => ({}))) as {
-        jobId?: string;
-        job?: { id?: string; status?: string };
-        error?: string;
-        status?: string;
-      };
-      if (!start.ok && start.status !== 409) {
-        throw new Error(started.error || 'Could not start GDPR pack');
-      }
-      const jobId = started.jobId || started.job?.id;
-      if (!jobId) {
-        throw new Error('Could not start GDPR pack');
-      }
-      for (let i = 0; i < 90; i += 1) {
-        const statusRes = await fetch(`/api/account/export-pack/${jobId}`, { credentials: 'include' });
-        const statusBody = (await statusRes.json().catch(() => ({}))) as {
-          status?: string;
-          error?: string;
-        };
-        if (!statusRes.ok) {
-          throw new Error(statusBody.error || 'Could not check pack status');
-        }
-        if (statusBody.status === 'ready') {
-          await downloadPackFile(jobId);
-          return;
-        }
-        if (statusBody.status === 'error') {
-          throw new Error(statusBody.error || 'Pack failed');
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-      }
-      throw new Error('Pack is still building. Try again in a moment.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to download GDPR pack.');
-    } finally {
-      setPackBusy(false);
-    }
-  };
-
-  const resendVerification = async () => {
-    setAccountMsg('');
-    setError('');
-    if (!user?.email) return;
-    setAccountBusy(true);
-    try {
-      const result = await authClient.sendVerificationEmail({
-        email: user.email,
-        callbackURL: `${window.location.origin}/settings`,
-      });
-      if (result.error) {
-        setError(result.error.message || 'Could not resend verification');
-        return;
-      }
-      setAccountMsg('Verification email sent.');
-    } catch {
-      setError('Unable to resend verification.');
-    } finally {
-      setAccountBusy(false);
-    }
-  };
-
-  const beginReupload = (source: DataSourceInfo) => {
-    setReuploadSourceId(source.id);
-    setLabel(source.label);
-    setError('');
-    document.getElementById('timeline-upload')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
-
-  const status = entitlements?.status ?? 'none';
+  const status = entitlements?.status ?? "none";
   const graceUntil = entitlements?.graceUntil;
   const graceActive =
     Boolean(graceUntil) &&
     new Date(graceUntil as string) > new Date() &&
-    status !== 'active' &&
-    status !== 'trialing';
-  const graceUntilLabel = graceUntil
-    ? new Date(graceUntil).toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      })
-    : '';
+    status !== "active" &&
+    status !== "trialing";
+  const paneMotion = reduce
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+        transition: { duration: 0.08 },
+      }
+    : enterMotion;
+
+  const flash = {
+    onMessage: setMessage,
+    onError: setError,
+  };
+
+  let pane: ReactNode;
+  switch (section) {
+    case "account":
+      pane = (
+        <SettingsAccount
+          currentToken={currentToken}
+          onMessage={setMessage}
+          onError={setError}
+        />
+      );
+      break;
+    case "billing":
+      pane = <SettingsBilling onError={setError} />;
+      break;
+    case "display":
+      pane = <SettingsDisplay onError={setError} onMessage={setMessage} />;
+      break;
+    case "data":
+      pane = <SettingsTimeline {...flash} />;
+      break;
+    case "privacy":
+      pane = <SettingsPrivacy {...flash} />;
+      break;
+    default:
+      pane = (
+        <SettingsOverview
+          name={user?.name}
+          email={user?.email}
+          emailVerified={user?.emailVerified}
+          onSelect={setSection}
+        />
+      );
+  }
 
   return (
-    <div className="h-full overflow-y-auto bg-bg">
-      <div className="mx-auto max-w-2xl px-6 py-8">
-        <div className="mb-8 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/15 text-accent">
-            <Settings size={20} />
+    <div className="flex h-full min-h-0 flex-col bg-bg">
+      <header className="shrink-0 border-b border-border bg-bg px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent/15 font-display text-sm font-semibold text-accent">
+            {initials(user?.name, user?.email)}
           </div>
-          <div>
-            <h1 className="font-display text-xl font-semibold text-text">Settings</h1>
-            <p className="text-sm text-text-muted">Account, billing, and Timeline data</p>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Settings size={16} className="text-text-muted" />
+              <h1 className="font-display text-lg font-semibold text-text">Settings</h1>
+            </div>
+            <p className="truncate text-sm text-text-muted">
+              {user?.name || "Account"}
+              {user?.email ? ` · ${user.email}` : ""}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <Badge
+              title={user?.emailVerified ? "Email is verified" : "Verify email before import"}
+            >
+              {user?.emailVerified ? "Verified" : "Unverified"}
+            </Badge>
+            <Badge title={`Billing status: ${status}`}>
+              {entitlements?.entitled ? `${status} · entitled` : status}
+            </Badge>
+            {graceActive && (
+              <Badge title="Import is paused during the read-only grace period">Grace</Badge>
+            )}
           </div>
         </div>
-
-        <section className="mb-8 rounded-xl border border-border bg-surface p-5">
-          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-            <User size={12} />
-            Account
-          </div>
-          <div className="text-sm text-text">{user?.name || 'User'}</div>
-          <div className="mt-0.5 text-sm text-text-muted">{user?.email}</div>
-          <p className="mt-1 text-xs text-text-muted">
-            {user?.emailVerified ? 'Email verified' : 'Email not verified (required before import)'}
-          </p>
-          {accountMsg && <p className="mt-2 text-sm text-walk">{accountMsg}</p>}
-          <div className="mt-4 border-t border-border pt-4">
-            <Label htmlFor="display-name">Display name</Label>
-            <Input
-              id="display-name"
-              title="Your display name"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="mb-2"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              title="Save display name"
-              disabled={accountBusy}
-              onClick={() => void changeDisplayName()}
-            >
-              Save name
-            </Button>
-          </div>
-          {!user?.emailVerified && (
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-3"
-              title="Resend email verification link and code"
-              disabled={accountBusy}
-              onClick={() => void resendVerification()}
-            >
-              Resend verification
-            </Button>
-          )}
-          <div className="mt-5 border-t border-border pt-4">
-            <Label htmlFor="new-email">Change email</Label>
-            <Input
-              id="new-email"
-              type="email"
-              title="New account email (requires re-verification)"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              className="mb-2"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              title="Send confirmation to the new email"
-              disabled={accountBusy}
-              onClick={() => void changeEmail()}
-            >
-              Update email
-            </Button>
-          </div>
-          <div className="mt-5 border-t border-border pt-4">
-            <Label htmlFor="current-password">Current password</Label>
-            <PasswordInput
-              id="current-password"
-              autoComplete="current-password"
-              title="Current password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-            />
-            <Label htmlFor="settings-new-password" className="mt-3">
-              New password
-            </Label>
-            <PasswordInput
-              id="settings-new-password"
-              autoComplete="new-password"
-              title="New password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              title="Change password and sign out other sessions"
-              disabled={accountBusy || !currentPassword || !newPassword}
-              onClick={() => void changePassword()}
-            >
-              Change password
-            </Button>
-          </div>
-        </section>
-
-        {accountMsg && (
-          <p className="mb-4 text-sm text-walk">{accountMsg}</p>
-        )}
+        {message && <p className="mt-3 text-sm text-walk">{message}</p>}
         {error && (
-          <div className="mb-8 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          <div className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">
             {error}
           </div>
         )}
+      </header>
 
-        <SettingsSessions currentToken={currentToken} onMessage={setAccountMsg} onError={setError} />
-
-        <section className="mb-8 rounded-xl border border-border bg-surface p-5">
-          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-            <CreditCard size={12} />
-            Billing
-          </div>
-          <p className="mb-3 text-sm text-text-muted">
-            Status: {status}
-            {entitlements?.entitled ? ' (entitled)' : ''}
-          </p>
-          {graceActive && (
-            <p className="mb-3 text-sm text-text">
-              Payment failed. Import is paused. You still have read-only access until {graceUntilLabel}.
+      <div className="flex min-h-0 flex-1">
+        {isDesktop && (
+          <aside className="flex w-52 shrink-0 flex-col overflow-y-auto border-r border-border p-3">
+            <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+              Workspace
             </p>
-          )}
-          <p className="mb-3 text-sm text-text-muted">
-            Invoices, payment method, pause, and cancel are in Manage billing. Pause keeps the
-            subscription (access follows Stripe pause rules). Cancel ends access at period end.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" title="Subscribe monthly" onClick={() => void startCheckout('monthly')}>
-              Subscribe monthly
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              title="Subscribe yearly"
-              onClick={() => void startCheckout('yearly')}
-            >
-              Subscribe yearly
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              title="Open Stripe portal for invoices, pause, and cancel"
-              onClick={() => void openPortal()}
-            >
-              Manage billing
-            </Button>
-          </div>
-        </section>
-
-        <section className="mb-8 rounded-xl border border-border bg-surface p-5">
-          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-            <Ruler size={12} />
-            Display
-          </div>
-          <Label htmlFor="unit">Distance unit</Label>
-          <select
-            id="unit"
-            title="Miles or kilometres"
-            value={distanceUnit}
-            onChange={(e) => setDistanceUnit(e.target.value as DistanceUnit)}
-            className="mb-3 h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
-          >
-            <option value="mi">Miles</option>
-            <option value="km">Kilometres</option>
-          </select>
-          <Label htmlFor="tz">Timezone (IANA)</Label>
-          <Input
-            id="tz"
-            title="IANA timezone such as Europe/London"
-            value={tz}
-            onChange={(e) => setTz(e.target.value)}
-            placeholder="Europe/London"
-            className="mb-3"
-          />
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <Label htmlFor="monthly-recap">Monthly recap email</Label>
-              <p className="text-xs text-text-muted">
-                Opt in to a counts-only recap after each month. No place names or coordinates.
-              </p>
-            </div>
-            <Switch
-              id="monthly-recap"
-              title="Enable monthly recap email"
-              checked={recapEnabled}
-              onCheckedChange={setRecapEnabled}
-            />
-          </div>
-          <Button type="button" title="Save display preferences" onClick={() => void savePrefs()}>
-            Save preferences
-          </Button>
-        </section>
-
-        {publicConfig?.customTiles && (
-          <section className="mb-8 rounded-xl border border-border bg-surface p-5">
-            <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-              <MapIcon size={12} />
-              Custom map tiles
-            </div>
-            <p className="mb-3 text-sm text-text-muted">
-              HTTPS XYZ templates with {'{z}'}, {'{x}'}, and {'{y}'}. Hosts must be on this
-              environment allowlist
-              {publicConfig.customTileHosts?.length
-                ? `: ${publicConfig.customTileHosts.join(', ')}`
-                : ''}
-              . Used for Auto basemap when no vector style is configured.
-            </p>
-            <Label htmlFor="tile-dark">Dark raster URL</Label>
-            <Input
-              id="tile-dark"
-              title="Custom dark basemap tile URL"
-              value={tileDark}
-              onChange={(e) => setTileDark(e.target.value)}
-              placeholder="https://tiles.example.com/{z}/{x}/{y}.png"
-              className="mb-3"
-            />
-            <Label htmlFor="tile-light">Light raster URL</Label>
-            <Input
-              id="tile-light"
-              title="Custom light basemap tile URL"
-              value={tileLight}
-              onChange={(e) => setTileLight(e.target.value)}
-              placeholder="https://tiles.example.com/{z}/{x}/{y}.png"
-              className="mb-3"
-            />
-            <Button type="button" title="Save custom map tiles" onClick={() => void savePrefs()}>
-              Save map tiles
-            </Button>
-          </section>
+            <SettingsNav section={section} onSelect={setSection} orientation="rail" />
+          </aside>
         )}
-
-        <section className="mb-8 rounded-xl border border-border bg-surface p-5">
-          <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-            <Upload size={12} />
-            Timeline data
-          </div>
-          <p className="mb-5 text-sm leading-relaxed text-text-muted">
-            Upload Google Timeline JSON or a Takeout zip (Timeline.json / Records.json). Zip the
-            Takeout folder if you have a directory. After a drop we preview which file won and how
-            days overlap, then you choose replace, merge, or skip overlapping days.
-          </p>
-
-          {importStatus?.timezoneWarning?.warn && (
-            <p className="mb-4 rounded-lg border border-border bg-bg/60 px-3 py-2 text-sm text-text-muted">
-              {TIMEZONE_SKEW_COPY}
-            </p>
-          )}
-
-          {error && (
-            <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-              {error}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {!isDesktop && (
+            <div className="shrink-0 border-b border-border px-3 py-2">
+              <SettingsNav section={section} onSelect={setSection} orientation="chips" />
             </div>
           )}
-
-          {(busy || latest?.status === 'pending' || latest?.status === 'processing') && (
-            <div className="mb-4 flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
-              <Loader2 size={16} className="animate-spin" />
-              Importing…{' '}
-              {latest?.parsedCount
-                ? `${latest.parsedCount} records parsed`
-                : latest?.status === 'processing'
-                  ? 'parsing file'
-                  : 'queued'}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto max-w-5xl p-4 sm:p-6">
+              <AnimatePresence mode="wait">
+                <motion.div key={section} {...paneMotion}>
+                  {pane}
+                </motion.div>
+              </AnimatePresence>
             </div>
-          )}
-
-          {latest?.status === 'ready' && !busy && (
-            <div className="mb-4 rounded-lg border border-walk/40 bg-walk/10 px-3 py-2 text-sm text-walk">
-              Imported {latest.visitCount ?? 0} visits, {latest.activityCount ?? 0} activities
-              {latest.chosenFile ? ` from ${latest.chosenFile}` : ''}. Map views will refresh
-              automatically.
-            </div>
-          )}
-
-          <div id="timeline-upload" className="mb-6 space-y-3 rounded-lg border border-border bg-bg/50 p-4">
-            <div className="text-sm font-medium text-text">
-              {reuploadSourceId ? `Replace data: ${label}` : 'Add or update Timeline'}
-            </div>
-            {!reuploadSourceId && (
-              <div>
-                <Label htmlFor="src-label">Label (Google account name)</Label>
-                <Input
-                  id="src-label"
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  placeholder="e.g. personal@gmail.com"
-                  title="Label for this Google account / Timeline source"
-                />
-              </div>
-            )}
-            <ImportDropZone
-              sourceId={reuploadSourceId}
-              label={label}
-              disabled={isDemo || busy}
-              disabledReason={isDemo ? 'Demo accounts cannot import Timeline data.' : undefined}
-              onStarted={() => {
-                setPoll(true);
-                setBusy(true);
-              }}
-              onError={(msg) => setError(msg)}
-            />
-            {reuploadSourceId && (
-              <Button
-                type="button"
-                variant="outline"
-                title="Cancel re-upload and keep existing source data"
-                onClick={() => {
-                  setReuploadSourceId(null);
-                  setLabel('');
-                }}
-              >
-                Cancel
-              </Button>
-            )}
           </div>
-
-          <div className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">
-            Your sources ({sources?.length ?? 0})
-          </div>
-
-          {isLoading && (
-            <div className="flex justify-center py-8 text-text-muted">
-              <Loader2 className="animate-spin" size={20} />
-            </div>
-          )}
-
-          {!isLoading && (!sources || sources.length === 0) && (
-            <p className="py-4 text-center text-sm text-text-muted">
-              No Timeline data yet. Upload a JSON or zip export above.
-            </p>
-          )}
-
-          <ul className="space-y-2">
-            {sources?.map((source) => (
-              <li key={source.id} className="rounded-lg border border-border bg-bg/40 px-4 py-3">
-                {renameId === source.id ? (
-                  <form
-                    className="flex gap-2"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      void onRename(source);
-                    }}
-                  >
-                    <Input
-                      autoFocus
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      title="New label for this Timeline source"
-                    />
-                    <Button type="submit" title="Save the new source label">
-                      Save
-                    </Button>
-                  </form>
-                ) : (
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-text">{source.label}</div>
-                      <div className="mt-0.5 text-xs text-text-muted">
-                        {source.visitCount} visits · {source.activityCount} activities
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {PLACE_COLOR_TOKENS.map((token) => (
-                          <Button
-                            key={token}
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            title={`Set ${source.label} colour to ${token}`}
-                            aria-label={`Set ${source.label} colour to ${token}`}
-                            className={source.color === token ? 'ring-2 ring-text' : ''}
-                            onClick={() => void patchSourceColor(source, token)}
-                            disabled={isDemo}
-                          >
-                            <span
-                              className="h-5 w-5 rounded-full"
-                              style={{ background: sourceTokenVar(token) }}
-                            />
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        title="Re-upload Timeline JSON to replace this source"
-                        onClick={() => beginReupload(source)}
-                      >
-                        <RefreshCw size={12} />
-                        Re-upload
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        title="Rename this Timeline source"
-                        aria-label="Rename"
-                        onClick={() => {
-                          setRenameId(source.id);
-                          setRenameValue(source.label);
-                        }}
-                      >
-                        <Pencil size={14} />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        title="Delete this Timeline source and its data"
-                        aria-label="Delete"
-                        onClick={() => setDeleteSource(source)}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-6 space-y-3 border-t border-border pt-4">
-            <div className="text-sm font-medium text-text">Delete a date range</div>
-            <p className="text-xs text-text-muted">
-              Removes visits and journeys in this window, then rebuilds day stats. Route cache is
-              kept.
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="range-from">From</Label>
-                <Input
-                  id="range-from"
-                  type="date"
-                  title="Start date to delete"
-                  value={rangeFrom}
-                  onChange={(e) => setRangeFrom(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="range-to">To</Label>
-                <Input
-                  id="range-to"
-                  type="date"
-                  title="End date to delete"
-                  value={rangeTo}
-                  onChange={(e) => setRangeTo(e.target.value)}
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="range-source">Source (optional)</Label>
-              <select
-                id="range-source"
-                title="Limit delete to one Timeline source"
-                value={rangeSourceId}
-                onChange={(e) => setRangeSourceId(e.target.value)}
-                className="h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
-              >
-                <option value="">All sources</option>
-                {sources?.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={isDemo || !rangeFrom || !rangeTo || rangeFrom > rangeTo}
-              title="Delete visits in this date range"
-              onClick={() => setRangeOpen(true)}
-            >
-              Delete date range
-            </Button>
-          </div>
-
-          <div className="mt-6 space-y-2 border-t border-border pt-4">
-            <div className="text-sm font-medium text-text">Predicted routes</div>
-            <p className="text-xs text-text-muted">
-              Warm up to 100 uncached walking/driving journeys. Click again if more remain. Flights
-              and rail are skipped.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isDemo || rewarmBusy}
-              title="Reprocess uncached predicted routes"
-              onClick={() => void rewarm()}
-            >
-              {rewarmBusy ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-              Reprocess routes
-            </Button>
-            {rewarmMsg && <p className="text-sm text-text-muted">{rewarmMsg}</p>}
-          </div>
-        </section>
-
-        <section className="mb-8 rounded-xl border border-border bg-surface p-5">
-          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-            <Lock size={12} />
-            Privacy
-          </div>
-          <p className="mb-4 text-sm text-text-muted">
-            Downloads stay in this browser. We never email coordinates or place names. The GDPR pack
-            includes visits and activities as JSONL plus an HTML summary with no map tiles.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              title="Download a JSON summary of account, sources, settings, and labels"
-              disabled={exportBusy}
-              onClick={() => void exportData()}
-            >
-              {exportBusy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-              Download summary JSON
-            </Button>
-            <Button
-              type="button"
-              title="Build and download a GDPR pack ZIP of your Timeline"
-              disabled={packBusy}
-              onClick={() => void exportPack()}
-            >
-              {packBusy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-              {packBusy ? 'Building pack…' : 'Download GDPR pack'}
-            </Button>
-          </div>
-        </section>
-
-        <section className="mb-8 rounded-xl border border-red-500/30 bg-surface p-5">
-          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-red-400">
-            <ShieldAlert size={12} />
-            Danger zone
-          </div>
-          <p className="mb-4 text-sm text-text-muted">
-            Delete your account and all Timeline data. To remove one Google export only, use Timeline
-            data above.
-          </p>
-          <Button
-            type="button"
-            variant="destructive"
-            title="Delete account and all Timeline data"
-            onClick={() => setDeleteOpen(true)}
-          >
-            Delete account
-          </Button>
-        </section>
+        </div>
       </div>
-
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent title="Delete account">
-          <h2 className="text-lg font-semibold">Delete account?</h2>
-          <p className="mt-2 text-sm text-text-muted">
-            This wipes Timeline data, uploads, and billing. This cannot be undone.
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" title="Cancel" onClick={() => setDeleteOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" title="Confirm delete account" onClick={() => void deleteAccount()}>
-              Delete
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(deleteSource)} onOpenChange={(o) => !o && setDeleteSource(null)}>
-        <DialogContent title="Delete source">
-          <h2 className="text-lg font-semibold">Remove source?</h2>
-          <p className="mt-2 text-sm text-text-muted">
-            Remove “{deleteSource?.label}” and all visits from that Google account? Other sources stay.
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" title="Cancel" onClick={() => setDeleteSource(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              title="Confirm delete source"
-              onClick={() => deleteSource && void onDelete(deleteSource)}
-            >
-              Remove
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={rangeOpen} onOpenChange={setRangeOpen}>
-        <AlertDialogContent title="Delete date range">
-          <h2 className="text-lg font-semibold">Delete this date range?</h2>
-          <p className="mt-2 text-sm text-text-muted">
-            Remove visits from {rangeFrom} to {rangeTo}
-            {rangeSourceId ? ' for the selected source' : ' for all sources'}. Day stats will
-            rebuild. This cannot be undone.
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" title="Cancel" onClick={() => setRangeOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              title="Confirm delete date range"
-              onClick={() => void deleteRange()}
-            >
-              Delete range
-            </Button>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
 } from "../lib/sessions";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { Card, CardTitle } from "./ui/card";
 
 type Props = {
   currentToken?: string;
@@ -79,10 +80,10 @@ export default function SettingsSessions({ currentToken, onMessage, onError }: P
   const others = sessions.filter((s) => s.token !== currentToken);
 
   return (
-    <section className="mb-8 rounded-xl border border-border bg-surface p-5">
-      <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-        <Monitor size={12} />
-        Sign-in and devices
+    <Card>
+      <div className="mb-1 flex items-center gap-2">
+        <Monitor size={16} className="text-text-muted" />
+        <CardTitle className="text-base">Sign-in and devices</CardTitle>
       </div>
       <p className="mb-4 text-sm text-text-muted">
         Each row is a signed-in browser. Revoke a session you do not recognise.
@@ -149,6 +150,6 @@ export default function SettingsSessions({ currentToken, onMessage, onError }: P
           Revoke other sessions
         </Button>
       )}
-    </section>
+    </Card>
   );
 }
