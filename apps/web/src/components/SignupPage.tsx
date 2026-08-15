@@ -70,7 +70,7 @@ export default function SignupPage() {
             New accounts are not open right now. If you already have access, sign in. Operators can still invite users.
           </p>
           <Button asChild className="mt-4 w-full" title="Go to sign in">
-            <Link to="/">Sign in</Link>
+            <Link to="/login">Sign in</Link>
           </Button>
           <LegalFooter />
         </motion.div>
@@ -158,7 +158,7 @@ export default function SignupPage() {
         )}
         <p className="mt-4 text-center text-xs text-text-muted">
           Already have an account?{' '}
-          <Link className="text-accent" to="/" title="Sign in">
+          <Link className="text-accent" to="/login" title="Sign in">
             Sign in
           </Link>
         </p>

@@ -1,6 +1,7 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   useHeatmap,
+  useHeatmapLayers,
   useHomeWork,
   useAreas,
   useInvalidateLocationQueries,
@@ -11,24 +12,30 @@ import { useBreakpoint } from '../hooks/useBreakpoint';
 import { useSession } from '../lib/auth';
 import MapView from './Map';
 import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from './MobilePanel';
-import { Flame, MapPin, EyeOff, Eye, Star } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Flame, EyeOff, Eye, Star } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { placePath } from '../lib/paths';
 import { formatDuration } from '../utils/format';
 import type { HeatmapPoint, HotspotLabel, MapFocusTarget } from '../types';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
+import FilterPresets from './FilterPresets';
+import {
+  parseHotspotsQuery,
+  serializeHotspotsQuery,
+  type HotspotsQuery,
+} from '../lib/view-search-params';
 import {
   PLACE_COLOR_TOKENS,
   filterAndRankPlaces,
   findPlaceLabel,
   isPlaceColorToken,
   placeMetric,
+  sourceTokenVar,
   toggleChip,
   uniqueLabelTags,
   uniqueTopTypes,
   type PlaceLabelMeta,
-  type PlaceRankBy,
 } from '../lib/hotspots';
 
 type HotspotArea = HeatmapPoint & {
@@ -266,36 +273,43 @@ export default function HotspotsView() {
   const { data: areas } = useAreas();
   const { data: labels } = usePlaceLabels();
   const invalidate = useInvalidateLocationQueries();
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [sourceIds, setSourceIds] = useState<string[]>([]);
+  const [params, setParams] = useSearchParams();
+  const filters = parseHotspotsQuery(params);
+  const from = filters.from;
+  const to = filters.to;
+  const sourceIds = filters.sources;
+  const selectedTypes = filters.types;
+  const selectedTags = filters.tags;
+  const favouritesOnly = filters.fav;
+  const rankBy = filters.rank;
+  const patchFilters = (next: Partial<HotspotsQuery>) => {
+    setParams(serializeHotspotsQuery({ ...filters, ...next }), { replace: true });
+  };
   const { data: heatmapPoints, isLoading } = useHeatmap({
     from: from || undefined,
     to: to || undefined,
     sources: sourceIds.length ? sourceIds : undefined,
   });
+  const activeSourceIds =
+    sourceIds.length ? sourceIds : (sources ?? []).map((s) => s.id);
+  const layerQueries = useHeatmapLayers(
+    activeSourceIds.length > 1 ? activeSourceIds : undefined,
+    { from: from || undefined, to: to || undefined },
+  );
   const { isDesktop, isPhone } = useBreakpoint();
-  const [heatmapOn, setHeatmapOn] = useState(true);
-  const [opacityPct, setOpacityPct] = useState(72);
-  const [intensityPct, setIntensityPct] = useState(100);
   const [focusTarget, setFocusTarget] = useState<MapFocusTarget | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
   const [sheetHeight, setSheetHeight] = useState<MobilePanelHeight>('half');
   const [sizeSignal, setSizeSignal] = useState(0);
-  const [rankBy, setRankBy] = useState<PlaceRankBy>('visits');
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [favouritesOnly, setFavouritesOnly] = useState(false);
+
+  useEffect(() => {
+    if (filters.lat == null || filters.lon == null) return;
+    setFocusTarget({ lat: filters.lat, lon: filters.lon, zoom: 16 });
+  }, [filters.lat, filters.lon]);
 
   const bumpSize = useCallback(() => setSizeSignal((n) => n + 1), []);
   const labelRows: PlaceLabelMeta[] = labels ?? [];
-
-  const heatmapOpacity = opacityPct / 100;
-  const heatmapIntensity = useMemo(
-    () => Math.max(0.35, Math.min(2, intensityPct / 100)),
-    [intensityPct],
-  );
 
   const allAreas = useMemo(
     () => (heatmapPoints ?? []).map((p) => toArea(p)),
@@ -329,6 +343,18 @@ export default function HotspotsView() {
       })),
     [filteredAreas, rankBy],
   );
+
+  const heatmapLayers = useMemo(() => {
+    if (activeSourceIds.length <= 1) return undefined;
+    return activeSourceIds.map((id, i) => ({
+      id,
+      points: (layerQueries[i]?.data ?? []).map((p) => ({
+        ...p,
+        weight: p.weight ?? p.count,
+      })),
+      colorToken: sources?.find((s) => s.id === id)?.color ?? null,
+    }));
+  }, [activeSourceIds, layerQueries, sources]);
 
   const hotspotLabels: HotspotLabel[] = useMemo(
     () =>
@@ -403,17 +429,18 @@ export default function HotspotsView() {
           type="date"
           title="Heatmap start date"
           value={from}
-          onChange={(e) => setFrom(e.target.value)}
+          onChange={(e) => patchFilters({ from: e.target.value })}
           className="h-11 rounded-lg border border-border bg-bg px-2 text-xs text-text"
         />
         <input
           type="date"
           title="Heatmap end date"
           value={to}
-          onChange={(e) => setTo(e.target.value)}
+          onChange={(e) => patchFilters({ to: e.target.value })}
           className="h-11 rounded-lg border border-border bg-bg px-2 text-xs text-text"
         />
       </div>
+      <FilterPresets />
       <div className="mt-3 flex gap-2">
         <Button
           type="button"
@@ -421,7 +448,7 @@ export default function HotspotsView() {
           size="sm"
           className="flex-1"
           title="Rank places by visit count"
-          onClick={() => setRankBy('visits')}
+          onClick={() => patchFilters({ rank: 'visits' })}
         >
           Visits
         </Button>
@@ -431,7 +458,7 @@ export default function HotspotsView() {
           size="sm"
           className="flex-1"
           title="Rank places by time spent"
-          onClick={() => setRankBy('dwell')}
+          onClick={() => patchFilters({ rank: 'dwell' })}
         >
           Time there
         </Button>
@@ -443,7 +470,7 @@ export default function HotspotsView() {
         className="mt-2 w-full"
         title="Show favourite places only"
         aria-pressed={favouritesOnly}
-        onClick={() => setFavouritesOnly((v) => !v)}
+        onClick={() => patchFilters({ fav: !favouritesOnly })}
       >
         <Star size={14} className={favouritesOnly ? 'fill-current' : ''} />
         Favourites
@@ -459,7 +486,7 @@ export default function HotspotsView() {
                 variant={on ? 'default' : 'outline'}
                 size="sm"
                 title={on ? `Remove ${t} filter` : `Filter to ${t}`}
-                onClick={() => setSelectedTypes((cur) => toggleChip(cur, t))}
+                onClick={() => patchFilters({ types: toggleChip(selectedTypes, t) })}
               >
                 {t}
               </Button>
@@ -478,7 +505,7 @@ export default function HotspotsView() {
                 variant={on ? 'default' : 'outline'}
                 size="sm"
                 title={on ? `Remove tag ${t}` : `Filter to tag ${t}`}
-                onClick={() => setSelectedTags((cur) => toggleChip(cur, t))}
+                onClick={() => patchFilters({ tags: toggleChip(selectedTags, t) })}
               >
                 {t}
               </Button>
@@ -491,21 +518,28 @@ export default function HotspotsView() {
           {sources.map((s) => {
             const on = sourceIds.includes(s.id) || sourceIds.length === 0;
             return (
-              <button
+              <Button
                 key={s.id}
                 type="button"
-                title={`Filter to ${s.label}`}
+                variant={on ? 'default' : 'outline'}
+                size="sm"
+                title={on ? `Hide ${s.label} heat layer` : `Show ${s.label} heat layer`}
                 onClick={() =>
-                  setSourceIds((cur) =>
-                    cur.includes(s.id) ? cur.filter((id) => id !== s.id) : [...cur, s.id],
-                  )
+                  patchFilters({
+                    sources: sourceIds.includes(s.id)
+                      ? sourceIds.filter((id) => id !== s.id)
+                      : sourceIds.length === 0
+                        ? sources.filter((x) => x.id !== s.id).map((x) => x.id)
+                        : [...sourceIds, s.id],
+                  })
                 }
-                className={`h-11 rounded-lg border px-3 text-xs transition duration-300 ${
-                  on ? 'border-accent bg-accent/15 text-accent' : 'border-border text-text-muted'
-                }`}
               >
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ background: sourceTokenVar(s.color) }}
+                />
                 {s.label}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -613,88 +647,16 @@ export default function HotspotsView() {
     </>
   );
 
-  const heatmapControls = (
-    <div className="pointer-events-auto absolute top-3 right-3 z-[1000] w-[min(100%-1.5rem,17rem)] space-y-3 rounded-lg border border-border bg-surface/95 p-3 text-left shadow-lg backdrop-blur-sm">
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-sm font-medium text-text">
-          <MapPin size={14} className="shrink-0 text-accent" />
-          Heatmap
-        </span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={heatmapOn}
-          aria-label={heatmapOn ? 'Turn heatmap off' : 'Turn heatmap on'}
-          title={heatmapOn ? 'Turn heatmap off' : 'Turn heatmap on'}
-          onClick={() => setHeatmapOn((v) => !v)}
-          className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-ui-emphasis ease-ui ${
-            heatmapOn ? 'bg-accent' : 'bg-border'
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-ui-emphasis ease-ui ${
-              heatmapOn ? 'translate-x-5' : 'translate-x-0'
-            }`}
-          />
-        </button>
-      </div>
-
-      <div className={heatmapOn ? '' : 'pointer-events-none opacity-40'}>
-        <div className="mb-1 flex justify-between text-xs text-text-muted">
-          <span>See-through (map labels)</span>
-          <span className="font-mono tabular-nums">{opacityPct}%</span>
-        </div>
-        <input
-          type="range"
-          min={12}
-          max={100}
-          value={opacityPct}
-          onChange={(e) => setOpacityPct(Number(e.target.value))}
-          disabled={!heatmapOn}
-          title="Heatmap opacity so map labels stay readable"
-          className="h-2 w-full cursor-pointer accent-accent disabled:cursor-not-allowed"
-        />
-        <p className="mt-1 text-[10px] leading-snug text-text-muted/80">
-          Lower = town and road names stay readable through the heat.
-        </p>
-      </div>
-
-      <div className={heatmapOn ? '' : 'pointer-events-none opacity-40'}>
-        <div className="mb-1 flex justify-between text-xs text-text-muted">
-          <span>Strength</span>
-          <span className="font-mono tabular-nums">{intensityPct}%</span>
-        </div>
-        <input
-          type="range"
-          min={40}
-          max={180}
-          step={5}
-          value={intensityPct}
-          onChange={(e) => setIntensityPct(Number(e.target.value))}
-          disabled={!heatmapOn}
-          title="Heatmap colour strength"
-          className="h-2 w-full cursor-pointer accent-accent disabled:cursor-not-allowed"
-        />
-        <p className="mt-1 text-[10px] leading-snug text-text-muted/80">
-          100% = default. Higher = hotter colours; lower = softer.
-        </p>
-      </div>
-    </div>
-  );
-
   const mapPane = (
     <div className="relative min-h-0 flex-1">
       <MapView
         heatmapPoints={heatForMap}
-        heatmapEnabled={heatmapOn}
-        heatmapOpacity={heatmapOpacity}
-        heatmapIntensity={heatmapIntensity}
+        heatmapLayers={heatmapLayers}
         hotspotLabels={hotspotLabels}
         homeWorkPins={homeWorkPins}
         focusTarget={focusTarget}
         sizeSignal={sizeSignal}
       />
-      {heatmapControls}
       <MobilePanelOpenButton
         label="Show hotspots"
         visible={!panelOpen}
@@ -724,15 +686,12 @@ export default function HotspotsView() {
         <div className="relative min-h-0 flex-1">
           <MapView
             heatmapPoints={heatForMap}
-            heatmapEnabled={heatmapOn}
-            heatmapOpacity={heatmapOpacity}
-            heatmapIntensity={heatmapIntensity}
+        heatmapLayers={heatmapLayers}
             hotspotLabels={hotspotLabels}
             homeWorkPins={homeWorkPins}
             focusTarget={focusTarget}
             sizeSignal={sizeSignal}
           />
-          {heatmapControls}
         </div>
       </div>
     );

@@ -31,6 +31,9 @@ describe("account settings PATCH", () => {
       timezone: "Europe/London",
       monthlyRecapEnabled: true,
       monthlyRecapLastYm: null,
+      mapBookmarks: [],
+      mapTileDarkUrl: null,
+      mapTileLightUrl: null,
     } as never);
   });
 
@@ -74,6 +77,49 @@ describe("account settings PATCH", () => {
       env,
     );
     expect(res.status).toBe(403);
+    expect(upsertUserSettings).not.toHaveBeenCalled();
+  });
+
+  it("rejects custom tiles when the host is not allowlisted", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
+    const res = await requestApp(
+      app,
+      "/api/account/settings",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mapTileDarkUrl: "https://evil.test/{z}/{x}/{y}.png",
+        }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
+    expect(upsertUserSettings).not.toHaveBeenCalled();
+  });
+
+  it("rejects more than 20 bookmarks", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
+    const mapBookmarks = Array.from({ length: 21 }, (_, i) => ({
+      id: `id-${i}`,
+      name: "V",
+      lng: 0,
+      lat: 0,
+      zoom: 1,
+      pitch: 0,
+      bearing: 0,
+    }));
+    const res = await requestApp(
+      app,
+      "/api/account/settings",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mapBookmarks }),
+      },
+      env,
+    );
+    expect(res.status).toBe(400);
     expect(upsertUserSettings).not.toHaveBeenCalled();
   });
 });

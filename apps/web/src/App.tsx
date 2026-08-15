@@ -5,6 +5,7 @@ import type { TabId } from './types';
 import {
   useImportStatus,
   useOverview,
+  usePublicConfig,
   useRouteProgress,
 } from './hooks/useApi';
 import { useSession, signOut } from './lib/auth';
@@ -19,9 +20,15 @@ import SignupPage from './components/SignupPage';
 import ForgotPage from './components/ForgotPage';
 import ResetPasswordPage from './components/ResetPasswordPage';
 import { CookiesRoute, PrivacyRoute, TermsRoute } from './components/LegalRoutes';
+import LandingPage from './components/marketing/LandingPage';
+import PricingPage from './components/marketing/PricingPage';
+import StatusPage from './components/marketing/StatusPage';
+import ChangelogPage from './components/marketing/ChangelogPage';
+import DemoTour from './components/DemoTour';
 import ThemeToggle from './components/ThemeToggle';
-import SearchBar from './components/SearchBar';
+import CommandPalette from './components/CommandPalette';
 import { Button } from './components/ui/button';
+import ImportDropZone from './components/ImportDropZone';
 import { Toaster } from './components/ui/sonner';
 import ExploreMenu from './components/ExploreMenu';
 import CatalogRouter from './components/catalog/CatalogRouter';
@@ -83,18 +90,30 @@ function useDocumentTitle(title: string) {
   }, [title]);
 }
 
-function EmptyDataState({ onOpenSettings }: { onOpenSettings: () => void }) {
+function EmptyDataState({
+  onOpenSettings,
+  isDemo,
+}: {
+  onOpenSettings: () => void;
+  isDemo: boolean;
+}) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg px-6 text-center">
+    <div className="flex h-full min-h-0 flex-col items-center justify-center gap-4 bg-bg px-6 text-center">
       <div className="rounded-full bg-accent/15 p-4 text-accent">
         <Upload size={28} />
       </div>
       <div className="max-w-sm">
         <h2 className="font-display text-lg font-semibold text-text">Import your Timeline</h2>
         <p className="mt-2 text-sm text-text-muted">
-          Upload a Google Timeline JSON or Takeout zip in Settings. You can replace it anytime with a
-          newer export.
+          Drop a Google Timeline JSON or Takeout zip here. You can replace it anytime with a newer
+          export.
         </p>
+      </div>
+      <div className="w-full max-w-md text-left">
+        <ImportDropZone
+          disabled={isDemo}
+          disabledReason={isDemo ? 'Demo accounts cannot import Timeline data.' : undefined}
+        />
       </div>
       <Button type="button" title="Open Settings to upload Timeline data" onClick={onOpenSettings}>
         Open Settings
@@ -264,7 +283,7 @@ function AppContent() {
 
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div className="flex items-center gap-3 border-b border-border px-4 py-2">
-            <SearchBar />
+            <CommandPalette />
           </div>
           <div className="min-h-0 flex-1 overflow-hidden mobile-nav-pad lg:pb-0">
             {exploring ? (
@@ -292,7 +311,7 @@ function AppContent() {
                 </div>
               ) : (
                 <div key="empty" className="ui-enter h-full">
-                  <EmptyDataState onOpenSettings={() => selectTab('settings')} />
+                  <EmptyDataState isDemo={isDemo} onOpenSettings={() => selectTab('settings')} />
                 </div>
               )
             ) : (
@@ -395,6 +414,7 @@ function AppContent() {
 function AuthedShell() {
   return (
     <UnitsProvider>
+      <DemoTour />
       <Routes>
         <Route path="/" element={<Navigate to="/hotspots" replace />} />
         <Route path="/hotspots" element={<AppContent />} />
@@ -430,6 +450,9 @@ function AuthedShell() {
         <Route path="/health" element={<AppContent />} />
         <Route path="/admin" element={<AppContent />} />
         <Route path="/globe" element={<AppContent />} />
+        <Route path="/updates" element={<AppContent />} />
+        <Route path="/badges" element={<AppContent />} />
+        <Route path="/guesses" element={<AppContent />} />
         <Route path="*" element={<Navigate to="/hotspots" replace />} />
       </Routes>
     </UnitsProvider>
@@ -438,16 +461,18 @@ function AuthedShell() {
 
 function AuthGate() {
   const { data: session, isPending } = useSession();
+  const { data: config, isPending: configPending } = usePublicConfig();
+  const landing = config?.flags?.landing !== false;
 
   useEffect(() => {
-    if (isPending) {
+    if (isPending || configPending) {
       document.title = 'Locations';
     } else if (!session?.user) {
-      document.title = 'Sign in · Locations';
+      document.title = landing ? 'Locations' : 'Sign in · Locations';
     }
-  }, [isPending, session?.user]);
+  }, [isPending, configPending, session?.user, landing]);
 
-  if (isPending) {
+  if (isPending || (!session?.user && configPending)) {
     return (
       <div className="flex h-dvh w-screen items-center justify-center bg-bg text-text-muted">
         <Loader2 className="animate-spin text-accent" size={24} />
@@ -458,6 +483,8 @@ function AuthGate() {
   if (!session?.user) {
     return (
       <Routes>
+        <Route path="/" element={landing ? <LandingPage /> : <LoginPage />} />
+        <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/forgot" element={<ForgotPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -478,6 +505,9 @@ export default function App() {
           <Route path="/privacy" element={<PrivacyRoute />} />
           <Route path="/terms" element={<TermsRoute />} />
           <Route path="/cookies" element={<CookiesRoute />} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/status" element={<StatusPage />} />
+          <Route path="/changelog" element={<ChangelogPage />} />
           <Route path="/*" element={<AuthGate />} />
         </Routes>
       </BrowserRouter>

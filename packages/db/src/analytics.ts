@@ -4,6 +4,7 @@ import {
   METERS_TO_MILES,
 } from "./geo.js";
 import type { ActivityRow, DayStatsRow, VisitRow } from "./schema.js";
+import { computeActivityGuesses, computeBadges } from "./activity-guess.js";
 
 export type DayTrip = {
   date: string;
@@ -1209,6 +1210,12 @@ export function computeAllAnalytics(store: Store, opts?: { timezone?: string | n
     flights: detectFlights(store),
     "train-hops": detectTrainHops(store),
     "low-movement": detectLowMovementDays(store),
+    "activity-guesses": computeActivityGuesses(store.visits),
+    badges: computeBadges({
+      visits: store.visits,
+      activities: store.activities,
+      allDates: store.allDates,
+    }),
     ...extra,
   };
 }

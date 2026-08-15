@@ -17,6 +17,8 @@ export type TenantId = string;
 
 export type ImportJobStatus = "pending" | "processing" | "ready" | "error";
 
+export type ExportJobStatus = ImportJobStatus;
+
 export type SubscriptionStatus =
   | "none"
   | "trialing"
@@ -109,6 +111,7 @@ export const dataSources = pgTable(
     id: text("id").primaryKey(),
     tenant: text("tenant").notNull(),
     label: text("label").notNull(),
+    color: text("color").$type<PlaceColorToken | null>(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -131,6 +134,7 @@ export const importJobs = pgTable(
     activityCount: integer("activity_count"),
     parsedCount: integer("parsed_count"),
     merge: boolean("merge").notNull().default(false),
+    chosenFile: text("chosen_file"),
     r2Key: text("r2_key"),
     notifiedAt: timestamp("notified_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -139,6 +143,26 @@ export const importJobs = pgTable(
   (t) => [
     index("import_jobs_tenant_idx").on(t.tenant),
     index("import_jobs_user_id_idx").on(t.userId),
+  ],
+);
+
+export const exportJobs = pgTable(
+  "export_jobs",
+  {
+    id: text("id").primaryKey(),
+    tenant: text("tenant").notNull(),
+    userId: text("user_id").notNull(),
+    status: text("status").notNull().$type<ExportJobStatus>(),
+    error: text("error"),
+    visitCount: integer("visit_count"),
+    activityCount: integer("activity_count"),
+    r2Key: text("r2_key"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("export_jobs_tenant_idx").on(t.tenant),
+    index("export_jobs_user_id_idx").on(t.userId),
   ],
 );
 
@@ -278,12 +302,26 @@ export const lifeChapters = pgTable(
   (t) => [index("life_chapters_tenant_idx").on(t.tenant)],
 );
 
+/** Saved map camera (lng/lat, not lat/lon) for MapLibre jumpTo. */
+export type MapBookmark = {
+  id: string;
+  name: string;
+  lng: number;
+  lat: number;
+  zoom: number;
+  pitch: number;
+  bearing: number;
+};
+
 export const userSettings = pgTable("user_settings", {
   tenant: text("tenant").primaryKey(),
   distanceUnit: text("distance_unit").notNull().$type<DistanceUnit>().default("mi"),
   timezone: text("timezone"),
   monthlyRecapEnabled: boolean("monthly_recap_enabled").notNull().default(false),
   monthlyRecapLastYm: text("monthly_recap_last_ym"),
+  mapBookmarks: jsonb("map_bookmarks").$type<MapBookmark[]>().notNull().default([]),
+  mapTileDarkUrl: text("map_tile_dark_url"),
+  mapTileLightUrl: text("map_tile_light_url"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
@@ -317,6 +355,7 @@ export type ActivityRow = typeof activities.$inferSelect;
 export type DayStatsRow = typeof dayStats.$inferSelect;
 export type DataSourceRow = typeof dataSources.$inferSelect;
 export type ImportJobRow = typeof importJobs.$inferSelect;
+export type ExportJobRow = typeof exportJobs.$inferSelect;
 export type SubscriptionRow = typeof subscriptions.$inferSelect;
 export type UserSettingsRow = typeof userSettings.$inferSelect;
 

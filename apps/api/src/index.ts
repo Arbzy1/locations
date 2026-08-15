@@ -16,6 +16,13 @@ import { corsOriginFor } from "./cors";
 import { blockDemo } from "./guards";
 import { clientIp, rateLimit } from "./rate-limit";
 import { applySecurityHeaders, isProductionHttps } from "./security-headers";
+import {
+  cspSourcesForHosts,
+  extraCspHostsFromEnv,
+  parseCustomTileHosts,
+  sanitizeBookmarks,
+  validateTileTemplate,
+} from "./map-tiles";
 import { sniffTimelineJson } from "./upload-sniff";
 import { extractTimelineJsonFromZip, isZipMagic } from "./unzip-takeout";
 import {
@@ -44,7 +51,6 @@ import {
   listPlaceLabels,
   listSources,
   removeSource,
-  renameSource,
   resolveCoords,
   searchTenant,
   updateImportJob,
@@ -53,6 +59,11 @@ import {
   wipeTenantData,
   emailForTenant,
   getImportJob,
+  getAccountExportPayload,
+  createExportJob,
+  getExportJob,
+  getActiveExportJob,
+  updateExportJob,
   listClusters,
   getCluster,
   listClusterVisits,
@@ -66,12 +77,17 @@ import {
   deleteChapter,
   listImportJobs,
   staffTenantStats,
+  patchSource,
+  previewImport,
+  deleteTenantDateRange,
+  rewarmRoutes,
+  pingDatabase,
 } from "./services";
 import { billingEmailKind, sendProductEmail } from "./email";
 import { parsePlaceColor, sanitizePlaceTags } from "./place-labels";
 import { runMonthlyRecaps } from "./monthly-recap";
-
-const MAX_UPLOAD_BYTES = 80 * 1024 * 1024;
+import { runExportPackJob } from "./export-pack-job";
+import { publicExportJob } from "./export-pack";
 
 type Variables = {
   user: { id: string; email: string; name: string; role: string } | null;
@@ -90,6 +106,7 @@ app.use("*", async (c, next) => {
     isProductionHttps: isProductionHttps(c.env.BETTER_AUTH_URL, c.req.url),
     noStore,
     enforceCsp: c.env.CSP_ENFORCE === "true",
+    extraCspSources: cspSourcesForHosts(extraCspHostsFromEnv(c.env)),
   });
 });
 
@@ -176,6 +193,11 @@ app.use("/api/*", async (c, next) => {
   return next();
 });
 
+async function deleteR2Prefix(bucket: R2Bucket, prefix: string) {
+  const listed = await bucket.list({ prefix });
+  await Promise.all(listed.objects.map((o) => bucket.delete(o.key)));
+}
+
 function isErrorResult(value: unknown): value is { error: string } {
   return typeof value === "object" && value !== null && "error" in value;
 }
@@ -191,8 +213,69 @@ function isUploadFile(value: unknown): value is File {
   );
 }
 
-app.get("/api/config", (c) =>
-  c.json({
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseSourceIds(raw: string | undefined): string[] | undefined {
+  if (!raw) return undefined;
+  const ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  return ids.length ? ids : undefined;
+}
+
+function zipBasename(path: string): string {
+  const parts = path.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] || path;
+}
+
+type TimelineUpload = {
+  jsonText: string;
+  chosenPath: string | null;
+  candidates: string[];
+};
+
+async function readTimelineUpload(
+  file: File,
+  maxBytes: number,
+): Promise<{ ok: true; value: TimelineUpload } | { ok: false; error: string; status: 400 | 413 }> {
+  if (file.size > maxBytes) {
+    return {
+      ok: false,
+      status: 413,
+      error: `File too large (${Math.round(file.size / 1024 / 1024)}MB). Max ${Math.round(maxBytes / 1024 / 1024)}MB.`,
+    };
+  }
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".mbox")) {
+    return { ok: false, status: 400, error: "mbox is not supported. Upload Timeline JSON or a Takeout zip." };
+  }
+  const bytes = await file.arrayBuffer();
+  if (name.endsWith(".zip") || isZipMagic(bytes)) {
+    try {
+      const extracted = await extractTimelineJsonFromZip(bytes);
+      return {
+        ok: true,
+        value: {
+          jsonText: extracted.text,
+          chosenPath: extracted.chosenPath,
+          candidates: extracted.candidates,
+        },
+      };
+    } catch (err) {
+      return { ok: false, status: 400, error: err instanceof Error ? err.message : "Invalid zip" };
+    }
+  }
+  const sniffed = sniffTimelineJson(bytes);
+  if (!sniffed.ok) {
+    return { ok: false, status: 400, error: sniffed.error };
+  }
+  return {
+    ok: true,
+    value: { jsonText: sniffed.text, chosenPath: file.name || null, candidates: [file.name].filter(Boolean) },
+  };
+}
+
+app.get("/api/config", (c) => {
+  const customTileHosts = parseCustomTileHosts(c.env.MAP_CUSTOM_TILE_HOSTS);
+  return c.json({
     mapTileDark:
       c.env.MAP_TILE_DARK_URL ||
       "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
@@ -200,10 +283,20 @@ app.get("/api/config", (c) =>
       c.env.MAP_TILE_LIGHT_URL ||
       "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     mapAttr: c.env.MAP_TILE_ATTR || "&copy; OSM &copy; CARTO",
+    mapStyleDark: c.env.MAP_STYLE_DARK_URL || null,
+    mapStyleLight: c.env.MAP_STYLE_LIGHT_URL || null,
+    customTiles: customTileHosts.length > 0,
+    customTileHosts,
     signupDisabled: c.env.DISABLE_SIGNUP === "true",
     globe: c.env.GLOBE_ENABLED !== "false",
-  }),
-);
+    billingConfigured: Boolean(c.env.STRIPE_SECRET_KEY),
+    flags: {
+      globe: c.env.GLOBE_ENABLED !== "false",
+      demoTour: c.env.DEMO_TOUR !== "false",
+      landing: c.env.LANDING_ENABLED !== "false",
+    },
+  });
+});
 
 app.get("/api/me", async (c) => {
   const db = getDb(c.env);
@@ -243,6 +336,7 @@ app.get("/api/day/:date", async (c) => {
   const db = getDb(c.env);
   const date = c.req.param("date");
   const tenant = c.get("tenant");
+  const sourceIds = parseSourceIds(c.req.query("sources"));
 
   if (c.req.query("stream") === "1") {
     c.header("Content-Type", "application/x-ndjson; charset=utf-8");
@@ -255,7 +349,7 @@ app.get("/api/day/:date", async (c) => {
         const result = await withTenant(db, tenant, (tx) =>
           getDay(tx, tenant, date, async (progress) => {
             await write({ type: "progress", ...progress });
-          }),
+          }, sourceIds),
         );
         if ("error" in result) {
           await write({ type: "error", error: result.error });
@@ -269,7 +363,27 @@ app.get("/api/day/:date", async (c) => {
     });
   }
 
-  const result = await withTenant(db, tenant, (tx) => getDay(tx, tenant, date));
+  const result = await withTenant(db, tenant, (tx) => getDay(tx, tenant, date, undefined, sourceIds));
+  if ("error" in result) return c.json(result, 404);
+  return c.json(result);
+});
+
+app.delete("/api/days", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+
+  const from = (c.req.query("from") ?? "").trim();
+  const to = (c.req.query("to") ?? "").trim();
+  const sourceId = (c.req.query("sourceId") ?? "").trim() || undefined;
+  if (!ISO_DATE.test(from) || !ISO_DATE.test(to) || from > to) {
+    return c.json({ error: "from and to must be YYYY-MM-DD with from <= to" }, 400);
+  }
+
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    deleteTenantDateRange(tx, tenant, { from, to, sourceId }),
+  );
   if ("error" in result) return c.json(result, 404);
   return c.json(result);
 });
@@ -396,6 +510,14 @@ app.get("/api/route-progress", async (c) => {
   return c.json(await withTenant(db, tenant, (tx) => getRouteProgress(tx, tenant)));
 });
 
+app.post("/api/routes/rewarm", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  return c.json(await withTenant(db, tenant, (tx) => rewarmRoutes(tx, tenant)));
+});
+
 app.get("/api/place/:placeId", async (c) => {
   const db = getDb(c.env);
   const lat = Number(c.req.query("lat") ?? 0);
@@ -414,14 +536,25 @@ app.patch("/api/sources/:id", async (c) => {
   const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
 
-  const body = (await c.req.json().catch(() => null)) as { label?: string } | null;
-  const nextLabel = body?.label?.trim();
-  if (!nextLabel) return c.json({ error: "label is required" }, 400);
+  const body = (await c.req.json().catch(() => null)) as { label?: string; color?: unknown } | null;
+  const hasLabel = typeof body?.label === "string";
+  const hasColor = body !== null && typeof body === "object" && "color" in body;
+  if (!hasLabel && !hasColor) return c.json({ error: "label or color is required" }, 400);
+
+  let color: PlaceColorToken | null | undefined;
+  if (hasColor) {
+    const parsed = parsePlaceColor(body.color);
+    if (!parsed.ok) return c.json({ error: "Invalid color" }, 400);
+    color = parsed.value;
+  }
 
   const db = getDb(c.env);
   const tenant = c.get("tenant");
   const result = await withTenant(db, tenant, (tx) =>
-    renameSource(tx, tenant, c.req.param("id"), nextLabel),
+    patchSource(tx, tenant, c.req.param("id"), {
+      label: hasLabel ? body.label : undefined,
+      color,
+    }),
   );
   if ("error" in result) {
     const status = result.error === "Source not found" ? 404 : 400;
@@ -447,14 +580,97 @@ app.get("/api/import/status", async (c) => {
   return c.json(await withTenant(db, tenant, (tx) => getImportStatus(tx, tenant)));
 });
 
+app.post("/api/import/preview", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+
+  const user = c.get("user")!;
+  const tenant = c.get("tenant");
+  const ip = clientIp(c.req.raw.headers);
+  const limited = rateLimit({
+    key: `import-preview:${user.id}:${ip}`,
+    limit: 20,
+    windowMs: 60 * 60_000,
+  });
+  if (!limited.ok) {
+    c.header("Retry-After", String(limited.retryAfterSec));
+    return c.json({ error: "Too many import requests. Try again later." }, 429);
+  }
+
+  const db = getDb(c.env);
+  const sessionUser = c.get("user")!;
+  const verified = Boolean(
+    (await createAuth(c.env).api.getSession({ headers: c.req.raw.headers }))?.user
+      ?.emailVerified ?? sessionUser.role === "demo",
+  );
+  if (!verified && sessionUser.role !== "demo") {
+    return c.json({ error: "Verify your email before importing Timeline data" }, 403);
+  }
+
+  const sub = await withTenant(db, tenant, (tx) => getSubscription(tx, tenant));
+  const entitled =
+    isEntitled(sub, { isDemo: false }) || isStaffRole(sessionUser.role);
+  if (c.env.STRIPE_SECRET_KEY && !entitled) {
+    return c.json({ error: "An active subscription is required to import" }, 402);
+  }
+  const quota = quotaForEntitled(Boolean(c.env.STRIPE_SECRET_KEY) ? entitled : true);
+
+  let form: FormData;
+  try {
+    form = await c.req.formData();
+  } catch {
+    return c.json({ error: "Expected multipart form data with a file" }, 400);
+  }
+  const file = form.get("file");
+  if (!isUploadFile(file)) {
+    return c.json({ error: "file is required (Timeline JSON or zip)" }, 400);
+  }
+
+  const uploaded = await readTimelineUpload(file, quota.maxUploadBytes);
+  if (!uploaded.ok) return c.json({ error: uploaded.error }, uploaded.status);
+
+  let records: unknown;
+  try {
+    records = JSON.parse(uploaded.value.jsonText);
+  } catch {
+    return c.json({ error: "Invalid JSON file" }, 400);
+  }
+
+  const sourceIdField = String(form.get("sourceId") ?? "").trim();
+  let sourceId: string | undefined;
+  if (sourceIdField) {
+    const existing = await withTenant(db, tenant, (tx) => getSourceById(tx, tenant, sourceIdField));
+    if (!existing) return c.json({ error: "Source not found" }, 404);
+    sourceId = existing.id;
+  }
+
+  const chosenPath = uploaded.value.chosenPath
+    ? zipBasename(uploaded.value.chosenPath)
+    : null;
+  console.log(JSON.stringify({ kind: "import-preview", chosenPath }));
+
+  try {
+    const preview = await withTenant(db, tenant, async (tx) => {
+      const settings = await getUserSettings(tx, tenant);
+      return previewImport(tx, tenant, {
+        records,
+        sourceId,
+        timezone: settings.timezone,
+        chosenPath: uploaded.value.chosenPath,
+        candidates: uploaded.value.candidates,
+      });
+    });
+    return c.json(preview);
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Could not preview file" }, 400);
+  }
+});
+
 app.post("/api/import", async (c) => {
   const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
 
   const user = c.get("user")!;
-  if (!user.email || c.get("user")?.role === "user") {
-    /* verified check via Better Auth session field if present */
-  }
   const tenant = c.get("tenant");
   const ip = clientIp(c.req.raw.headers);
   const limited = rateLimit({
@@ -497,37 +713,17 @@ app.post("/api/import", async (c) => {
     return c.json({ error: "file is required (Timeline JSON or zip)" }, 400);
   }
 
-  if (file.size > quota.maxUploadBytes) {
-    return c.json(
-      {
-        error: `File too large (${Math.round(file.size / 1024 / 1024)}MB). Max ${Math.round(quota.maxUploadBytes / 1024 / 1024)}MB.`,
-      },
-      413,
-    );
-  }
-
-  const name = file.name.toLowerCase();
-  if (name.endsWith(".mbox")) {
-    return c.json({ error: "mbox is not supported. Upload Timeline JSON or a Takeout zip." }, 400);
-  }
-
-  const bytes = await file.arrayBuffer();
-  let jsonText: string;
-  if (name.endsWith(".zip") || isZipMagic(bytes)) {
-    try {
-      jsonText = await extractTimelineJsonFromZip(bytes);
-    } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : "Invalid zip" }, 400);
-    }
-  } else {
-    const sniffed = sniffTimelineJson(bytes);
-    if (!sniffed.ok) {
-      return c.json({ error: sniffed.error }, 400);
-    }
-    jsonText = sniffed.text;
-  }
+  const uploaded = await readTimelineUpload(file, quota.maxUploadBytes);
+  if (!uploaded.ok) return c.json({ error: uploaded.error }, uploaded.status);
+  const jsonText = uploaded.value.jsonText;
+  const chosenFile = uploaded.value.chosenPath
+    ? zipBasename(uploaded.value.chosenPath)
+    : null;
 
   const merge = String(form.get("merge") ?? "") === "1" || String(form.get("merge") ?? "") === "true";
+  const skipOverlappingDays =
+    String(form.get("skipOverlappingDays") ?? "") === "1" ||
+    String(form.get("skipOverlappingDays") ?? "") === "true";
   const sourceIdField = String(form.get("sourceId") ?? "").trim();
   const labelField = String(form.get("label") ?? "").trim();
 
@@ -557,6 +753,8 @@ app.post("/api/import", async (c) => {
     httpMetadata: { contentType: "application/json" },
   });
 
+  console.log(JSON.stringify({ kind: "import", chosenPath: chosenFile }));
+
   await withTenant(db, tenant, (tx) =>
     createImportJob(tx, {
       id: jobId,
@@ -565,10 +763,20 @@ app.post("/api/import", async (c) => {
       userId: user.id,
       r2Key,
       status: "pending",
+      merge,
+      chosenFile,
     }),
   );
 
-  const message: ImportQueueMessage = { jobId, tenant, userId: user.id, r2Key, sourceId, merge };
+  const message: ImportQueueMessage = {
+    jobId,
+    tenant,
+    userId: user.id,
+    r2Key,
+    sourceId,
+    merge,
+    skipOverlappingDays: merge && skipOverlappingDays,
+  };
 
   if (c.env.IMPORT_QUEUE) {
     await c.env.IMPORT_QUEUE.send(message);
@@ -576,7 +784,7 @@ app.post("/api/import", async (c) => {
     c.executionCtx.waitUntil(runImportJob(c.env, message));
   }
 
-  return c.json({ jobId, sourceId, label });
+  return c.json({ jobId, sourceId, label, chosenFile });
 });
 
 app.get("/api/search", async (c) => {
@@ -804,6 +1012,8 @@ for (const key of [
   "lapsed-places",
   "hour-of-week",
   "personality",
+  "activity-guesses",
+  "badges",
 ] as const) {
   app.get(`/api/analytics/${key}`, async (c) => {
     const db = getDb(c.env);
@@ -819,7 +1029,24 @@ app.patch("/api/account/settings", async (c) => {
     distanceUnit?: "mi" | "km";
     timezone?: string | null;
     monthlyRecapEnabled?: boolean;
+    mapBookmarks?: unknown;
+    mapTileDarkUrl?: string | null;
+    mapTileLightUrl?: string | null;
   } | null;
+  const allowedHosts = parseCustomTileHosts(c.env.MAP_CUSTOM_TILE_HOSTS);
+  if (body?.mapTileDarkUrl != null && body.mapTileDarkUrl !== "") {
+    const check = validateTileTemplate(body.mapTileDarkUrl, allowedHosts);
+    if (!check.ok) return c.json({ error: check.error }, 400);
+  }
+  if (body?.mapTileLightUrl != null && body.mapTileLightUrl !== "") {
+    const check = validateTileTemplate(body.mapTileLightUrl, allowedHosts);
+    if (!check.ok) return c.json({ error: check.error }, 400);
+  }
+  let mapBookmarks: ReturnType<typeof sanitizeBookmarks> | undefined;
+  if (body?.mapBookmarks !== undefined) {
+    mapBookmarks = sanitizeBookmarks(body.mapBookmarks);
+    if (!Array.isArray(mapBookmarks)) return c.json({ error: mapBookmarks.error }, 400);
+  }
   const db = getDb(c.env);
   const tenant = c.get("tenant");
   const settings = await withTenant(db, tenant, (tx) =>
@@ -827,6 +1054,9 @@ app.patch("/api/account/settings", async (c) => {
       distanceUnit: body?.distanceUnit,
       timezone: body?.timezone,
       monthlyRecapEnabled: body?.monthlyRecapEnabled,
+      mapBookmarks: Array.isArray(mapBookmarks) ? mapBookmarks : undefined,
+      mapTileDarkUrl: body?.mapTileDarkUrl,
+      mapTileLightUrl: body?.mapTileLightUrl,
     }),
   );
   return c.json(settings);
@@ -835,15 +1065,73 @@ app.patch("/api/account/settings", async (c) => {
 app.get("/api/account/export", async (c) => {
   const db = getDb(c.env);
   const tenant = c.get("tenant");
-  const data = await withTenant(db, tenant, async (tx) => ({
-    overview: await getOverview(tx, tenant),
-    sources: await listSources(tx, tenant),
-    settings: await getUserSettings(tx, tenant),
-    labels: await listPlaceLabels(tx, tenant),
-  }));
+  const data = await withTenant(db, tenant, (tx) => getAccountExportPayload(tx, tenant));
   const stamp = new Date().toISOString().slice(0, 10);
   c.header("Content-Disposition", `attachment; filename="locations-export-${stamp}.json"`);
   return c.json({ tenant, exportedAt: new Date().toISOString(), ...data });
+});
+
+app.post("/api/account/export-pack", async (c) => {
+  const user = c.get("user")!;
+  const tenant = c.get("tenant");
+  const ip = clientIp(c.req.raw.headers);
+  const limited = rateLimit({ key: `export-pack:${tenant}:${ip}`, limit: 3, windowMs: 10 * 60_000 });
+  if (!limited.ok) {
+    c.header("Retry-After", String(limited.retryAfterSec));
+    return c.json({ error: "Too many export requests" }, 429);
+  }
+  const db = getDb(c.env);
+  const active = await withTenant(db, tenant, (tx) => getActiveExportJob(tx, tenant));
+  if (active) {
+    return c.json({ error: "An export is already running", job: publicExportJob(active) }, 409);
+  }
+  const jobId = crypto.randomUUID();
+  const r2Key = `exports/${user.id}/${jobId}.zip`;
+  await withTenant(db, tenant, (tx) =>
+    createExportJob(tx, { id: jobId, tenant, userId: user.id, r2Key, status: "pending" }),
+  );
+  c.executionCtx.waitUntil(runExportPackJob(c.env, { jobId, tenant, userId: user.id, r2Key }));
+  return c.json({ jobId, status: "pending" });
+});
+
+app.get("/api/account/export-pack/:jobId/file", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const jobId = c.req.param("jobId");
+  const job = await withTenant(db, tenant, (tx) => getExportJob(tx, jobId, tenant));
+  if (!job) return c.json({ error: "Not found" }, 404);
+  if (job.status === "pending" || job.status === "processing") {
+    return c.json({ error: "Pack is still building" }, 409);
+  }
+  if (job.status !== "ready" || !job.r2Key) {
+    return c.json({ error: "Pack expired. Request a new download." }, 410);
+  }
+  const obj = await c.env.UPLOADS.get(job.r2Key);
+  if (!obj) {
+    return c.json({ error: "Pack expired. Request a new download." }, 410);
+  }
+  const bytes = await obj.arrayBuffer();
+  try {
+    await c.env.UPLOADS.delete(job.r2Key);
+  } catch {
+    /* ignore missing object */
+  }
+  await withTenant(db, tenant, (tx) =>
+    updateExportJob(tx, jobId, tenant, { r2Key: null }),
+  );
+  const stamp = new Date().toISOString().slice(0, 10);
+  c.header("Content-Type", "application/zip");
+  c.header("Content-Disposition", `attachment; filename="locations-gdpr-pack-${stamp}.zip"`);
+  return c.body(bytes);
+});
+
+app.get("/api/account/export-pack/:jobId", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const jobId = c.req.param("jobId");
+  const job = await withTenant(db, tenant, (tx) => getExportJob(tx, jobId, tenant));
+  if (!job) return c.json({ error: "Not found" }, 404);
+  return c.json(publicExportJob(job));
 });
 
 app.get("/api/places/labels", async (c) => {
@@ -860,8 +1148,8 @@ app.post("/api/account/delete", async (c) => {
   const tenant = c.get("tenant");
   const db = getDb(c.env);
   const prefix = `uploads/${user.id}/`;
-  const listed = await c.env.UPLOADS.list({ prefix });
-  await Promise.all(listed.objects.map((o) => c.env.UPLOADS.delete(o.key)));
+  await deleteR2Prefix(c.env.UPLOADS, prefix);
+  await deleteR2Prefix(c.env.UPLOADS, `exports/${user.id}/`);
   const stripe = stripeClient(c.env);
   const sub = await withTenant(db, tenant, (tx) => getSubscription(tx, tenant));
   if (stripe && sub?.stripeCustomerId) {
@@ -1009,7 +1297,10 @@ app.post("/api/billing/webhook", async (c) => {
   return c.json({ received: true });
 });
 
-app.get("/api/health", (c) => c.json({ ok: true }));
+app.get("/api/health", async (c) => {
+  const dbOk = await pingDatabase(c.env).catch(() => false);
+  return c.json({ ok: true, worker: "ok", db: dbOk ? "ok" : "error" });
+});
 
 async function sendBillingNotice(
   env: Env,
@@ -1063,7 +1354,7 @@ async function notifyImportJob(
 
 async function runImportJob(env: Env, message: ImportQueueMessage): Promise<void> {
   const jobDb = getDb(env);
-  const { jobId, tenant, r2Key, sourceId, merge } = message;
+  const { jobId, tenant, r2Key, sourceId, merge, skipOverlappingDays } = message;
   try {
     await withTenant(jobDb, tenant, (tx) =>
       updateImportJob(tx, jobId, { status: "processing" }, tenant),
@@ -1082,7 +1373,7 @@ async function runImportJob(env: Env, message: ImportQueueMessage): Promise<void
       updateImportJob(tx, jobId, { status: "processing", parsedCount }, tenant),
     );
     const result = await withTenant(jobDb, tenant, (tx) =>
-      importSourceData(tx, { tenant, sourceId, records, merge }),
+      importSourceData(tx, { tenant, sourceId, records, merge, skipOverlappingDays }),
     );
     await withTenant(jobDb, tenant, (tx) =>
       updateImportJob(
@@ -1119,6 +1410,7 @@ function withAssetSecurityHeaders(
     isProductionHttps: isProductionHttps(env.BETTER_AUTH_URL, requestUrl),
     noStore: false,
     enforceCsp: env.CSP_ENFORCE === "true",
+    extraCspSources: cspSourcesForHosts(extraCspHostsFromEnv(env)),
   });
   return new Response(response.body, {
     status: response.status,

@@ -14,7 +14,9 @@ Do not start with live sharing, family tenancy, or an LLM that sees coordinates.
 
 Hotspots, Day View, Day Trips, Insights, Settings, auth, legal, import, billing, search.
 
-Explore overflow (not extra bottom-nav tabs) also includes: place directory and place page, corridor page, coverage map, compare days, time-lapse replay, month/week/on-this-day/gaps, year-in-review page with private PNG download, multi-day trip story and named trips, away nights, commute, weekend vs weekday, firsts, life chapters, moving history, routine vs anomaly, onboarding, import history, data health, staff console (own tenant, no coordinates), waitlist copy when signup is disabled, and an optional MapLibre globe of heatmap points.
+Explore overflow (not extra bottom-nav tabs) also includes: place directory and place page, corridor page, coverage map, compare days, time-lapse replay, month/week/on-this-day/gaps, year-in-review page with private PNG download, multi-day trip story and named trips, away nights, commute, weekend vs weekday, firsts, life chapters, moving history, routine vs anomaly, onboarding, import history, data health, staff console (own tenant, stuck imports, wipe runbook), in-app changelog, activity guesses, badges, waitlist copy when signup is disabled, and an optional MapLibre globe of heatmap points.
+
+Public marketing pages (separate from the app shell): landing, pricing, status, changelog.
 
 ---
 
@@ -87,43 +89,28 @@ Shipped from this list: year-in-review chapters, streaks, new/lapsed places, per
 
 ## 6. Search, filters, and navigation
 
-- Mobile search (command palette / sheet)
-- Filter all views by date range, source, mode, place tag
-- Saved filter presets
-- Jump to GPS (paste lat,lon)
-- Recent places
-- Command palette (`g h` Hotspots, `g d` Day, date tokens)
-- Deep links that survive refresh (router already exists for tabs)
+Shipped: command palette (desktop dialog, mobile sheet), URL-synced Hotspots and Day Trips filters, GPS jump, recent places, local presets, and `g h` / `[` `]` chords. Insights is not date-sliced (analytics cache is whole-tenant).
+
+Remaining:
+
+- Filter Insights / year-review by date range (needs a recompute, not a chrome toggle)
+- Saved presets synced across devices (would be a tenant table)
 
 ---
 
 ## 7. Maps and basemaps
 
-- MapLibre / vector tiles (if CSP and vendor keys allow)
-- 3D buildings
+Shipped: MapLibre product maps, vector style + 3D buildings (env), measure, bookmarks, mini-map, heatmap/layers chrome, cluster spiderfy, Street View/Mapillary link-out, allowlisted custom raster XYZ.
+
+Remaining:
+
 - Traffic overlay (historical: hard; skip unless a vendor exists)
 - Isochrones from home
-- Measure tool
-- Bookmark map views
-- Mini-map
-- Better collision of heatmap vs layers vs legend (iterate on mobile)
-- Cluster click to spiderfy visits
-- Street View / Mapillary link-out (external; do not load PII into their URL if avoidable)
-- Custom tile URL in Settings for self-hosters
 
 ---
 
 ## 8. Import, sources, and data quality
 
-- Drag-drop on empty state
-- Import from Google Takeout folder structure with clearer errors
-- Records.json vs semantic Timeline: explain which file won
-- Duplicate-day merge preview
-- "What will this import change" dry run
-- Multiple phones / accounts as coloured layers
-- Delete a date range
-- Reprocess routes only
-- Detect Takeout timezone bugs
 - Import GPX / GeoJSON / Strava / Apple (new parsers; large)
 - Continuous sync: out of character (live tracker). If ever: opt-in companion, not default
 
@@ -131,18 +118,11 @@ Shipped from this list: year-in-review chapters, streaks, new/lapsed places, per
 
 ## 9. Account, billing, privacy
 
-- Change display name in Settings (email and password change already ship)
-- Sessions list and revoke
 - 2FA
 - Passkeys
-- Data export ZIP (JSON + a simple HTML summary with no third-party map keys)
 - Retention: auto-delete after N years
-- Download a GDPR pack
-- Pause subscription vs cancel copy
 - Family plan: conflicts with tenant-per-user; only if you redesign tenancy
 - Referral / gift subscription
-- Invoice history
-- Danger zone: delete one source vs whole account (source delete exists)
 
 ---
 
@@ -150,7 +130,7 @@ Shipped from this list: year-in-review chapters, streaks, new/lapsed places, per
 
 - Installable PWA
 - Add to Home Screen
-- Bottom-sheet search
+- Bottom-sheet search (ships with the command palette)
 - Swipe between days
 - Haptics on day change
 - Large-map / cinema mode
@@ -174,24 +154,27 @@ Prefer exports and screenshots over multi-user maps unless you are ready to redo
 
 ## 12. Staff, demo, and growth
 
-- Richer public demo: scripted tour
-- Marketing landing (separate from the app shell)
-- Pricing page
-- Changelog in-app
-- Status page (Worker + Neon)
-- Admin: stuck imports, tenant wipe runbook UI (coords still never in logs)
-- Feature flags
+Shipped: skippable scripted demo tour, public landing at `/` (kill switch `LANDING_ENABLED`), `/pricing`, `/status` (Worker + Neon via `GET /api/health`), public `/changelog` plus in-app `/updates`, staff stuck-import list and wipe runbook on `/admin` (own tenant; job ids and counts only), env flags on `GET /api/config` (`globe`, `demoTour`, `landing`).
+
+Remaining:
+
+- Richer demo script (more steps, highlight chrome)
+- Dollar amounts on pricing (keep price ids server-only)
+- Status history / incidents (not just a live ping)
+- Cross-tenant admin (rejected under FORCE RLS; staff stay on their own tenant)
 
 ---
 
 ## 13. Later / research
 
-- Semantic "what was I doing" from dwell + hour + type
+Shipped (heuristics only): activity guesses from dwell + hour + Google place type; coverage percent and visit badges. Not an LLM. Place names stay off the guess list.
+
+Do not build:
+
 - LLM journal: dangerous (coords in prompts). If ever: local model, redacted places, never email
 - AR "stand where you stood"
 - Music / calendar overlay from other Takeout products
 - Predict "you will go to X on Thursday" (creepy; skip unless opt-in research)
-- Game: coverage %, visit badges
 - Soundscape of a day (synthetic; novelty)
 - Physical print atlas
 - Browser extension: none that reads live location

@@ -17,8 +17,8 @@ export default function LegalPage({
       <article className="ui-enter mx-auto max-w-2xl">
         <h1 className="font-display text-2xl font-semibold">{title}</h1>
         <div className="mt-6 space-y-4 text-sm leading-relaxed text-text-muted">{children}</div>
-        <Button asChild variant="outline" className="mt-8" title="Back to sign in">
-          <Link to="/">Back to sign in</Link>
+        <Button asChild variant="outline" className="mt-8" title="Back to home">
+          <Link to="/">Back to home</Link>
         </Button>
       </article>
     </div>

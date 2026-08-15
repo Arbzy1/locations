@@ -2,7 +2,9 @@ import { Link } from 'react-router-dom';
 import CatalogPage from './CatalogPage';
 import { Button } from '../ui/button';
 import { useAdminStats, useCachedAnalytics, useImportJobs, useImportStatus } from '../../hooks/useApi';
+import { TIMEZONE_SKEW_COPY } from '../ImportDropZone';
 import { useSession } from '../../lib/auth';
+import ChangelogList from '../marketing/ChangelogList';
 
 export function OnboardingPage() {
   const { data: session } = useSession();
@@ -44,6 +46,7 @@ export function ImportsPage() {
             <div className="font-medium">{j.status}</div>
             <div className="text-text-muted">
               {j.parsedCount ?? 0} parsed · {j.visitCount ?? 0} visits · {j.activityCount ?? 0} journeys
+              {j.chosenFile ? ` · ${j.chosenFile}` : ''}
             </div>
             {j.error && <div className="text-train">{j.error}</div>}
           </li>
@@ -64,7 +67,10 @@ export function HealthPage() {
     unknownModes: number;
     midnightCrossings: number;
   }>('data-health');
+  const { data: importStatus } = useImportStatus();
   const stats = data && !Array.isArray(data) ? data : null;
+  const midnightHigh = (stats?.midnightCrossings ?? 0) >= 20;
+  const tzWarn = Boolean(importStatus?.timezoneWarning?.warn) || midnightHigh;
   return (
     <CatalogPage title="Data health" description="Import quality checks. Dates and counts only, no coordinates.">
       {stats ? (
@@ -76,6 +82,11 @@ export function HealthPage() {
         </ul>
       ) : (
         <p className="text-sm text-text-muted">Health stats appear after the next Timeline import.</p>
+      )}
+      {tzWarn && (
+        <p className="mt-4 rounded-lg border border-border bg-bg/60 px-3 py-2 text-sm text-text-muted">
+          {TIMEZONE_SKEW_COPY}
+        </p>
       )}
     </CatalogPage>
   );
@@ -90,6 +101,8 @@ export function AdminPage() {
       </CatalogPage>
     );
   }
+  const stuck = data?.stuckJobs ?? [];
+  const recent = data?.recentJobs ?? [];
   return (
     <CatalogPage
       title="Staff console"
@@ -100,7 +113,58 @@ export function AdminPage() {
         <li>Sources: {data?.sourceCount ?? 0}</li>
         <li>Latest job: {data?.latestJobStatus ?? 'none'}</li>
         <li>Recent jobs listed: {data?.recentJobCount ?? 0}</li>
+        <li>Stuck imports (pending or processing over 15 minutes): {data?.stuckJobCount ?? 0}</li>
       </ul>
+      {stuck.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-text">Stuck jobs</h3>
+          <ul className="space-y-2 text-sm">
+            {stuck.map((j) => (
+              <li key={j.id} className="rounded-lg border border-border bg-bg px-3 py-2">
+                <div className="font-mono text-xs">{j.id}</div>
+                <div className="text-text-muted">
+                  {j.status} · {j.ageMinutes} min · {j.parsedCount} parsed · {j.visitCount} visits
+                </div>
+                {j.error && <div className="text-train">{j.error}</div>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {recent.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-text">Recent jobs</h3>
+          <ul className="space-y-2 text-sm">
+            {recent.map((j) => (
+              <li key={j.id} className="rounded-lg border border-border bg-bg px-3 py-2">
+                <div className="font-mono text-xs">{j.id}</div>
+                <div className="text-text-muted">
+                  {j.status} · {j.ageMinutes} min · {j.parsedCount} parsed · {j.visitCount} visits
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <div className="rounded-lg border border-border bg-bg px-3 py-3 text-sm text-text-muted">
+        <h3 className="font-semibold text-text">Wipe this tenant</h3>
+        <p className="mt-2">
+          Staff still use their own tenant. To wipe: Settings, Danger zone, Delete account. That removes
+          Neon rows, the R2 prefix, sessions, and the Stripe customer. Coordinates are never written to
+          logs or email. Check Worker logs by job id only. Do not paste Timeline JSON.
+        </p>
+        <Button asChild className="mt-3" variant="outline" title="Open Settings danger zone">
+          <Link to="/settings">Open Settings</Link>
+        </Button>
+      </div>
+    </CatalogPage>
+  );
+}
+
+export function UpdatesPage() {
+  return (
+    <CatalogPage title="Changelog" description="Product notes. The public page at /changelog is the same copy.">
+      <ChangelogList />
     </CatalogPage>
   );
 }

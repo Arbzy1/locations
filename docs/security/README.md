@@ -18,7 +18,7 @@ Keep Drizzle tenant filters **and** FORCE RLS. Full classes:
 
 ## Headers and XSS
 
-- Enforcing CSP in production (`CSP_ENFORCE=true`). Leaflet HTML must escape labels.
+- Enforcing CSP in production (`CSP_ENFORCE=true`). Map popup HTML must escape labels.
 - No `dangerouslySetInnerHTML` for user/OSM text.
 
 ## Uploads

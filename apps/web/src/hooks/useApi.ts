@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useQueries } from '@tanstack/react-query';
 import type {
   DayData,
   DaySummary,
@@ -75,8 +75,11 @@ async function fetchDayStreaming(
   date: string,
   onProgress: (p: DayLoadProgress) => void,
   signal?: AbortSignal,
+  sourceIds?: string[],
 ): Promise<DayData> {
-  const res = await fetch(`/api/day/${date}?stream=1`, {
+  const params = new URLSearchParams({ stream: '1' });
+  if (sourceIds?.length) params.set('sources', sourceIds.join(','));
+  const res = await fetch(`/api/day/${date}?${params.toString()}`, {
     credentials: 'include',
     signal,
   });
@@ -93,7 +96,7 @@ async function fetchDayStreaming(
   let streamError: string | null = null;
 
   const pushLog = (stage: string, detail?: string) => {
-    const line = detail ? `${stage} — ${detail}` : stage;
+    const line = detail ? `${stage}: ${detail}` : stage;
     if (logs[logs.length - 1] !== line) {
       logs.push(line);
       if (logs.length > 12) logs.shift();
@@ -142,15 +145,16 @@ async function fetchDayStreaming(
   return result;
 }
 
-export function useDayData(date: string) {
+export function useDayData(date: string, sourceIds?: string[]) {
   const tenantKey = useTenantKey();
   const [progress, setProgress] = useState<DayLoadProgress | null>(null);
+  const sourceKey = sourceIds?.slice().sort().join(',') ?? '';
 
   const query = useQuery<DayData>({
-    queryKey: ['day', tenantKey, date],
+    queryKey: ['day', tenantKey, date, sourceKey],
     queryFn: ({ signal }) => {
       setProgress({ stage: 'Starting', percent: 0, logs: ['Starting…'] });
-      return fetchDayStreaming(date, setProgress, signal);
+      return fetchDayStreaming(date, setProgress, signal, sourceIds);
     },
     enabled: !!date && tenantKey !== 'anon',
     staleTime: Infinity,
@@ -178,6 +182,29 @@ export function useHeatmap(opts?: { sources?: string[]; from?: string; to?: stri
     queryFn: () => fetchJson(`/api/heatmap${qs ? `?${qs}` : ''}`),
     staleTime: Infinity,
     enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useHeatmapLayers(
+  sourceIds: string[] | undefined,
+  opts?: { from?: string; to?: string },
+) {
+  const tenantKey = useTenantKey();
+  const ids = sourceIds ?? [];
+  return useQueries({
+    queries: ids.map((id) => {
+      const params = new URLSearchParams();
+      params.set('sources', id);
+      if (opts?.from) params.set('from', opts.from);
+      if (opts?.to) params.set('to', opts.to);
+      const qs = params.toString();
+      return {
+        queryKey: ['heatmap', tenantKey, qs],
+        queryFn: () => fetchJson<HeatmapPoint[]>(`/api/heatmap?${qs}`),
+        staleTime: Infinity,
+        enabled: tenantKey !== 'anon' && ids.length > 1,
+      };
+    }),
   });
 }
 
@@ -268,7 +295,7 @@ export function useImportStatus(opts?: { poll?: boolean }) {
 export function useSearch(q: string) {
   const tenantKey = useTenantKey();
   return useQuery<{
-    places: { cluster: string; lat: number; lon: number; date: string }[];
+    places: { cluster: string; label?: string; lat: number; lon: number; date: string }[];
     days: { date: string }[];
   }>({
     queryKey: ['search', tenantKey, q],
@@ -525,6 +552,8 @@ export function useImportJobs() {
       visitCount: number | null;
       activityCount: number | null;
       parsedCount: number | null;
+      merge?: boolean;
+      chosenFile?: string | null;
       createdAt: string;
       updatedAt: string;
     }[]
@@ -542,6 +571,23 @@ export function useAdminStats() {
     sourceCount: number;
     latestJobStatus: string | null;
     recentJobCount: number;
+    stuckJobCount: number;
+    stuckJobs: {
+      id: string;
+      status: string;
+      ageMinutes: number;
+      parsedCount: number;
+      visitCount: number;
+      error: string | null;
+    }[];
+    recentJobs: {
+      id: string;
+      status: string;
+      ageMinutes: number;
+      parsedCount: number;
+      visitCount: number;
+      error: string | null;
+    }[];
   }>({
     queryKey: ['admin-stats', tenantKey],
     queryFn: () => fetchJson('/api/admin/stats'),
@@ -599,7 +645,16 @@ export function usePersonality() {
 }
 
 export function usePublicConfig() {
-  return useQuery<{ signupDisabled?: boolean; globe?: boolean }>({
+  return useQuery<{
+    signupDisabled?: boolean;
+    globe?: boolean;
+    billingConfigured?: boolean;
+    customTiles?: boolean;
+    customTileHosts?: string[];
+    mapStyleDark?: string | null;
+    mapStyleLight?: string | null;
+    flags?: { globe?: boolean; demoTour?: boolean; landing?: boolean };
+  }>({
     queryKey: ['public-config'],
     queryFn: () => fetchJson('/api/config'),
     staleTime: 60_000,

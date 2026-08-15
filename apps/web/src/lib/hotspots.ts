@@ -16,6 +16,10 @@ export function isPlaceColorToken(value: string | null | undefined): value is Pl
   return Boolean(value && (PLACE_COLOR_TOKENS as readonly string[]).includes(value));
 }
 
+export function sourceTokenVar(color: string | null | undefined): string {
+  return isPlaceColorToken(color) ? `var(--${color})` : 'var(--accent)';
+}
+
 export type PlaceLabelMeta = {
   placeKey: string;
   label: string;

@@ -1,10 +1,12 @@
 import {
   createDb,
+  createHttpDb,
   activities,
   analyticsCache,
   dataSources,
   dayStats,
   importJobs,
+  exportJobs,
   visits,
   routeCache,
   placeCache,
@@ -23,8 +25,14 @@ import {
   haversineM,
   METERS_TO_MILES,
   deleteSourceData,
+  deleteDateRange,
   ensureDataSource,
   importSourceData,
+  parseTimelineJson,
+  detectTimelineFormat,
+  datesFromParsed,
+  importDayDiff,
+  timezoneSkewWarning,
   rebuildHourOfWeekCache,
   and,
   eq,
@@ -34,6 +42,7 @@ import {
   ilike,
   inArray,
   gte,
+  gt,
   lte,
   lt,
   type RouteStep,
@@ -42,7 +51,9 @@ import {
   type TenantId,
   type PlaceColorToken,
   type ImportJobStatus,
+  type ExportJobStatus,
   type DistanceUnit,
+  type MapBookmark,
   landmarkForPlaceId,
 } from "@locations/db";
 import type { Env } from "./env";
@@ -125,6 +136,18 @@ function parseSteps(legs: Array<{ steps?: unknown[] }>): RouteStep[] {
 
 export function getDb(env: Env) {
   return createDb(env.DATABASE_URL);
+}
+
+/** Worker liveness helper. Never logs the connection string or query errors. */
+export async function pingDatabase(env: Env): Promise<boolean> {
+  if (!env.DATABASE_URL) return false;
+  try {
+    const db = createHttpDb(env.DATABASE_URL);
+    await db.execute(sql`select 1`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function fetchRoute(
@@ -337,6 +360,7 @@ function visitToApi(v: VisitRow) {
     semantic_type: v.semanticType,
     place_id: v.placeId,
     duration_minutes: v.durationMinutes,
+    source_id: v.sourceId,
   };
 }
 
@@ -351,6 +375,7 @@ function activityToApi(a: ActivityRow) {
     mode: a.mode,
     distance_meters: a.distanceMeters,
     duration_minutes: a.durationMinutes,
+    source_id: a.sourceId,
   };
 }
 
@@ -605,13 +630,34 @@ export function filterHiddenAnalytics(key: string, data: unknown, hidden: Set<st
 }
 
 export async function getRouteProgress(db: ReturnType<typeof createDb>, tenant: TenantId) {
-  const [activityCount] = await db
-    .select({ count: sql<number>`count(*)::int` })
+  const rows = await db
+    .select({
+      startLat: activities.startLat,
+      startLon: activities.startLon,
+      endLat: activities.endLat,
+      endLon: activities.endLon,
+      mode: activities.mode,
+    })
     .from(activities)
     .where(eq(activities.tenant, tenant));
-  const [cachedCount] = await db.select({ count: sql<number>`count(*)::int` }).from(routeCache);
-  const total = activityCount?.count ?? 0;
-  const cached = cachedCount?.count ?? 0;
+
+  const keys: string[] = [];
+  for (const a of rows) {
+    if (SKIP.has(a.mode)) continue;
+    const profile = MODE_TO_PROFILE[a.mode] ?? "driving";
+    keys.push(makeRouteCacheKey(a.startLat, a.startLon, a.endLat, a.endLon, profile));
+  }
+  const total = keys.length;
+  let cached = 0;
+  for (let i = 0; i < keys.length; i += 400) {
+    const batch = keys.slice(i, i + 400);
+    if (!batch.length) continue;
+    const found = await db
+      .select({ key: routeCache.key })
+      .from(routeCache)
+      .where(inArray(routeCache.key, batch));
+    cached += found.length;
+  }
   return {
     running: false,
     total,
@@ -634,6 +680,7 @@ export async function getDay(
   tenant: TenantId,
   date: string,
   onProgress?: (event: DayProgressEvent) => void | Promise<void>,
+  sourceIds?: string[],
 ) {
   const report = async (event: DayProgressEvent) => {
     await onProgress?.(event);
@@ -649,7 +696,7 @@ export async function getDay(
   const day = dayRows[0];
   if (!day) return { error: "No data for this date" };
 
-  const dayVisits = await db
+  const dayVisitsRaw = await db
     .select()
     .from(visits)
     .where(
@@ -659,7 +706,7 @@ export async function getDay(
       ),
     )
     .orderBy(visits.start);
-  const dayActivities = await db
+  const dayActivitiesRaw = await db
     .select()
     .from(activities)
     .where(
@@ -669,6 +716,13 @@ export async function getDay(
       ),
     )
     .orderBy(activities.start);
+
+  const dayVisits = sourceIds?.length
+    ? dayVisitsRaw.filter((v) => v.sourceId && sourceIds.includes(v.sourceId))
+    : dayVisitsRaw;
+  const dayActivities = sourceIds?.length
+    ? dayActivitiesRaw.filter((a) => a.sourceId && sourceIds.includes(a.sourceId))
+    : dayActivitiesRaw;
 
   await report({
     stage: "Building timeline",
@@ -1085,6 +1139,7 @@ export async function listSources(db: ReturnType<typeof createDb>, tenant: Tenan
     result.push({
       id: s.id,
       label: s.label,
+      color: s.color ?? null,
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
       visitCount: v?.count ?? 0,
@@ -1126,6 +1181,46 @@ export async function renameSource(
   return { id: sourceId, label: trimmed };
 }
 
+export async function patchSource(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  sourceId: string,
+  patch: { label?: string; color?: PlaceColorToken | null },
+) {
+  const existing = await db
+    .select()
+    .from(dataSources)
+    .where(and(eq(dataSources.tenant, tenant), eq(dataSources.id, sourceId)))
+    .limit(1);
+  if (!existing[0]) return { error: "Source not found" as const };
+
+  const nextLabel = patch.label !== undefined ? patch.label.trim() : existing[0].label;
+  if (!nextLabel) return { error: "Label is required" as const };
+
+  try {
+    await db
+      .update(dataSources)
+      .set({
+        label: nextLabel,
+        ...(patch.color !== undefined ? { color: patch.color } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(dataSources.tenant, tenant), eq(dataSources.id, sourceId)));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("unique") || message.includes("duplicate")) {
+      return { error: "A source with that label already exists" as const };
+    }
+    throw err;
+  }
+
+  return {
+    id: sourceId,
+    label: nextLabel,
+    color: patch.color !== undefined ? patch.color : existing[0].color ?? null,
+  };
+}
+
 export async function removeSource(
   db: ReturnType<typeof createDb>,
   tenant: TenantId,
@@ -1159,6 +1254,14 @@ export async function getImportStatus(
 
   const sources = await listSources(db, tenant);
 
+  const sample = await db
+    .select({ start: visits.start, date: visits.date })
+    .from(visits)
+    .where(eq(visits.tenant, tenant))
+    .limit(250);
+  const settings = await getUserSettings(db, tenant);
+  const timezoneWarning = timezoneSkewWarning(sample, settings.timezone);
+
   return {
     hasData: (visitCount?.count ?? 0) > 0,
     visitCount: visitCount?.count ?? 0,
@@ -1173,6 +1276,8 @@ export async function getImportStatus(
           visitCount: jobs[0].visitCount,
           activityCount: jobs[0].activityCount,
           parsedCount: jobs[0].parsedCount,
+          merge: jobs[0].merge,
+          chosenFile: jobs[0].chosenFile,
           createdAt: jobs[0].createdAt,
           updatedAt: jobs[0].updatedAt,
         }
@@ -1185,9 +1290,12 @@ export async function getImportStatus(
       visitCount: j.visitCount,
       activityCount: j.activityCount,
       parsedCount: j.parsedCount,
+      merge: j.merge,
+      chosenFile: j.chosenFile,
       createdAt: j.createdAt,
       updatedAt: j.updatedAt,
     })),
+    timezoneWarning,
   };
 }
 
@@ -1200,6 +1308,8 @@ export async function createImportJob(
     userId: string;
     r2Key: string;
     status?: ImportJobStatus;
+    merge?: boolean;
+    chosenFile?: string | null;
   },
 ) {
   const now = new Date();
@@ -1209,6 +1319,8 @@ export async function createImportJob(
     sourceId: opts.sourceId,
     userId: opts.userId,
     status: opts.status ?? "pending",
+    merge: opts.merge ?? false,
+    chosenFile: opts.chosenFile ?? null,
     r2Key: opts.r2Key,
     createdAt: now,
     updatedAt: now,
@@ -1259,6 +1371,113 @@ export async function updateImportJob(
     .where(tenant ? and(eq(importJobs.id, jobId), eq(importJobs.tenant, tenant)) : eq(importJobs.id, jobId));
 }
 
+export async function getAccountExportPayload(db: ReturnType<typeof createDb>, tenant: TenantId) {
+  return {
+    overview: await getOverview(db, tenant),
+    sources: await listSources(db, tenant),
+    settings: await getUserSettings(db, tenant),
+    labels: await listPlaceLabels(db, tenant),
+  };
+}
+
+const EXPORT_PAGE = 1000;
+
+export async function listVisitExportPage(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  afterId: number,
+) {
+  return db
+    .select()
+    .from(visits)
+    .where(and(eq(visits.tenant, tenant), gt(visits.id, afterId)))
+    .orderBy(visits.id)
+    .limit(EXPORT_PAGE);
+}
+
+export async function listActivityExportPage(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  afterId: number,
+) {
+  return db
+    .select()
+    .from(activities)
+    .where(and(eq(activities.tenant, tenant), gt(activities.id, afterId)))
+    .orderBy(activities.id)
+    .limit(EXPORT_PAGE);
+}
+
+export async function createExportJob(
+  db: ReturnType<typeof createDb>,
+  opts: {
+    id: string;
+    tenant: TenantId;
+    userId: string;
+    r2Key: string;
+    status?: ExportJobStatus;
+  },
+) {
+  const now = new Date();
+  await db.insert(exportJobs).values({
+    id: opts.id,
+    tenant: opts.tenant,
+    userId: opts.userId,
+    status: opts.status ?? "pending",
+    r2Key: opts.r2Key,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+export async function getExportJob(
+  db: ReturnType<typeof createDb>,
+  jobId: string,
+  tenant: TenantId,
+) {
+  const rows = await db
+    .select()
+    .from(exportJobs)
+    .where(and(eq(exportJobs.id, jobId), eq(exportJobs.tenant, tenant)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getActiveExportJob(db: ReturnType<typeof createDb>, tenant: TenantId) {
+  const rows = await db
+    .select()
+    .from(exportJobs)
+    .where(eq(exportJobs.tenant, tenant))
+    .orderBy(desc(exportJobs.createdAt))
+    .limit(8);
+  return rows.find((row) => row.status === "pending" || row.status === "processing") ?? null;
+}
+
+export async function updateExportJob(
+  db: ReturnType<typeof createDb>,
+  jobId: string,
+  tenant: TenantId,
+  patch: {
+    status?: ExportJobStatus;
+    error?: string | null;
+    visitCount?: number;
+    activityCount?: number;
+    r2Key?: string | null;
+  },
+) {
+  await db
+    .update(exportJobs)
+    .set({
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+      ...(patch.error !== undefined ? { error: patch.error } : {}),
+      ...(patch.visitCount !== undefined ? { visitCount: patch.visitCount } : {}),
+      ...(patch.activityCount !== undefined ? { activityCount: patch.activityCount } : {}),
+      ...(patch.r2Key !== undefined ? { r2Key: patch.r2Key } : {}),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(exportJobs.id, jobId), eq(exportJobs.tenant, tenant)));
+}
+
 export async function emailForTenant(
   db: ReturnType<typeof createDb>,
   tenant: TenantId,
@@ -1290,6 +1509,9 @@ export async function getUserSettings(db: ReturnType<typeof createDb>, tenant: T
       timezone: null,
       monthlyRecapEnabled: false,
       monthlyRecapLastYm: null,
+      mapBookmarks: [] as MapBookmark[],
+      mapTileDarkUrl: null as string | null,
+      mapTileLightUrl: null as string | null,
       updatedAt: new Date(),
     }
   );
@@ -1303,6 +1525,9 @@ export async function upsertUserSettings(
     timezone?: string | null;
     monthlyRecapEnabled?: boolean;
     monthlyRecapLastYm?: string | null;
+    mapBookmarks?: MapBookmark[];
+    mapTileDarkUrl?: string | null;
+    mapTileLightUrl?: string | null;
   },
 ) {
   const current = await getUserSettings(db, tenant);
@@ -1316,6 +1541,15 @@ export async function upsertUserSettings(
     patch.monthlyRecapLastYm === undefined
       ? (current.monthlyRecapLastYm ?? null)
       : patch.monthlyRecapLastYm;
+  const mapBookmarks = patch.mapBookmarks ?? current.mapBookmarks ?? [];
+  const mapTileDarkUrl =
+    patch.mapTileDarkUrl === undefined
+      ? (current.mapTileDarkUrl ?? null)
+      : patch.mapTileDarkUrl?.trim() || null;
+  const mapTileLightUrl =
+    patch.mapTileLightUrl === undefined
+      ? (current.mapTileLightUrl ?? null)
+      : patch.mapTileLightUrl?.trim() || null;
   const timezoneChanged = patch.timezone !== undefined && patch.timezone !== current.timezone;
   await db
     .insert(userSettings)
@@ -1325,6 +1559,9 @@ export async function upsertUserSettings(
       timezone,
       monthlyRecapEnabled,
       monthlyRecapLastYm,
+      mapBookmarks,
+      mapTileDarkUrl,
+      mapTileLightUrl,
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
@@ -1334,13 +1571,33 @@ export async function upsertUserSettings(
         timezone,
         monthlyRecapEnabled,
         monthlyRecapLastYm,
+        mapBookmarks,
+        mapTileDarkUrl,
+        mapTileLightUrl,
         updatedAt: new Date(),
       },
     });
   if (timezoneChanged) {
     await rebuildHourOfWeekCache(db, tenant, timezone);
   }
-  return { tenant, distanceUnit, timezone, monthlyRecapEnabled, monthlyRecapLastYm };
+  return {
+    tenant,
+    distanceUnit,
+    timezone,
+    monthlyRecapEnabled,
+    monthlyRecapLastYm,
+    mapBookmarks,
+    mapTileDarkUrl,
+    mapTileLightUrl,
+  };
+}
+
+export function filterHiddenSearchPlaces<T extends { cluster?: string | null }>(
+  places: T[],
+  hidden: Set<string>,
+): T[] {
+  if (!hidden.size) return places;
+  return places.filter((p) => !p.cluster || !hidden.has(p.cluster));
 }
 
 export async function searchTenant(
@@ -1351,6 +1608,22 @@ export async function searchTenant(
   const term = q.trim().slice(0, 80);
   if (term.length < 2) return { places: [], days: [] };
   const like = `%${term}%`;
+  const needle = term.toLowerCase();
+  const hidden = await hiddenPlaceKeySet(db, tenant);
+  const labels = await listPlaceLabels(db, tenant);
+  const labelByKey = new Map(
+    labels.filter((row) => !row.hidden).map((row) => [row.placeKey, row.label] as const),
+  );
+  const labelKeys = labels
+    .filter((row) => {
+      if (row.hidden) return false;
+      if (row.label.toLowerCase().includes(needle)) return true;
+      return (row.tags ?? []).some((tag) => tag.toLowerCase().includes(needle));
+    })
+    .map((row) => row.placeKey)
+    .slice(0, 30);
+  const clusterMatch = [ilike(visits.cluster, like), ilike(visits.semanticType, like)];
+  if (labelKeys.length) clusterMatch.push(inArray(visits.cluster, labelKeys));
   const places = await db
     .select({
       cluster: visits.cluster,
@@ -1359,18 +1632,36 @@ export async function searchTenant(
       date: visits.date,
     })
     .from(visits)
-    .where(and(eq(visits.tenant, tenant), or(ilike(visits.cluster, like), ilike(visits.semanticType, like))))
-    .limit(30);
-  const hidden = await hiddenPlaceKeySet(db, tenant);
-  const visiblePlaces = hidden.size
-    ? places.filter((p) => !p.cluster || !hidden.has(p.cluster))
-    : places;
-  const days = await db
-    .select()
-    .from(dayStats)
-    .where(and(eq(dayStats.tenant, tenant), sql`${dayStats.date} like ${`%${term}%`}`))
-    .limit(20);
-  return { places: visiblePlaces, days };
+    .where(and(eq(visits.tenant, tenant), or(...clusterMatch)))
+    .orderBy(desc(visits.date))
+    .limit(40);
+  const unique: typeof places = [];
+  const seen = new Set<string>();
+  for (const row of places) {
+    if (seen.has(row.cluster)) continue;
+    seen.add(row.cluster);
+    unique.push(row);
+  }
+  const visiblePlaces = filterHiddenSearchPlaces(unique, hidden).slice(0, 30);
+  const isoDay = /^\d{4}-\d{2}-\d{2}$/.test(term);
+  const days = isoDay
+    ? await db
+        .select()
+        .from(dayStats)
+        .where(and(eq(dayStats.tenant, tenant), eq(dayStats.date, term)))
+        .limit(5)
+    : await db
+        .select()
+        .from(dayStats)
+        .where(and(eq(dayStats.tenant, tenant), sql`${dayStats.date} like ${`%${term}%`}`))
+        .limit(20);
+  return {
+    places: visiblePlaces.map((p) => ({
+      ...p,
+      label: (p.cluster && labelByKey.get(p.cluster)) || p.cluster,
+    })),
+    days,
+  };
 }
 
 export async function upsertPlaceLabel(
@@ -1413,6 +1704,125 @@ export async function listPlaceLabels(db: ReturnType<typeof createDb>, tenant: T
   return db.select().from(placeLabels).where(eq(placeLabels.tenant, tenant));
 }
 
+export async function previewImport(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  opts: {
+    records: unknown;
+    sourceId?: string;
+    timezone?: string | null;
+    chosenPath?: string | null;
+    candidates?: string[];
+  },
+) {
+  const format = detectTimelineFormat(opts.records);
+  const parsed = parseTimelineJson(opts.records);
+  const incoming = datesFromParsed(parsed);
+  const visitFilters = [eq(visits.tenant, tenant)];
+  const activityFilters = [eq(activities.tenant, tenant)];
+  if (opts.sourceId) {
+    visitFilters.push(eq(visits.sourceId, opts.sourceId));
+    activityFilters.push(eq(activities.sourceId, opts.sourceId));
+  }
+  const existingVisitDates = await db.select({ date: visits.date }).from(visits).where(and(...visitFilters));
+  const existingActivityDates = await db
+    .select({ date: activities.date })
+    .from(activities)
+    .where(and(...activityFilters));
+  const existing = [...new Set([...existingVisitDates, ...existingActivityDates].map((r) => r.date))];
+  const diff = importDayDiff(incoming, existing);
+  const existSet = new Set(existing);
+  const tz = timezoneSkewWarning(parsed.visits, opts.timezone);
+  const existingVisitCount = existingVisitDates.length;
+  return {
+    chosenPath: opts.chosenPath ?? null,
+    candidates: (opts.candidates ?? []).map((p) => p.replace(/\\/g, "/").split("/").pop() || p).slice(0, 20),
+    format,
+    visitCount: parsed.visits.length,
+    activityCount: parsed.activities.length,
+    dateMin: incoming[0] ?? null,
+    dateMax: incoming[incoming.length - 1] ?? null,
+    overlappingDays: diff.overlappingDays,
+    newDays: diff.newDays,
+    existingDays: diff.existingDays,
+    overlappingSample: diff.overlappingSample,
+    replaceWouldRemoveVisits: existingVisitCount,
+    mergeWouldAppendVisits: parsed.visits.length,
+    skipOverlapWouldAppendVisits: parsed.visits.filter((v) => !existSet.has(v.date)).length,
+    timezoneWarning: tz,
+  };
+}
+
+export async function deleteTenantDateRange(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  opts: { from: string; to: string; sourceId?: string },
+) {
+  if (opts.sourceId) {
+    const existing = await getSourceById(db, tenant, opts.sourceId);
+    if (!existing) return { error: "Source not found" as const };
+  }
+  return deleteDateRange(db, { tenant, ...opts });
+}
+
+const REWARM_CAP = 100;
+
+export async function rewarmRoutes(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+) {
+  const rows = await db
+    .select({
+      startLat: activities.startLat,
+      startLon: activities.startLon,
+      endLat: activities.endLat,
+      endLon: activities.endLon,
+      mode: activities.mode,
+    })
+    .from(activities)
+    .where(eq(activities.tenant, tenant));
+
+  const candidates: Array<{
+    startLat: number;
+    startLon: number;
+    endLat: number;
+    endLon: number;
+    mode: string;
+    key: string;
+  }> = [];
+  for (const a of rows) {
+    if (SKIP.has(a.mode)) continue;
+    const profile = MODE_TO_PROFILE[a.mode] ?? "driving";
+    candidates.push({
+      ...a,
+      key: makeRouteCacheKey(a.startLat, a.startLon, a.endLat, a.endLon, profile),
+    });
+  }
+
+  const cachedKeys = new Set<string>();
+  const keys = candidates.map((c) => c.key);
+  for (let i = 0; i < keys.length; i += 400) {
+    const batch = keys.slice(i, i + 400);
+    if (!batch.length) continue;
+    const found = await db
+      .select({ key: routeCache.key })
+      .from(routeCache)
+      .where(inArray(routeCache.key, batch));
+    for (const row of found) cachedKeys.add(row.key);
+  }
+
+  const uncached = candidates.filter((c) => !cachedKeys.has(c.key));
+  const batch = uncached.slice(0, REWARM_CAP);
+  for (const a of batch) {
+    await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode);
+  }
+  return {
+    warmed: batch.length,
+    remaining: uncached.length - batch.length,
+    cap: REWARM_CAP,
+  };
+}
+
 async function hiddenPlaceKeySet(
   db: ReturnType<typeof createDb>,
   tenant: TenantId,
@@ -1431,6 +1841,7 @@ export async function wipeTenantData(
   await db.delete(dayStats).where(eq(dayStats.tenant, tenant));
   await db.delete(analyticsCache).where(eq(analyticsCache.tenant, tenant));
   await db.delete(importJobs).where(eq(importJobs.tenant, tenant));
+  await db.delete(exportJobs).where(eq(exportJobs.tenant, tenant));
   await db.delete(dataSources).where(eq(dataSources.tenant, tenant));
   await db.delete(placeLabels).where(eq(placeLabels.tenant, tenant));
   await db.delete(namedTrips).where(eq(namedTrips.tenant, tenant));

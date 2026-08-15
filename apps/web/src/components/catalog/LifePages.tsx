@@ -12,6 +12,7 @@ import {
 } from '../../hooks/useApi';
 import { placePath } from '../../lib/paths';
 import { useSession } from '../../lib/auth';
+import type { ActivityGuessCount, BadgeSummary } from '../../types';
 
 export function FirstsPage() {
   const { data } = useCachedAnalytics<{ clusters: { name: string; date: string }[]; types: { name: string; date: string }[] }>(
@@ -168,5 +169,63 @@ function ChapterMap({
     <div className="h-56 overflow-hidden rounded-lg border border-border">
       <MapView compact heatmapPoints={points || []} />
     </div>
+  );
+}
+
+export function BadgesPage() {
+  const { data } = useCachedAnalytics<BadgeSummary>('badges');
+  const summary = data && !Array.isArray(data) ? data : null;
+  return (
+    <CatalogPage
+      title="Badges"
+      description="Coverage percent and visit counts from your import. Not a live streak with anyone else."
+    >
+      {summary ? (
+        <>
+          <p className="text-sm text-text">
+            {summary.coveragePercent}% of days in the span have Timeline ({summary.daysWithData} of{' '}
+            {summary.spanDays}).
+          </p>
+          <ul className="space-y-2">
+            {summary.badges.map((b) => (
+              <li
+                key={b.id}
+                className={`rounded-lg border px-3 py-2 text-sm ${
+                  b.earned ? 'border-accent/40 bg-accent/10 text-text' : 'border-border bg-bg text-text-muted'
+                }`}
+              >
+                <div className="font-semibold">{b.label}</div>
+                <div className="text-xs">{b.detail}</div>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="text-sm text-text-muted">Badges appear after the next Timeline import.</p>
+      )}
+    </CatalogPage>
+  );
+}
+
+export function GuessesPage() {
+  const { data } = useCachedAnalytics<ActivityGuessCount[]>('activity-guesses');
+  const rows = Array.isArray(data) ? data : [];
+  return (
+    <CatalogPage
+      title="Activity guesses"
+      description="Labels from dwell time, hour of day, and Google place type. Not an LLM. Place names stay off this list."
+    >
+      <ul className="space-y-1 text-sm">
+        {rows.map((r) => (
+          <li key={r.id} className="flex h-11 items-center justify-between rounded-lg border border-border bg-bg px-3">
+            <span className="text-text">{r.label}</span>
+            <span className="text-text-muted">{r.count}</span>
+          </li>
+        ))}
+      </ul>
+      {rows.length === 0 && (
+        <p className="text-sm text-text-muted">Guesses appear after the next Timeline import.</p>
+      )}
+    </CatalogPage>
   );
 }

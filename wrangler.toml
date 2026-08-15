@@ -29,6 +29,8 @@ BETTER_AUTH_URL = "http://localhost:8787"
 DISABLE_SIGNUP = "false"
 CSP_ENFORCE = "false"
 GLOBE_ENABLED = "true"
+LANDING_ENABLED = "true"
+DEMO_TOUR = "true"
 
 # Local / preview R2. Staging and production override this binding.
 [[r2_buckets]]
@@ -50,6 +52,8 @@ BETTER_AUTH_URL = "https://locations-staging.aden.website"
 DISABLE_SIGNUP = "false"
 CSP_ENFORCE = "false"
 GLOBE_ENABLED = "true"
+LANDING_ENABLED = "true"
+DEMO_TOUR = "true"
 
 [[env.staging.r2_buckets]]
 binding = "UPLOADS"
@@ -85,6 +89,8 @@ BETTER_AUTH_URL = "https://locations.aden.website"
 DISABLE_SIGNUP = "false"
 CSP_ENFORCE = "true"
 GLOBE_ENABLED = "true"
+LANDING_ENABLED = "true"
+DEMO_TOUR = "true"
 
 [[env.production.r2_buckets]]
 binding = "UPLOADS"

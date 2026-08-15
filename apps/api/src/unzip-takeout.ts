@@ -6,10 +6,36 @@ export function isZipMagic(bytes: ArrayBuffer): boolean {
   return u.length >= 4 && u[0] === 0x50 && u[1] === 0x4b && (u[2] === 0x03 || u[2] === 0x05 || u[2] === 0x07);
 }
 
+export type ZipExtractResult = {
+  text: string;
+  chosenPath: string;
+  candidates: string[];
+};
+
+function basename(path: string): string {
+  const parts = path.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] || path;
+}
+
+function listNames(names: string[]): string {
+  return names.map(basename).slice(0, 8).join(", ");
+}
+
+function pickPreferred(names: string[]): string | undefined {
+  return (
+    names.find((n) => /timeline\.json$/i.test(n)) ??
+    names.find((n) => /semantic/i.test(n) && !/settings/i.test(n)) ??
+    names.find((n) => /records\.json$/i.test(n)) ??
+    names.find((n) => /edits/i.test(n))
+  );
+}
+
 /**
  * Extract the best Timeline JSON from a Takeout zip. Rejects nested zips and bombs.
  */
-export async function extractTimelineJsonFromZip(bytes: ArrayBuffer | Uint8Array): Promise<string> {
+export async function extractTimelineJsonFromZip(
+  bytes: ArrayBuffer | Uint8Array,
+): Promise<ZipExtractResult> {
   const { unzipSync } = await import("fflate");
   const raw = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   let files: Record<string, Uint8Array>;
@@ -40,11 +66,16 @@ export async function extractTimelineJsonFromZip(bytes: ArrayBuffer | Uint8Array
     throw new Error("Uncompressed zip is too large.");
   }
 
-  const preferred = names.find((n) => /timeline\.json$/i.test(n))
-    ?? names.find((n) => /semantic/i.test(n))
-    ?? names.find((n) => /records\.json$/i.test(n))
-    ?? names.find((n) => /edits/i.test(n))
-    ?? names[0];
+  const preferred = pickPreferred(names);
+  if (!preferred) {
+    throw new Error(
+      `Found ${listNames(names)}. Zip should include Timeline.json or Records.json.`,
+    );
+  }
 
-  return new TextDecoder().decode(files[preferred]);
+  return {
+    text: new TextDecoder().decode(files[preferred]),
+    chosenPath: preferred,
+    candidates: names,
+  };
 }

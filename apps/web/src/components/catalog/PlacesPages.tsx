@@ -1,5 +1,5 @@
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import CatalogPage from './CatalogPage';
 import MapView from '../Map';
 import { Button } from '../ui/button';
@@ -12,6 +12,8 @@ import {
   useHeatmap,
 } from '../../hooks/useApi';
 import { corridorPath, placePath } from '../../lib/paths';
+import { parseCoverageRange } from '../../lib/view-search-params';
+import { rememberRecentPlace } from '../../lib/nav-memory';
 import { formatDuration, formatTime } from '../../utils/format';
 import { MODE_LABELS } from '../../types';
 
@@ -68,6 +70,9 @@ export function PlacePage() {
   const decoded = decodeURIComponent(key);
   const { data, isError } = useCluster(decoded);
   const { data: visitPage } = useClusterVisits(decoded);
+  useEffect(() => {
+    if (data?.cluster) rememberRecentPlace(data.cluster, data.label || data.cluster);
+  }, [data?.cluster, data?.label]);
   if (isError) {
     return (
       <CatalogPage title="Place">
@@ -186,11 +191,17 @@ export function CorridorPage() {
 }
 
 export function CoveragePage() {
-  const { data } = useHeatmap();
+  const [params] = useSearchParams();
+  const range = parseCoverageRange(params);
+  const { data } = useHeatmap({ from: range.from, to: range.to });
   return (
     <CatalogPage
       title="Coverage map"
-      description="Imported history only. This is not a live location map."
+      description={
+        range.from || range.to
+          ? `Imported history${range.from ? ` from ${range.from}` : ''}${range.to ? ` to ${range.to}` : ''}. Not a live map.`
+          : 'Imported history only. This is not a live location map.'
+      }
     >
       <div className="h-[min(70vh,32rem)] overflow-hidden rounded-lg border border-border">
         <MapView compact heatmapPoints={data || []} />

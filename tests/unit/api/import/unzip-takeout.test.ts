@@ -21,7 +21,33 @@ describe("extractTimelineJsonFromZip", () => {
         JSON.stringify([{ startTime: "2024-01-01T00:00:00Z" }]),
       ),
     });
-    const text = await extractTimelineJsonFromZip(zipped);
-    expect(text).toContain("startTime");
+    const result = await extractTimelineJsonFromZip(zipped);
+    expect(result.text).toContain("startTime");
+    expect(result.chosenPath).toMatch(/Timeline\.json$/i);
+    expect(result.candidates.some((n) => /Timeline\.json$/i.test(n))).toBe(true);
+  });
+
+  it("prefers Timeline.json over Records.json", async () => {
+    const zipped = zipSync({
+      "Takeout/Location History/Records.json": new TextEncoder().encode('{"locations":[]}'),
+      "Takeout/Location History/Timeline.json": new TextEncoder().encode(
+        JSON.stringify([{ startTime: "2024-02-01T00:00:00Z" }]),
+      ),
+    });
+    const result = await extractTimelineJsonFromZip(zipped);
+    expect(result.chosenPath).toMatch(/Timeline\.json$/i);
+    expect(result.text).toContain("2024-02-01");
+  });
+
+  it("explains a Settings-only zip", async () => {
+    const zipped = zipSync({
+      "Takeout/Location History/Settings.json": new TextEncoder().encode(
+        JSON.stringify({ timelineEnabled: true }),
+      ),
+    });
+    await expect(extractTimelineJsonFromZip(zipped)).rejects.toThrow(/Found Settings\.json/);
+    await expect(extractTimelineJsonFromZip(zipped)).rejects.toThrow(
+      /Zip should include Timeline\.json or Records\.json/,
+    );
   });
 });

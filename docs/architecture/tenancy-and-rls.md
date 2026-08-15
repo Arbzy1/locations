@@ -30,4 +30,4 @@ Worker connections use a transactional driver. Each authenticated request:
 
 `route_cache` and `place_cache` are OSM geometry/address only. User-edited names live in `place_labels`.
 
-Catalog tenant tables `named_trips` and `life_chapters` use the same FORCE RLS policy as visits. Staff `/api/admin/stats` reads the caller’s tenant only.
+Catalog tenant tables `named_trips`, `life_chapters`, and `export_jobs` use the same FORCE RLS policy as visits. Staff `/api/admin/stats` reads the caller’s tenant only.

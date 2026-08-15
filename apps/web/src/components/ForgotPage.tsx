@@ -70,7 +70,7 @@ export default function ForgotPage() {
           </>
         )}
         <p className="mt-4 text-center text-xs">
-          <Link className="text-accent" to="/" title="Back to sign in">
+          <Link className="text-accent" to="/login" title="Back to sign in">
             Back to sign in
           </Link>
         </p>

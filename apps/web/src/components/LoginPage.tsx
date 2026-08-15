@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { authClient, signIn } from '../lib/auth';
+import { startDemoSession } from '../lib/demo';
 import { MapPinned, Lock, Play } from 'lucide-react';
 import PasswordInput from './PasswordInput';
 import ThemeToggle from './ThemeToggle';
@@ -21,6 +22,10 @@ export default function LoginPage() {
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
+
+  useEffect(() => {
+    document.title = 'Sign in · Locations';
+  }, []);
 
   const sendMagicLink = async () => {
     setError('');
@@ -104,19 +109,13 @@ export default function LoginPage() {
   const tryDemo = async () => {
     setError('');
     setDemoLoading(true);
-    try {
-      const res = await fetch('/api/auth/demo', { method: 'POST', credentials: 'include' });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(body.error || 'Demo unavailable right now');
-        return;
-      }
-      window.location.assign('/hotspots');
-    } catch {
-      setError('Unable to start demo. Try again shortly.');
-    } finally {
+    const result = await startDemoSession();
+    if (!result.ok) {
+      setError(result.error);
       setDemoLoading(false);
+      return;
     }
+    window.location.assign('/hotspots');
   };
 
   return (
@@ -235,6 +234,11 @@ export default function LoginPage() {
           </div>
         </form>
         <LegalFooter />
+        <p className="mt-3 text-center text-xs">
+          <Link className="text-accent hover:underline" to="/" title="Product home">
+            About Locations
+          </Link>
+        </p>
       </motion.div>
     </div>
   );

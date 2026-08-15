@@ -53,7 +53,7 @@ export default function ResetPasswordPage() {
         {done ? (
           <p className="mt-4 text-sm text-walk">
             Password updated.{' '}
-            <Link className="text-accent" to="/" title="Sign in">
+            <Link className="text-accent" to="/login" title="Sign in">
               Sign in
             </Link>
           </p>

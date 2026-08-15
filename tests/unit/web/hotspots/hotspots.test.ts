@@ -3,6 +3,7 @@ import {
   filterAndRankPlaces,
   placeMatchesTypes,
   placeMetric,
+  sourceTokenVar,
   toggleChip,
   uniqueTopTypes,
 } from '@locations/web/lib/hotspots';
@@ -78,5 +79,13 @@ describe('toggleChip', () => {
   it('adds and removes', () => {
     expect(toggleChip(['Home'], 'Work')).toEqual(['Home', 'Work']);
     expect(toggleChip(['Home', 'Work'], 'Home')).toEqual(['Work']);
+  });
+});
+
+describe('sourceTokenVar', () => {
+  it('maps allowlisted tokens to CSS variables', () => {
+    expect(sourceTokenVar('visit')).toBe('var(--visit)');
+    expect(sourceTokenVar(null)).toBe('var(--accent)');
+    expect(sourceTokenVar('#ff00aa')).toBe('var(--accent)');
   });
 });

@@ -94,7 +94,7 @@ export default function GlobeView() {
   }
 
   return (
-    <CatalogPage title="Globe" description="Coverage from heatmap points, not raw visits. Isolated from the Leaflet maps.">
+      <CatalogPage title="Globe" description="Coverage from heatmap points, not raw visits. Isolated from the product maps.">
       {error && <p className="text-sm text-train">{error}</p>}
       <div ref={host} className="h-[min(70vh,36rem)] overflow-hidden rounded-lg border border-border" />
     </CatalogPage>

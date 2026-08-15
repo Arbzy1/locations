@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 14 August 2026
+Last updated: 15 August 2026
 
 Locations (“we”) provides a hosted map journal for **your** Google Timeline export.
 
@@ -10,6 +10,7 @@ Locations (“we”) provides a hosted map journal for **your** Google Timeline 
 - Timeline: visits, activities, inferred place names, travel modes, source labels
 - Billing: Stripe customer and subscription ids (card data stays with Stripe)
 - Uploads: Takeout JSON/zip stored briefly on R2 then deleted after parse
+- Export packs: ZIP of your Timeline stored briefly on R2 then deleted after download
 
 We do not sell location data. We do not put coordinates, place names, day routes, or Takeout payloads in email. Mail is transactional only (verify, reset, magic link, OTP, import status, billing status, account deleted). There is no marketing list. See the product [email catalog](../product/email.md).
 
@@ -19,11 +20,11 @@ Contract (providing the service) and legitimate interests (security, fraud). Pre
 
 ## Retention
 
-Active account: until you delete it. Import files: deleted after parse or via R2 lifecycle. Backups: limited TTL on Neon.
+Active account: until you delete it. Import files: deleted after parse or via R2 lifecycle. Export packs: deleted after download. Backups: limited TTL on Neon.
 
 ## Your rights
 
-Access, rectification, erasure, export (`GET /api/account/export`), objection. Email the privacy contact on the site.
+Access, rectification, erasure, a JSON summary (`GET /api/account/export`), a GDPR pack ZIP from Settings (visits and activities; download only, never emailed), objection. Email the privacy contact on the site.
 
 ## Children
 

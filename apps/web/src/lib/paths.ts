@@ -29,9 +29,12 @@ export const EXPLORE_LINKS: ExploreLink[] = [
   { group: "Life", to: "/chapters", label: "Life chapters", title: "Name date ranges" },
   { group: "Life", to: "/moving", label: "Moving history", title: "Home guess by year" },
   { group: "Life", to: "/anomaly", label: "Routine vs anomaly", title: "Days that look unusual" },
+  { group: "Life", to: "/badges", label: "Badges", title: "Coverage percent and visit badges" },
+  { group: "Life", to: "/guesses", label: "Activity guesses", title: "Heuristic labels from dwell, hour, and type" },
   { group: "Account", to: "/onboarding", label: "Onboarding", title: "Verify email and import Timeline" },
   { group: "Account", to: "/imports", label: "Import history", title: "Past import jobs" },
   { group: "Account", to: "/health", label: "Data health", title: "Duplicates and unknown modes" },
+  { group: "Account", to: "/updates", label: "Changelog", title: "What changed in the product" },
   { group: "Account", to: "/globe", label: "Globe", title: "3D coverage globe" },
 ];
 
@@ -56,6 +59,9 @@ const CATALOG_EXACT = new Set([
   "/health",
   "/admin",
   "/globe",
+  "/updates",
+  "/badges",
+  "/guesses",
   "/trips/new",
 ]);
 

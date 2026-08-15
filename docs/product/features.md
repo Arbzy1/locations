@@ -4,7 +4,7 @@ What the hosted app does today. Nothing here is a roadmap.
 
 ## Maps
 
-- **Hotspots:** visit-density heatmap, ranked places, date range, filter by Timeline source
+- **Hotspots:** visit-density heatmap, ranked places, date range, filter by Timeline source; multiple sources draw as coloured heat layers
 - Rank by visit count or time spent
 - Filter by Google place type, favourite, and your tags
 - Heatmap on/off, opacity, and strength
@@ -12,7 +12,7 @@ What the hosted app does today. Nothing here is a roadmap.
 - Favourite, colour, and tags on a place
 - Hide a place from Hotspots, search, and Insights (Day View still lists the visits); unhide from Hidden places in the Hotspots panel
 - Home and work guess pins on the Hotspots map when those clusters have coordinates
-- **Day View:** one day on a map plus a chronological timeline
+- **Day View:** one day on a map plus a chronological timeline; optional source chips colour the timeline and journeys
 - Calendar of days that have data; previous/next day
 - Visits and journeys on the map; tap a timeline row to zoom
 - Time scrubber and playback with speed control; the map follows an estimated playhead along stays and predicted routes (not raw GPS breadcrumbs)
@@ -21,7 +21,11 @@ What the hosted app does today. Nothing here is a roadmap.
 - Timeline rows show arrived-by / left-by when Google recorded a mode
 - Gaps without a recorded journey show as unknown movement, with a note that the dashed path is inferred
 - Journeys use cached road geometry when it is available (turn-by-turn steps in the timeline)
-- Basemaps: dark, light, street, satellite
+- Basemaps: auto (follows theme), street, satellite; optional vector style from env
+- 3D buildings when a vector style is configured
+- Measure tool, visit clustering with spiderfy, Street View / Mapillary link-out (coordinates only)
+- Saved map views (capped) and a desktop overview mini-map
+- Optional custom raster XYZ in Settings when the operator allowlists hosts
 - Dark / light UI theme
 - Optional 3D globe of heatmap points at `/globe` (MapLibre, config flag `globe`)
 
@@ -30,7 +34,7 @@ What the hosted app does today. Nothing here is a roadmap.
 - **Day Trips:** days with more range or more places, listed with distance, stops, and modes
 - Filter by year, mode, minimum range, and place name; sort by date, distance, range, or stops
 - Open a trip to that day in Day View
-- **Explore** overflow (desktop rail, mobile More): place directory and place pages, corridors, coverage, compare, replay, month/week/on this day/gaps, year-in-review, trip stories, commute, away nights, chapters, and related screens
+- **Explore** overflow (desktop rail, mobile More): place directory and place pages, corridors, coverage, compare, replay, month/week/on this day/gaps, year-in-review, trip stories, commute, away nights, chapters, activity guesses, badges, changelog, and related screens
 - Auto-named multi-day trips (start and end place names, modes, distance) on Insights and Day Trips; tap opens the trip story
 - **Insights:** total distance, days tracked, visits, journeys, unique places
 - Monthly distance chart, per-month top places, and transport-mode breakdown
@@ -44,16 +48,27 @@ What the hosted app does today. Nothing here is a roadmap.
 - Train hops guessed from consecutive train legs and nearby stations (not named rail lines)
 - Low-movement days: little range and few places (a guess, not a diagnosis)
 - Extra stats: busiest day, longest day, farthest from home, most stops, longest journey, estimated steps, most boring Tuesday, longest stay without leaving
+- Activity guesses from dwell, hour of day, and Google place type (not an LLM; place names stay off the list)
+- Coverage percent and visit badges (days tracked, places, walking miles)
 
 ## Search
 
-- Search place names and dates from the header (including phones); places open the place page, dates open Day View
+- Command palette from the header (`Ctrl/Cmd+K`). Desktop dialog, bottom sheet on phones
+- Search places (including your labels and tags), ISO dates, months, Explore pages, and `lat,lon` GPS jump
+- Hidden places stay out of search; Day View still lists those visits
+- Recent places and named filter presets stay on this device
+- Keyboard: `g` then `h`/`d`/`t`/`i`/`e`/`s` for main pages; `[` / `]` previous/next day
+- Hotspots and Day Trips filters live in the URL so refresh keeps them. Insights is the full import, not a date slice
 
 ## Import
 
 - Upload Google Timeline JSON or a Takeout zip (`Timeline.json` / `Records.json`)
-- One source per Google account; label, rename, re-upload, merge, or delete a source
-- Import progress shows records parsed and visits written
+- Drag-drop on the empty Hotspots state and in Settings; a preview shows which zip file won, date overlap, and replace vs merge vs skip-overlap counts
+- One source per Google account; label, colour, rename, re-upload, merge (optional skip overlapping days), or delete a source
+- Delete a date range (optionally per source) from Settings
+- Reprocess a capped batch of predicted routes from Settings
+- Import progress shows records parsed, visits written, and the chosen file name
+- Timezone skew is a warning only (dates are not rewritten)
 - Email must be verified before import
 - Demo accounts cannot import
 
@@ -62,19 +77,25 @@ What the hosted app does today. Nothing here is a roadmap.
 - Sign up with email and password (unless signup is turned off; then `/signup` shows a closed-signup page)
 - Onboarding steps at `/onboarding` (verify, Takeout, import). Empty accounts are sent there from Hotspots.
 - Import history and data-health counts under Explore
-- Staff (`admin` / `developer`) can open `/admin` for their own tenant counts (no coordinates)
 - Verify email with a link or a 6-digit code; resend from Settings
 - Sign in with password, a one-time email link, or a 6-digit code
 - Forgot password; choose a new password at `/reset-password`
 - Change display name, email (re-verify), and password from Settings
-- Download a JSON export of overview, sources, settings, and place labels
-- Public demo with sample journeys (read-only)
+- List signed-in sessions and revoke one or all other devices from Settings
+- Download a JSON summary of overview, sources, settings, and place labels
+- Download a GDPR pack ZIP (account JSON, visits/activities JSONL, HTML summary with no map tiles)
+- Public demo with sample journeys (read-only) and a skippable scripted tour for the demo role
+- Public marketing pages outside the app shell: `/` landing, `/pricing`, `/status`, `/changelog` (Privacy, Terms, and Cookies links on those pages)
+- In-app changelog under Explore (`/updates`)
+- Staff (`admin` / `developer`) can open `/admin` for their own tenant counts, stuck import jobs (id and status only), and a wipe runbook that points at Settings delete account (no coordinates)
+- Env feature flags on `GET /api/config` (`globe`, `demoTour`, `landing`)
 - Miles or kilometres, and an IANA timezone
 - Opt-in monthly recap email (counts only; off by default)
 - Stripe subscribe (monthly or yearly) and customer portal when billing is configured
+- Customer portal for invoices, payment method, pause, and cancel (enable pause in the Stripe Dashboard)
 - Failed payment: read-only grace copy in Settings until `graceUntil`, with import paused
 - Status email when import finishes or fails, and when billing becomes active, past due, or canceled
-- Delete account: wipes Timeline rows, uploads, sessions, and the Stripe customer
+- Delete one Timeline source, or delete the account (wipes Timeline rows, uploads, export packs, sessions, and the Stripe customer)
 - Privacy, Terms, and Cookies pages
 
 Possible later work (not a roadmap): [Further features and pages](ideas.md).
@@ -84,4 +105,3 @@ Possible later work (not a roadmap): [Further features and pages](ideas.md).
 - Live Google Location sharing or a phone tracker
 - Editing individual visits on the map
 - Sharing a map with other people
-- Full Timeline JSON dump (export is overview, sources, settings, and labels)

@@ -40,7 +40,7 @@ Push to `main` deploys staging. Production is a manual promote (`npm run deploy:
 
    Staging Stripe: test-mode keys. Add a Stripe test webhook to `https://locations-staging.aden.website/api/billing/webhook`. Production keeps live keys and the existing live webhook.
 
-   Optional map vars (`MAP_TILE_*`, `OSRM_BASE`, `GEOCODE_BASE`) can live in `[env.*.vars]` or as secrets.
+   Optional map vars (`MAP_TILE_*`, `MAP_STYLE_*`, `MAP_CUSTOM_TILE_HOSTS`, `OSRM_BASE`, `GEOCODE_BASE`) can live in `[env.*.vars]` or as secrets.
 
 5. Deploy staging and confirm health:
 

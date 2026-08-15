@@ -61,5 +61,26 @@
     "when": 1755223600000,
     "tag": "0008_catalog_pages",
     "breakpoints": true
+  },
+  {
+    "idx": 9,
+    "version": "7",
+    "when": 1755228000000,
+    "tag": "0009_import_quality",
+    "breakpoints": true
+  },
+  {
+    "idx": 10,
+    "version": "7",
+    "when": 1755232000000,
+    "tag": "0010_export_jobs",
+    "breakpoints": true
+  },
+  {
+    "idx": 11,
+    "version": "7",
+    "when": 1755236000000,
+    "tag": "0011_map_settings",
+    "breakpoints": true
   }
 ]

@@ -18,4 +18,17 @@ describe("applySecurityHeaders", () => {
     expect(headers.get("Content-Security-Policy")).toContain("frame-ancestors 'none'");
     expect(headers.get("Content-Security-Policy-Report-Only")).toBeNull();
   });
+
+  it("appends extra tile hosts to img-src and connect-src", () => {
+    const headers = new Headers();
+    applySecurityHeaders(headers, {
+      isProductionHttps: false,
+      noStore: false,
+      enforceCsp: true,
+      extraCspSources: "https://tiles.example.com",
+    });
+    const csp = headers.get("Content-Security-Policy") ?? "";
+    expect(csp).toContain("https://tiles.example.com");
+    expect(csp).toContain("worker-src 'self' blob:");
+  });
 });

@@ -14,6 +14,7 @@ import {
   useTrainHops,
   useLowMovementDays,
   useStreaks,
+  useCachedAnalytics,
 } from '../hooks/useApi';
 import StatCard from './StatCard';
 import MapView from './Map';
@@ -27,7 +28,7 @@ import { downloadElementPng, downloadTextFile, insightsCsv } from '../lib/insigh
 import { InsightsStory } from './InsightsStory';
 import { isStreaks } from '../lib/year-review';
 import { Link } from 'react-router-dom';
-import type { FlightSummary } from '../types';
+import type { ActivityGuessCount, BadgeSummary, FlightSummary } from '../types';
 import { useTheme } from '../lib/theme';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -87,6 +88,8 @@ export default function InsightsView() {
   const { data: lowMovement } = useLowMovementDays();
   const { data: labels } = usePlaceLabels();
   const { data: heatmapPoints } = useHeatmap();
+  const { data: badges } = useCachedAnalytics<BadgeSummary>('badges');
+  const { data: guesses } = useCachedAnalytics<ActivityGuessCount[]>('activity-guesses');
   const { unit } = useUnits();
   const chart = useChartColors();
   const navigate = useNavigate();
@@ -287,6 +290,45 @@ export default function InsightsView() {
               value={overview.unique_places.toLocaleString()}
               icon={<MapPin size={16} />}
             />
+          </div>
+        )}
+
+        {badges && !Array.isArray(badges) && (
+          <div className="rounded-lg border border-border bg-bg p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-text-muted">Coverage and badges</h3>
+              <Button asChild variant="ghost" title="Open badges page">
+                <Link to="/badges">All badges</Link>
+              </Button>
+            </div>
+            <p className="text-sm text-text">
+              {badges.coveragePercent}% of days in the span have Timeline.
+            </p>
+            <p className="mt-1 text-xs text-text-muted">
+              {(badges.badges ?? []).filter((b) => b.earned).length} earned of {badges.badges?.length ?? 0}
+            </p>
+          </div>
+        )}
+
+        {Array.isArray(guesses) && guesses.length > 0 && (
+          <div className="rounded-lg border border-border bg-bg p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-text-muted">Activity guesses</h3>
+              <Button asChild variant="ghost" title="Open activity guesses">
+                <Link to="/guesses">All guesses</Link>
+              </Button>
+            </div>
+            <ul className="space-y-1 text-sm">
+              {guesses.slice(0, 5).map((g) => (
+                <li key={g.id} className="flex justify-between gap-2">
+                  <span className="text-text">{g.label}</span>
+                  <span className="text-text-muted">{g.count}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-text-muted">
+              From dwell, hour, and Google place type. Not an LLM.
+            </p>
           </div>
         )}
 

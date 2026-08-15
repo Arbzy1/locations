@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useDayTrips, useMultiDayTrips, usePlaceLabels } from '../hooks/useApi';
 import { formatDate, formatMilesOrKm } from '../utils/format';
 import { useUnits } from '../lib/units';
@@ -6,6 +7,8 @@ import { MODE_COLORS, MODE_LABELS } from '../types';
 import type { DayTrip } from '../types';
 import { multiDayTripLabel } from '../lib/trips';
 import { Button } from './ui/button';
+import FilterPresets from './FilterPresets';
+import { parseDayTripsQuery, serializeDayTripsQuery } from '../lib/view-search-params';
 import {
   Compass,
   Filter,
@@ -68,10 +71,23 @@ export default function DayTripsView({ onSelectDate }: Props) {
   const { data: multiDay } = useMultiDayTrips();
   const { data: labels } = usePlaceLabels();
   const { unit } = useUnits();
-  const [yearFilter, setYearFilter] = useState<string>('all');
-  const [minRange, setMinRange] = useState(5);
-  const [modeFilter, setModeFilter] = useState<Set<string>>(new Set());
-  const [clusterFilter, setClusterFilter] = useState<string>('');
+  const [params, setParams] = useSearchParams();
+  const query = parseDayTripsQuery(params);
+  const yearFilter = query.year;
+  const minRange = query.min;
+  const modeFilter = useMemo(() => new Set(query.modes), [query.modes]);
+  const clusterFilter = query.q;
+  const patchQuery = (next: Partial<{ year: string; modes: string[]; min: number; q: string }>) => {
+    setParams(
+      serializeDayTripsQuery({
+        year: next.year ?? yearFilter,
+        modes: next.modes ?? query.modes,
+        min: next.min ?? minRange,
+        q: next.q ?? clusterFilter,
+      }),
+      { replace: true },
+    );
+  };
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -91,12 +107,10 @@ export default function DayTripsView({ onSelectDate }: Props) {
   }, [trips]);
 
   const toggleMode = (mode: string) => {
-    setModeFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(mode)) next.delete(mode);
-      else next.add(mode);
-      return next;
-    });
+    const next = new Set(modeFilter);
+    if (next.has(mode)) next.delete(mode);
+    else next.add(mode);
+    patchQuery({ modes: [...next] });
   };
 
   const filtered = useMemo(() => {
@@ -189,7 +203,7 @@ export default function DayTripsView({ onSelectDate }: Props) {
           <Filter size={12} className="text-text-muted" />
           <select
             value={yearFilter}
-            onChange={(e) => setYearFilter(e.target.value)}
+            onChange={(e) => patchQuery({ year: e.target.value })}
             title="Filter day trips by year"
             className="min-h-11 rounded border border-border bg-bg px-2 py-1 text-xs text-text"
           >
@@ -207,7 +221,7 @@ export default function DayTripsView({ onSelectDate }: Props) {
             min={1}
             max={100}
             value={minRange}
-            onChange={(e) => setMinRange(Number(e.target.value))}
+            onChange={(e) => patchQuery({ min: Number(e.target.value) })}
             title="Minimum trip range in miles"
             className="w-20"
           />
@@ -218,7 +232,7 @@ export default function DayTripsView({ onSelectDate }: Props) {
           type="text"
           placeholder="Search places..."
           value={clusterFilter}
-          onChange={(e) => setClusterFilter(e.target.value)}
+          onChange={(e) => patchQuery({ q: e.target.value })}
           title="Filter trips by place name"
           className="min-h-11 min-w-0 flex-1 rounded border border-border bg-bg px-2 py-1 text-xs text-text"
         />
@@ -231,6 +245,7 @@ export default function DayTripsView({ onSelectDate }: Props) {
         <SortBtn field="range" label="Range" sortField={sortField} sortDir={sortDir} onToggle={toggleSort} />
         <SortBtn field="stops" label="Stops" sortField={sortField} sortDir={sortDir} onToggle={toggleSort} />
       </div>
+      <FilterPresets />
     </>
   );
 
@@ -246,7 +261,7 @@ export default function DayTripsView({ onSelectDate }: Props) {
               <button
                 type="button"
                 title="Clear year, range, mode, and place filters"
-                onClick={() => { setYearFilter('all'); setMinRange(5); setModeFilter(new Set()); setClusterFilter(''); }}
+                onClick={() => { patchQuery({ year: 'all', min: 5, modes: [], q: '' }); }}
                 className="ml-2 text-xs text-accent transition-colors duration-ui-fast ease-ui hover:text-accent/80"
               >
                 Clear filters

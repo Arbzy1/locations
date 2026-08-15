@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import L from 'leaflet';
-import { useDayData, useDays } from '../hooks/useApi';
+import { useNavigate } from 'react-router-dom';
+import { useDayData, useDays, useSources } from '../hooks/useApi';
 import { useBreakpoint } from '../hooks/useBreakpoint';
 import MapView from './Map';
 import Timeline from './Timeline';
@@ -20,6 +20,9 @@ import {
   type PlaybackSpeed,
 } from '../lib/dayPlayback';
 import { sunTimes } from '../utils/sunTimes';
+import { isTypingTarget } from '../lib/command-query';
+import { sourceTokenVar } from '../lib/hotspots';
+import { Button } from './ui/button';
 import {
   ChevronDown,
   ChevronLeft,
@@ -34,32 +37,25 @@ function focusTargetForVisit(v: Visit): MapFocusTarget {
 
 function focusTargetForActivity(a: Activity): MapFocusTarget {
   if (a.route_geometry && a.route_geometry.length > 1) {
-    const bounds = L.latLngBounds(
-      a.route_geometry.map((c) => [c[0], c[1]] as [number, number]),
-    );
-    return { bounds };
+    return { bounds: a.route_geometry.map((c) => [c[0], c[1]] as [number, number]) };
   }
   return {
-    bounds: L.latLngBounds([
+    bounds: [
       [a.start_lat, a.start_lon],
       [a.end_lat, a.end_lon],
-    ]),
+    ],
   };
 }
 
 function focusTargetForConnector(c: Connector): MapFocusTarget {
   if (c.route_geometry && c.route_geometry.length > 1) {
-    return {
-      bounds: L.latLngBounds(
-        c.route_geometry.map((p) => [p[0], p[1]] as [number, number]),
-      ),
-    };
+    return { bounds: c.route_geometry.map((p) => [p[0], p[1]] as [number, number]) };
   }
   return {
-    bounds: L.latLngBounds([
+    bounds: [
       [c.from_lat, c.from_lon],
       [c.to_lat, c.to_lon],
-    ]),
+    ],
   };
 }
 
@@ -68,6 +64,7 @@ interface Props {
 }
 
 export default function DayView({ initialDate }: Props) {
+  const navigate = useNavigate();
   const { data: allDays } = useDays();
   const { isDesktop, isPhone, isTablet } = useBreakpoint();
   const { unit, timezone } = useUnits();
@@ -87,7 +84,18 @@ export default function DayView({ initialDate }: Props) {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<PlaybackSpeed>(DEFAULT_PLAYBACK_SPEED);
   const [followPlayhead, setFollowPlayhead] = useState(false);
-  const { data: dayData, isLoading, isFetching, progress } = useDayData(selectedDate);
+  const [sourceFilter, setSourceFilter] = useState<string[]>([]);
+  const { data: sources } = useSources();
+  const { data: dayData, isLoading, isFetching, progress } = useDayData(
+    selectedDate,
+    sourceFilter.length ? sourceFilter : undefined,
+  );
+
+  const sourceColors = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const s of sources ?? []) map[s.id] = sourceTokenVar(s.color);
+    return map;
+  }, [sources]);
 
   const bumpSize = useCallback(() => setSizeSignal((n) => n + 1), []);
 
@@ -210,10 +218,14 @@ export default function DayView({ initialDate }: Props) {
     [allDays],
   );
 
-  const setDateAndClearFocus = (date: string) => {
-    setSelectedDate(date);
-    setMapFocus(null);
-  };
+  const setDateAndClearFocus = useCallback(
+    (date: string) => {
+      setSelectedDate(date);
+      setMapFocus(null);
+      void navigate(`/day/${date}`);
+    },
+    [navigate],
+  );
 
   if (initialDate !== prevInitialDate) {
     setPrevInitialDate(initialDate);
@@ -229,12 +241,27 @@ export default function DayView({ initialDate }: Props) {
   const canPrev = currentIdx > 0;
   const canNext = currentIdx >= 0 && currentIdx < dateList.length - 1;
 
-  const goToPrev = () => {
+  const goToPrev = useCallback(() => {
     if (canPrev) setDateAndClearFocus(dateList[currentIdx - 1]);
-  };
-  const goToNext = () => {
+  }, [canPrev, currentIdx, dateList, setDateAndClearFocus]);
+  const goToNext = useCallback(() => {
     if (canNext) setDateAndClearFocus(dateList[currentIdx + 1]);
-  };
+  }, [canNext, currentIdx, dateList, setDateAndClearFocus]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target) || e.metaKey || e.ctrlKey) return;
+      if (e.key === '[') {
+        e.preventDefault();
+        goToPrev();
+      } else if (e.key === ']') {
+        e.preventDefault();
+        goToNext();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [goToPrev, goToNext]);
 
   const iconBtn =
     'flex h-11 w-11 items-center justify-center rounded border border-border transition-colors duration-ui-fast ease-ui hover:bg-bg disabled:cursor-not-allowed disabled:opacity-30';
@@ -277,7 +304,36 @@ export default function DayView({ initialDate }: Props) {
     playhead: playheadPos ? { lat: playheadPos.lat, lon: playheadPos.lon } : null,
     followPlayhead,
     dayDate: selectedDate || undefined,
+    sourceColors,
   };
+
+  const sourceChips =
+    sources && sources.length > 1 ? (
+      <div className="mt-3 flex flex-wrap gap-1">
+        {sources.map((s) => {
+          const on = sourceFilter.includes(s.id) || sourceFilter.length === 0;
+          return (
+            <Button
+              key={s.id}
+              type="button"
+              variant={on ? 'default' : 'outline'}
+              size="sm"
+              title={on ? `Hide ${s.label}` : `Show ${s.label}`}
+              onClick={() =>
+                setSourceFilter((current) => {
+                  if (current.includes(s.id)) return current.filter((id) => id !== s.id);
+                  if (current.length === 0) return sources.filter((x) => x.id !== s.id).map((x) => x.id);
+                  return [...current, s.id];
+                })
+              }
+            >
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: sourceTokenVar(s.color) }} />
+              {s.label}
+            </Button>
+          );
+        })}
+      </div>
+    ) : null;
 
   const sidePanel = (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-surface">
@@ -329,6 +385,7 @@ export default function DayView({ initialDate }: Props) {
         {selectedDate && (
           <div className="text-sm text-text-muted">{formatDate(selectedDate)}</div>
         )}
+        {sourceChips}
 
         {allDays && allDays.length > 0 && (
           <div
@@ -448,6 +505,7 @@ export default function DayView({ initialDate }: Props) {
             onVisitClick={handleVisitOnMap}
             onActivityClick={handleActivityOnMap}
             onUnknownClick={handleUnknownOnMap}
+            sourceColors={sourceColors}
           />
         ) : (
           <div className="p-4 text-sm text-text-muted">

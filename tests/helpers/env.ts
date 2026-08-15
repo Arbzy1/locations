@@ -8,8 +8,10 @@ export function testEnv(overrides: Partial<Env> = {}): Env {
     BETTER_AUTH_URL: "http://127.0.0.1:8787",
     ASSETS: { fetch: async () => new Response("asset") },
     UPLOADS: {
-      put: vi.fn(),
-      get: vi.fn(),
+      put: vi.fn(async () => undefined),
+      get: vi.fn(async () => null),
+      delete: vi.fn(async () => undefined),
+      list: vi.fn(async () => ({ objects: [] })),
     },
     ...overrides,
   } as unknown as Env;

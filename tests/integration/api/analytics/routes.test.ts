@@ -31,6 +31,8 @@ const KEYS = [
   "/api/analytics/lapsed-places",
   "/api/analytics/hour-of-week",
   "/api/analytics/personality",
+  "/api/analytics/activity-guesses",
+  "/api/analytics/badges",
 ] as const;
 
 async function request(path: string, init?: RequestInit) {

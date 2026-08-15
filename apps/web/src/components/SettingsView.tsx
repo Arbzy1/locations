@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Loader2,
   Upload,
@@ -10,13 +10,12 @@ import {
   CreditCard,
   Ruler,
   Download,
+  ShieldAlert,
+  Lock,
+  Map as MapIcon,
 } from 'lucide-react';
 import type { DataSourceInfo } from '../types';
-import {
-  useImportStatus,
-  useInvalidateLocationQueries,
-  useSources,
-} from '../hooks/useApi';
+import { useImportStatus, useInvalidateLocationQueries, usePublicConfig, useSources } from '../hooks/useApi';
 import { authClient, useSession } from '../lib/auth';
 import { useUnits } from '../lib/units';
 import type { DistanceUnit } from '../utils/format';
@@ -25,19 +24,22 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Switch } from './ui/switch';
 import { Dialog, DialogContent } from './ui/dialog';
+import { AlertDialog, AlertDialogContent } from './ui/alert-dialog';
 import PasswordInput from './PasswordInput';
+import SettingsSessions from './SettingsSessions';
+import ImportDropZone, { TIMEZONE_SKEW_COPY } from './ImportDropZone';
+import { PLACE_COLOR_TOKENS, sourceTokenVar } from '../lib/hotspots';
 
 export default function SettingsView() {
   const { data: session, refetch: refetchSession } = useSession();
   const { data: sources, isLoading } = useSources();
-  const { unit, timezone, monthlyRecapEnabled, entitlements } = useUnits();
+  const { unit, timezone, monthlyRecapEnabled, mapTileDarkUrl, mapTileLightUrl, entitlements } = useUnits();
+  const { data: publicConfig } = usePublicConfig();
   const [poll, setPoll] = useState(false);
   const { data: importStatus } = useImportStatus({ poll });
   const invalidate = useInvalidateLocationQueries();
 
   const [label, setLabel] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [merge, setMerge] = useState(false);
   const [reuploadSourceId, setReuploadSourceId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -46,8 +48,16 @@ export default function SettingsView() {
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(unit);
   const [tz, setTz] = useState(timezone ?? '');
   const [recapEnabled, setRecapEnabled] = useState(monthlyRecapEnabled);
+  const [tileDark, setTileDark] = useState(mapTileDarkUrl ?? '');
+  const [tileLight, setTileLight] = useState(mapTileLightUrl ?? '');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteSource, setDeleteSource] = useState<DataSourceInfo | null>(null);
+  const [rangeFrom, setRangeFrom] = useState('');
+  const [rangeTo, setRangeTo] = useState('');
+  const [rangeSourceId, setRangeSourceId] = useState('');
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const [rewarmBusy, setRewarmBusy] = useState(false);
+  const [rewarmMsg, setRewarmMsg] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -55,16 +65,20 @@ export default function SettingsView() {
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountMsg, setAccountMsg] = useState('');
   const [exportBusy, setExportBusy] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [packBusy, setPackBusy] = useState(false);
 
   const latest = importStatus?.latestJob;
-  const user = session?.user as { email?: string; name?: string; emailVerified?: boolean } | undefined;
+  const user = session?.user as { email?: string; name?: string; emailVerified?: boolean; role?: string } | undefined;
+  const isDemo = user?.role === 'demo';
+  const currentToken = (session as { session?: { token?: string } } | null | undefined)?.session?.token;
 
   useEffect(() => {
     setDistanceUnit(unit);
     setTz(timezone ?? '');
     setRecapEnabled(monthlyRecapEnabled);
-  }, [unit, timezone, monthlyRecapEnabled]);
+    setTileDark(mapTileDarkUrl ?? '');
+    setTileLight(mapTileLightUrl ?? '');
+  }, [unit, timezone, monthlyRecapEnabled, mapTileDarkUrl, mapTileLightUrl]);
 
   useEffect(() => {
     if (user?.name) setDisplayName(user.name);
@@ -75,53 +89,14 @@ export default function SettingsView() {
       setPoll(false);
       setBusy(false);
       invalidate();
-      setFile(null);
       setLabel('');
       setReuploadSourceId(null);
-      if (fileRef.current) fileRef.current.value = '';
     } else if (latest?.status === 'error') {
       setPoll(false);
       setBusy(false);
       setError(latest.error || 'Import failed');
     }
   }, [latest?.status, latest?.error, latest?.id, invalidate]);
-
-  const startImport = async (e: FormEvent) => {
-    e.preventDefault();
-    setError('');
-    if (!file) {
-      setError('Choose a Timeline JSON or Takeout zip');
-      return;
-    }
-    setBusy(true);
-    try {
-      const form = new FormData();
-      form.append('file', file);
-      if (merge) form.append('merge', '1');
-      if (reuploadSourceId) {
-        form.append('sourceId', reuploadSourceId);
-      } else if (label.trim()) {
-        form.append('label', label.trim());
-      }
-      const res = await fetch('/api/import', {
-        method: 'POST',
-        credentials: 'include',
-        body: form,
-      });
-      const body = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        jobId?: string;
-      };
-      if (!res.ok) {
-        throw new Error(body.error || `Upload failed (${res.status})`);
-      }
-      setPoll(true);
-      invalidate();
-    } catch (err) {
-      setBusy(false);
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
 
   const onRename = async (source: DataSourceInfo) => {
     const next = renameValue.trim();
@@ -160,6 +135,60 @@ export default function SettingsView() {
     invalidate();
   };
 
+  const patchSourceColor = async (source: DataSourceInfo, color: string | null) => {
+    setError('');
+    const res = await fetch(`/api/sources/${source.id}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ color }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) {
+      setError(body.error || 'Could not update colour');
+      return;
+    }
+    invalidate();
+  };
+
+  const deleteRange = async () => {
+    setError('');
+    const params = new URLSearchParams({ from: rangeFrom, to: rangeTo });
+    if (rangeSourceId) params.set('sourceId', rangeSourceId);
+    const res = await fetch(`/api/days?${params.toString()}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) {
+      setError(body.error || 'Could not delete that date range');
+      return;
+    }
+    setRangeOpen(false);
+    invalidate();
+  };
+
+  const rewarm = async () => {
+    setRewarmBusy(true);
+    setRewarmMsg('');
+    setError('');
+    try {
+      const res = await fetch('/api/routes/rewarm', { method: 'POST', credentials: 'include' });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        warmed?: number;
+        remaining?: number;
+      };
+      if (!res.ok) throw new Error(body.error || 'Rewarm failed');
+      setRewarmMsg(`Warmed ${body.warmed ?? 0} routes. ${body.remaining ?? 0} remaining.`);
+      invalidate();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRewarmBusy(false);
+    }
+  };
+
   const savePrefs = async () => {
     setError('');
     const res = await fetch('/api/account/settings', {
@@ -170,10 +199,14 @@ export default function SettingsView() {
         distanceUnit,
         timezone: tz || null,
         monthlyRecapEnabled: recapEnabled,
+        ...(publicConfig?.customTiles
+          ? { mapTileDarkUrl: tileDark, mapTileLightUrl: tileLight }
+          : {}),
       }),
     });
     if (!res.ok) {
-      setError('Could not save preferences');
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      setError(body.error || 'Could not save preferences');
       return;
     }
     invalidate();
@@ -292,6 +325,15 @@ export default function SettingsView() {
     }
   };
 
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const exportData = async () => {
     setError('');
     setExportBusy(true);
@@ -302,17 +344,71 @@ export default function SettingsView() {
       }
       const blob = await res.blob();
       const stamp = new Date().toISOString().slice(0, 10);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `locations-export-${stamp}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setAccountMsg('Download started.');
+      downloadBlob(blob, `locations-export-${stamp}.json`);
+      setAccountMsg('Summary download started.');
     } catch {
       setError('Unable to export data.');
     } finally {
       setExportBusy(false);
+    }
+  };
+
+  const downloadPackFile = async (jobId: string) => {
+    const fileRes = await fetch(`/api/account/export-pack/${jobId}/file`, { credentials: 'include' });
+    if (!fileRes.ok) {
+      const body = (await fileRes.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error || 'Could not download pack');
+    }
+    const blob = await fileRes.blob();
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadBlob(blob, `locations-gdpr-pack-${stamp}.zip`);
+    setAccountMsg('GDPR pack download started.');
+  };
+
+  const exportPack = async () => {
+    setError('');
+    setPackBusy(true);
+    try {
+      const start = await fetch('/api/account/export-pack', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const started = (await start.json().catch(() => ({}))) as {
+        jobId?: string;
+        job?: { id?: string; status?: string };
+        error?: string;
+        status?: string;
+      };
+      if (!start.ok && start.status !== 409) {
+        throw new Error(started.error || 'Could not start GDPR pack');
+      }
+      const jobId = started.jobId || started.job?.id;
+      if (!jobId) {
+        throw new Error('Could not start GDPR pack');
+      }
+      for (let i = 0; i < 90; i += 1) {
+        const statusRes = await fetch(`/api/account/export-pack/${jobId}`, { credentials: 'include' });
+        const statusBody = (await statusRes.json().catch(() => ({}))) as {
+          status?: string;
+          error?: string;
+        };
+        if (!statusRes.ok) {
+          throw new Error(statusBody.error || 'Could not check pack status');
+        }
+        if (statusBody.status === 'ready') {
+          await downloadPackFile(jobId);
+          return;
+        }
+        if (statusBody.status === 'error') {
+          throw new Error(statusBody.error || 'Pack failed');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+      throw new Error('Pack is still building. Try again in a moment.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to download GDPR pack.');
+    } finally {
+      setPackBusy(false);
     }
   };
 
@@ -342,9 +438,7 @@ export default function SettingsView() {
     setReuploadSourceId(source.id);
     setLabel(source.label);
     setError('');
-    setFile(null);
-    if (fileRef.current) fileRef.current.value = '';
-    fileRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.getElementById('timeline-upload')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   const status = entitlements?.status ?? 'none';
@@ -466,28 +560,18 @@ export default function SettingsView() {
               Change password
             </Button>
           </div>
-          <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              title="Download a JSON copy of your account summary"
-              disabled={exportBusy}
-              onClick={() => void exportData()}
-            >
-              {exportBusy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-              Export my data
-            </Button>
-          </div>
-          <Button
-            type="button"
-            variant="destructive"
-            className="mt-4"
-            title="Delete account and all Timeline data"
-            onClick={() => setDeleteOpen(true)}
-          >
-            Delete account
-          </Button>
         </section>
+
+        {accountMsg && (
+          <p className="mb-4 text-sm text-walk">{accountMsg}</p>
+        )}
+        {error && (
+          <div className="mb-8 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        <SettingsSessions currentToken={currentToken} onMessage={setAccountMsg} onError={setError} />
 
         <section className="mb-8 rounded-xl border border-border bg-surface p-5">
           <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
@@ -503,6 +587,10 @@ export default function SettingsView() {
               Payment failed. Import is paused. You still have read-only access until {graceUntilLabel}.
             </p>
           )}
+          <p className="mb-3 text-sm text-text-muted">
+            Invoices, payment method, pause, and cancel are in Manage billing. Pause keeps the
+            subscription (access follows Stripe pause rules). Cancel ends access at period end.
+          </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" title="Subscribe monthly" onClick={() => void startCheckout('monthly')}>
               Subscribe monthly
@@ -515,7 +603,12 @@ export default function SettingsView() {
             >
               Subscribe yearly
             </Button>
-            <Button type="button" variant="outline" title="Open Stripe customer portal" onClick={() => void openPortal()}>
+            <Button
+              type="button"
+              variant="outline"
+              title="Open Stripe portal for invoices, pause, and cancel"
+              onClick={() => void openPortal()}
+            >
               Manage billing
             </Button>
           </div>
@@ -565,15 +658,60 @@ export default function SettingsView() {
           </Button>
         </section>
 
-        <section className="rounded-xl border border-border bg-surface p-5">
+        {publicConfig?.customTiles && (
+          <section className="mb-8 rounded-xl border border-border bg-surface p-5">
+            <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+              <MapIcon size={12} />
+              Custom map tiles
+            </div>
+            <p className="mb-3 text-sm text-text-muted">
+              HTTPS XYZ templates with {'{z}'}, {'{x}'}, and {'{y}'}. Hosts must be on this
+              environment allowlist
+              {publicConfig.customTileHosts?.length
+                ? `: ${publicConfig.customTileHosts.join(', ')}`
+                : ''}
+              . Used for Auto basemap when no vector style is configured.
+            </p>
+            <Label htmlFor="tile-dark">Dark raster URL</Label>
+            <Input
+              id="tile-dark"
+              title="Custom dark basemap tile URL"
+              value={tileDark}
+              onChange={(e) => setTileDark(e.target.value)}
+              placeholder="https://tiles.example.com/{z}/{x}/{y}.png"
+              className="mb-3"
+            />
+            <Label htmlFor="tile-light">Light raster URL</Label>
+            <Input
+              id="tile-light"
+              title="Custom light basemap tile URL"
+              value={tileLight}
+              onChange={(e) => setTileLight(e.target.value)}
+              placeholder="https://tiles.example.com/{z}/{x}/{y}.png"
+              className="mb-3"
+            />
+            <Button type="button" title="Save custom map tiles" onClick={() => void savePrefs()}>
+              Save map tiles
+            </Button>
+          </section>
+        )}
+
+        <section className="mb-8 rounded-xl border border-border bg-surface p-5">
           <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
             <Upload size={12} />
             Timeline data
           </div>
           <p className="mb-5 text-sm leading-relaxed text-text-muted">
-            Upload Google Timeline JSON or a Takeout zip (Timeline.json / Records.json). In Takeout,
-            select Location History only, then download. Merge keeps existing rows for this source.
+            Upload Google Timeline JSON or a Takeout zip (Timeline.json / Records.json). Zip the
+            Takeout folder if you have a directory. After a drop we preview which file won and how
+            days overlap, then you choose replace, merge, or skip overlapping days.
           </p>
+
+          {importStatus?.timezoneWarning?.warn && (
+            <p className="mb-4 rounded-lg border border-border bg-bg/60 px-3 py-2 text-sm text-text-muted">
+              {TIMEZONE_SKEW_COPY}
+            </p>
+          )}
 
           {error && (
             <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
@@ -595,15 +733,13 @@ export default function SettingsView() {
 
           {latest?.status === 'ready' && !busy && (
             <div className="mb-4 rounded-lg border border-walk/40 bg-walk/10 px-3 py-2 text-sm text-walk">
-              Imported {latest.visitCount ?? 0} visits, {latest.activityCount ?? 0} activities.
-              Map views will refresh automatically.
+              Imported {latest.visitCount ?? 0} visits, {latest.activityCount ?? 0} activities
+              {latest.chosenFile ? ` from ${latest.chosenFile}` : ''}. Map views will refresh
+              automatically.
             </div>
           )}
 
-          <form
-            onSubmit={startImport}
-            className="mb-6 space-y-3 rounded-lg border border-border bg-bg/50 p-4"
-          >
+          <div id="timeline-upload" className="mb-6 space-y-3 rounded-lg border border-border bg-bg/50 p-4">
             <div className="text-sm font-medium text-text">
               {reuploadSourceId ? `Replace data: ${label}` : 'Add or update Timeline'}
             </div>
@@ -619,60 +755,31 @@ export default function SettingsView() {
                 />
               </div>
             )}
-            <div>
-              <Label htmlFor="timeline-file">Timeline JSON or zip</Label>
-              <input
-                id="timeline-file"
-                ref={fileRef}
-                type="file"
-                accept=".json,.zip,application/json,application/zip"
-                title="Choose a Google Timeline JSON or Takeout zip"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                className="w-full text-sm text-text-muted file:mr-3 file:rounded-md file:border-0 file:bg-accent/20 file:px-3 file:py-1.5 file:text-sm file:text-accent"
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch
-                id="merge"
-                title="Merge into existing source instead of replacing"
-                checked={merge}
-                onCheckedChange={setMerge}
-              />
-              <Label htmlFor="merge" className="mb-0">
-                Merge (keep existing rows)
-              </Label>
-            </div>
-            <div className="flex gap-2 pt-1">
+            <ImportDropZone
+              sourceId={reuploadSourceId}
+              label={label}
+              disabled={isDemo || busy}
+              disabledReason={isDemo ? 'Demo accounts cannot import Timeline data.' : undefined}
+              onStarted={() => {
+                setPoll(true);
+                setBusy(true);
+              }}
+              onError={(msg) => setError(msg)}
+            />
+            {reuploadSourceId && (
               <Button
-                type="submit"
-                disabled={busy || !file}
-                title={
-                  reuploadSourceId
-                    ? 'Replace this source with the selected file'
-                    : 'Upload Timeline JSON or zip'
-                }
-                className="flex-1"
+                type="button"
+                variant="outline"
+                title="Cancel re-upload and keep existing source data"
+                onClick={() => {
+                  setReuploadSourceId(null);
+                  setLabel('');
+                }}
               >
-                {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                {reuploadSourceId ? 'Replace Timeline data' : 'Upload Timeline data'}
+                Cancel
               </Button>
-              {reuploadSourceId && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  title="Cancel re-upload and keep existing source data"
-                  onClick={() => {
-                    setReuploadSourceId(null);
-                    setLabel('');
-                    setFile(null);
-                    if (fileRef.current) fileRef.current.value = '';
-                  }}
-                >
-                  Cancel
-                </Button>
-              )}
-            </div>
-          </form>
+            )}
+          </div>
 
           <div className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">
             Your sources ({sources?.length ?? 0})
@@ -718,6 +825,26 @@ export default function SettingsView() {
                       <div className="mt-0.5 text-xs text-text-muted">
                         {source.visitCount} visits · {source.activityCount} activities
                       </div>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {PLACE_COLOR_TOKENS.map((token) => (
+                          <Button
+                            key={token}
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            title={`Set ${source.label} colour to ${token}`}
+                            aria-label={`Set ${source.label} colour to ${token}`}
+                            className={source.color === token ? 'ring-2 ring-text' : ''}
+                            onClick={() => void patchSourceColor(source, token)}
+                            disabled={isDemo}
+                          >
+                            <span
+                              className="h-5 w-5 rounded-full"
+                              style={{ background: sourceTokenVar(token) }}
+                            />
+                          </Button>
+                        ))}
+                      </div>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-1">
                       <Button
@@ -759,6 +886,132 @@ export default function SettingsView() {
               </li>
             ))}
           </ul>
+
+          <div className="mt-6 space-y-3 border-t border-border pt-4">
+            <div className="text-sm font-medium text-text">Delete a date range</div>
+            <p className="text-xs text-text-muted">
+              Removes visits and journeys in this window, then rebuilds day stats. Route cache is
+              kept.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="range-from">From</Label>
+                <Input
+                  id="range-from"
+                  type="date"
+                  title="Start date to delete"
+                  value={rangeFrom}
+                  onChange={(e) => setRangeFrom(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="range-to">To</Label>
+                <Input
+                  id="range-to"
+                  type="date"
+                  title="End date to delete"
+                  value={rangeTo}
+                  onChange={(e) => setRangeTo(e.target.value)}
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="range-source">Source (optional)</Label>
+              <select
+                id="range-source"
+                title="Limit delete to one Timeline source"
+                value={rangeSourceId}
+                onChange={(e) => setRangeSourceId(e.target.value)}
+                className="h-11 w-full rounded-lg border border-border bg-bg px-3 text-sm text-text"
+              >
+                <option value="">All sources</option>
+                {sources?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isDemo || !rangeFrom || !rangeTo || rangeFrom > rangeTo}
+              title="Delete visits in this date range"
+              onClick={() => setRangeOpen(true)}
+            >
+              Delete date range
+            </Button>
+          </div>
+
+          <div className="mt-6 space-y-2 border-t border-border pt-4">
+            <div className="text-sm font-medium text-text">Predicted routes</div>
+            <p className="text-xs text-text-muted">
+              Warm up to 100 uncached walking/driving journeys. Click again if more remain. Flights
+              and rail are skipped.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isDemo || rewarmBusy}
+              title="Reprocess uncached predicted routes"
+              onClick={() => void rewarm()}
+            >
+              {rewarmBusy ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+              Reprocess routes
+            </Button>
+            {rewarmMsg && <p className="text-sm text-text-muted">{rewarmMsg}</p>}
+          </div>
+        </section>
+
+        <section className="mb-8 rounded-xl border border-border bg-surface p-5">
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-text-muted">
+            <Lock size={12} />
+            Privacy
+          </div>
+          <p className="mb-4 text-sm text-text-muted">
+            Downloads stay in this browser. We never email coordinates or place names. The GDPR pack
+            includes visits and activities as JSONL plus an HTML summary with no map tiles.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              title="Download a JSON summary of account, sources, settings, and labels"
+              disabled={exportBusy}
+              onClick={() => void exportData()}
+            >
+              {exportBusy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+              Download summary JSON
+            </Button>
+            <Button
+              type="button"
+              title="Build and download a GDPR pack ZIP of your Timeline"
+              disabled={packBusy}
+              onClick={() => void exportPack()}
+            >
+              {packBusy ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+              {packBusy ? 'Building pack…' : 'Download GDPR pack'}
+            </Button>
+          </div>
+        </section>
+
+        <section className="mb-8 rounded-xl border border-red-500/30 bg-surface p-5">
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-red-400">
+            <ShieldAlert size={12} />
+            Danger zone
+          </div>
+          <p className="mb-4 text-sm text-text-muted">
+            Delete your account and all Timeline data. To remove one Google export only, use Timeline
+            data above.
+          </p>
+          <Button
+            type="button"
+            variant="destructive"
+            title="Delete account and all Timeline data"
+            onClick={() => setDeleteOpen(true)}
+          >
+            Delete account
+          </Button>
         </section>
       </div>
 
@@ -800,6 +1053,30 @@ export default function SettingsView() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={rangeOpen} onOpenChange={setRangeOpen}>
+        <AlertDialogContent title="Delete date range">
+          <h2 className="text-lg font-semibold">Delete this date range?</h2>
+          <p className="mt-2 text-sm text-text-muted">
+            Remove visits from {rangeFrom} to {rangeTo}
+            {rangeSourceId ? ' for the selected source' : ' for all sources'}. Day stats will
+            rebuild. This cannot be undone.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button type="button" variant="outline" title="Cancel" onClick={() => setRangeOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              title="Confirm delete date range"
+              onClick={() => void deleteRange()}
+            >
+              Delete range
+            </Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

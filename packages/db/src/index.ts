@@ -20,9 +20,10 @@ export function createDb(databaseUrl: string) {
 export * from "./schema.js";
 export * from "./geo.js";
 export * from "./analytics.js";
+export * from "./activity-guess.js";
 export * from "./demo-landmarks.js";
 export * from "./timeline-import.js";
 export * from "./with-tenant.js";
 export * from "./entitlements.js";
 export * from "./quotas.js";
-export { and, eq, sql, desc, or, ilike, inArray, gte, lte, lt } from "drizzle-orm";
+export { and, eq, sql, desc, or, ilike, inArray, gte, gt, lte, lt } from "drizzle-orm";

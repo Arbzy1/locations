@@ -2,7 +2,17 @@
 
 ## Unreleased
 
-Explore overflow (desktop rail and mobile More) with nested catalog pages: place directory and place pages, corridors, coverage, compare, time-lapse, month/week/on this day/gaps, year-in-review PNG, trip stories and named trips, commute, away nights, firsts, chapters, onboarding, import history, data health, staff console (own tenant counts), and an optional heatmap globe.
+Public marketing pages outside the app shell (landing, pricing, status, changelog), a skippable scripted demo tour, staff stuck-import list and tenant-wipe runbook, and env feature flags (`globe`, `demoTour`, `landing`). `GET /api/health` reports Worker and database separately. Activity guesses from dwell, hour, and place type (not an LLM) plus coverage percent and visit badges; existing tenants see those after the next import.
+
+Import quality: drag-drop empty state and Settings drop zone, zip extract that reports which Timeline file won, `POST /api/import/preview` plus skip-overlapping-days merge, source colours as Hotspots heat layers and Day View filters, date-range delete, capped route rewarm, and a timezone-skew warning (dates are not rewritten).
+
+Product maps run on MapLibre (heatmap, journeys, playback, clustering). Vector styles and 3D buildings are optional via env. Map chrome unifies layers, heatmap, measure, and saved views. Custom raster XYZ is allowlisted for self-hosters.
+
+Settings: signed-in session list and revoke, pause vs cancel billing copy (invoices stay in the Stripe portal), a labelled Danger zone for account delete, and a download-only GDPR pack ZIP of Timeline rows.
+
+Command palette search (`Ctrl/Cmd+K`, mobile sheet), URL-synced Hotspots and Day Trips filters, GPS jump, on-device recents and filter presets, and `g h` / `[` `]` keyboard jumps.
+
+Explore overflow (desktop rail and mobile More) with nested catalog pages: place directory and place pages, corridors, coverage, compare, time-lapse, month/week/on this day/gaps, year-in-review PNG, trip stories and named trips, commute, away nights, firsts, chapters, onboarding, import history, data health, staff console (own tenant counts, stuck imports, wipe runbook), in-app changelog, activity guesses, badges, and an optional heatmap globe.
 
 Day View time scrubber and playback (estimated path along stays and predicted routes), sunrise/sunset ticks, overnight stay labels, and unknown-movement gap copy.
 

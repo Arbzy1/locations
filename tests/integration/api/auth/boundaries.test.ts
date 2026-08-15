@@ -24,7 +24,7 @@ import {
   getOverview,
   getSourceById,
   listPlaceLabels,
-  renameSource,
+  patchSource,
   removeSource,
   upsertPlaceLabel,
   listClusters,
@@ -48,10 +48,10 @@ describe("API auth boundaries", () => {
     getSession.mockReset();
     vi.mocked(getOverview).mockClear();
     vi.mocked(getSourceById).mockReset();
-    vi.mocked(renameSource).mockReset();
+    vi.mocked(patchSource).mockReset();
     vi.mocked(removeSource).mockReset();
     vi.mocked(getOverview).mockResolvedValue({ ok: true } as never);
-    vi.mocked(renameSource).mockResolvedValue({ error: "Source not found" });
+    vi.mocked(patchSource).mockResolvedValue({ error: "Source not found" });
     vi.mocked(removeSource).mockResolvedValue({ error: "Source not found" });
     vi.mocked(getSourceById).mockResolvedValue(null);
     vi.mocked(upsertPlaceLabel).mockReset();
@@ -61,7 +61,10 @@ describe("API auth boundaries", () => {
     getSession.mockResolvedValue(null);
     const res = await request("/api/health");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.worker).toBe("ok");
+    expect(body.db).toBe("ok");
     expect(getSession).not.toHaveBeenCalled();
     expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(res.headers.get("Content-Security-Policy-Report-Only")).toContain(
@@ -122,7 +125,7 @@ describe("API auth boundaries", () => {
     expect(await res.json()).toEqual({
       error: "Demo accounts cannot import or manage data sources",
     });
-    expect(renameSource).not.toHaveBeenCalled();
+    expect(patchSource).not.toHaveBeenCalled();
   });
 
   it("blocks demo users from DELETE /api/sources/:id", async () => {
@@ -143,7 +146,7 @@ describe("API auth boundaries", () => {
 
   it("denies cross-tenant source rename (source not found for caller tenant)", async () => {
     getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
-    vi.mocked(renameSource).mockResolvedValue({ error: "Source not found" });
+    vi.mocked(patchSource).mockResolvedValue({ error: "Source not found" });
 
     const res = await request("/api/sources/other-tenant-source", {
       method: "PATCH",
@@ -152,11 +155,11 @@ describe("API auth boundaries", () => {
     });
 
     expect(res.status).toBe(404);
-    expect(renameSource).toHaveBeenCalledWith(
+    expect(patchSource).toHaveBeenCalledWith(
       expect.anything(),
       "user-a",
       "other-tenant-source",
-      "Stolen",
+      expect.objectContaining({ label: "Stolen" }),
     );
   });
 

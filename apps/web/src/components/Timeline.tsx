@@ -188,6 +188,7 @@ interface Props {
   /** Focus the map on this journey segment (walking, car, etc.). */
   onActivityClick?: (activity: Activity) => void;
   onUnknownClick?: (connector: Connector | null, startIso: string) => void;
+  sourceColors?: Record<string, string>;
 }
 
 function isActiveRow(startIso: string, endIso: string, activeTime?: number | null): boolean {
@@ -280,6 +281,7 @@ export default function Timeline({
   onVisitClick,
   onActivityClick,
   onUnknownClick,
+  sourceColors,
 }: Props) {
   const { timezone, unit } = useUnits();
   const sortedActivities = [...activities].sort((a, b) => a.start.localeCompare(b.start));
@@ -332,7 +334,10 @@ export default function Timeline({
                       {formatTime(v.start, timezone)}
                     </div>
                     <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold text-white z-10"
-                      style={{ background: '#bc8cff', border: '2.5px solid rgba(255,255,255,0.4)' }}>
+                      style={{
+                        background: (v.source_id && sourceColors?.[v.source_id]) || 'var(--visit)',
+                        border: '2.5px solid rgba(255,255,255,0.4)',
+                      }}>
                       {stopNum}
                     </div>
                     {!isLast && (
@@ -439,7 +444,9 @@ export default function Timeline({
           }
 
           const a = event.data;
-          const color = getJourneyColor(event.journeyIndex, totalJourneys);
+          const color =
+            (a.source_id && sourceColors?.[a.source_id]) ||
+            getJourneyColor(event.journeyIndex, totalJourneys);
           const mainRoads = a.steps?.filter((s) => s.name && s.distance_meters > 100).slice(0, 3).map((s) => s.name).filter(Boolean);
 
           return (

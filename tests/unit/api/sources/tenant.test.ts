@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { emailForTenant, getSourceById, removeSource, renameSource } from "@locations/api/services";
+import { emailForTenant, getSourceById, patchSource, removeSource, renameSource } from "@locations/api/services";
 
 /** Minimal Drizzle-like chain that returns configured rows from limit(). */
 function mockDb(rows: unknown[]) {
@@ -22,6 +22,11 @@ describe("source tenant isolation (app-level; no Postgres RLS)", () => {
 
   it("renameSource refuses when the source is not visible to the tenant", async () => {
     const result = await renameSource(mockDb([]), "user-a", "src-owned-by-b", "Hijack");
+    expect(result).toEqual({ error: "Source not found" });
+  });
+
+  it("patchSource refuses when the source is not visible to the tenant", async () => {
+    const result = await patchSource(mockDb([]), "user-a", "src-owned-by-b", { color: "visit" });
     expect(result).toEqual({ error: "Source not found" });
   });
 

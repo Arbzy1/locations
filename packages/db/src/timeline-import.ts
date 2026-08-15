@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gte, lte, sql } from "drizzle-orm";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 import * as schema from "./schema.js";
@@ -394,6 +394,90 @@ export function parseTimelineJson(raw: unknown): ParsedTimeline {
   return parsed;
 }
 
+export type TimelineFormat = "classic" | "semantic" | "records" | "edits";
+
+export function detectTimelineFormat(raw: unknown): TimelineFormat {
+  if (raw === null || typeof raw !== "object") {
+    throw new Error("Timeline JSON must be an array or a Timeline export object");
+  }
+  if (Array.isArray(raw)) return "classic";
+  const obj = raw as Record<string, unknown>;
+  if (Array.isArray(obj.semanticSegments)) return "semantic";
+  if (Array.isArray(obj.timelineEdits)) return "edits";
+  if (Array.isArray(obj.locations)) return "records";
+  throw new Error(
+    "Timeline JSON must be a visit/activity array, a semanticSegments Timeline.json, a Timeline Edits export, or Records.json",
+  );
+}
+
+export function datesFromParsed(parsed: ParsedTimeline): string[] {
+  const set = new Set<string>();
+  for (const v of parsed.visits) set.add(v.date);
+  for (const a of parsed.activities) set.add(a.date);
+  return [...set].sort();
+}
+
+export function importDayDiff(incoming: string[], existing: string[]) {
+  const exist = new Set(existing);
+  const incomingSet = new Set(incoming);
+  const overlapping = incoming.filter((d) => exist.has(d));
+  const newDays = incoming.filter((d) => !exist.has(d));
+  return {
+    overlappingDays: overlapping.length,
+    newDays: newDays.length,
+    existingDays: existing.length,
+    overlappingSample: overlapping.slice(0, 12),
+  };
+}
+
+export type TimezoneWarning = {
+  warn: boolean;
+  skewedShare: number;
+  sampleCount: number;
+};
+
+/** Compare UTC date vs local calendar date. Does not rewrite stored dates. */
+export function timezoneSkewWarning(
+  visits: Array<{ start: string; date: string }>,
+  timeZone?: string | null,
+): TimezoneWarning {
+  const tz = timeZone?.trim() || "UTC";
+  let skewed = 0;
+  let sample = 0;
+  for (const v of visits) {
+    if (!v.start) continue;
+    sample += 1;
+    const local = localCalendarDate(v.start, tz);
+    if (local && local !== v.date) skewed += 1;
+  }
+  const skewedShare = sample ? skewed / sample : 0;
+  return {
+    warn: sample >= 8 && skewedShare >= 0.15,
+    skewedShare: Math.round(skewedShare * 1000) / 1000,
+    sampleCount: sample,
+  };
+}
+
+export function localCalendarDate(iso: string, timeZone: string): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(d);
+    const y = parts.find((p) => p.type === "year")?.value;
+    const m = parts.find((p) => p.type === "month")?.value;
+    const day = parts.find((p) => p.type === "day")?.value;
+    if (!y || !m || !day) return iso.slice(0, 10);
+    return `${y}-${m}-${day}`;
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
+
 function buildDayStatRows(
   tenant: TenantId,
   visitRows: Array<{ date: string; cluster: string }>,
@@ -511,7 +595,13 @@ export async function rebuildHourOfWeekCache(
  */
 export async function importSourceData(
   db: Db,
-  opts: { tenant: TenantId; sourceId: string; records: unknown; merge?: boolean },
+  opts: {
+    tenant: TenantId;
+    sourceId: string;
+    records: unknown;
+    merge?: boolean;
+    skipOverlappingDays?: boolean;
+  },
 ): Promise<{ visitCount: number; activityCount: number; days: number }> {
   const { tenant, sourceId } = opts;
   const parsed = parseTimelineJson(opts.records);
@@ -525,12 +615,30 @@ export async function importSourceData(
       .where(and(eq(activities.tenant, tenant), eq(activities.sourceId, sourceId)));
   }
 
-  const visitRows = parsed.visits.map((v) => ({
+  let visitDrafts = parsed.visits;
+  let activityDrafts = parsed.activities;
+  if (opts.merge && opts.skipOverlappingDays) {
+    const existing = new Set<string>();
+    const visitDates = await db
+      .select({ date: visits.date })
+      .from(visits)
+      .where(and(eq(visits.tenant, tenant), eq(visits.sourceId, sourceId)));
+    const activityDates = await db
+      .select({ date: activities.date })
+      .from(activities)
+      .where(and(eq(activities.tenant, tenant), eq(activities.sourceId, sourceId)));
+    for (const row of visitDates) existing.add(row.date);
+    for (const row of activityDates) existing.add(row.date);
+    visitDrafts = visitDrafts.filter((v) => !existing.has(v.date));
+    activityDrafts = activityDrafts.filter((a) => !existing.has(a.date));
+  }
+
+  const visitRows = visitDrafts.map((v) => ({
     ...v,
     tenant,
     sourceId,
   }));
-  const activityRows = parsed.activities.map((a) => ({
+  const activityRows = activityDrafts.map((a) => ({
     ...a,
     tenant,
     sourceId,
@@ -573,6 +681,40 @@ export async function deleteSourceData(
     .delete(dataSources)
     .where(and(eq(dataSources.tenant, tenant), eq(dataSources.id, sourceId)));
   return rebuildTenantAggregates(db, tenant);
+}
+
+/** Delete visits and activities in an inclusive date window, then rebuild aggregates. */
+export async function deleteDateRange(
+  db: Db,
+  opts: { tenant: TenantId; from: string; to: string; sourceId?: string },
+): Promise<{ visitCount: number; activityCount: number; days: number }> {
+  const { tenant, from, to, sourceId } = opts;
+  const visitFilters = [eq(visits.tenant, tenant), gte(visits.date, from), lte(visits.date, to)];
+  const activityFilters = [
+    eq(activities.tenant, tenant),
+    gte(activities.date, from),
+    lte(activities.date, to),
+  ];
+  if (sourceId) {
+    visitFilters.push(eq(visits.sourceId, sourceId));
+    activityFilters.push(eq(activities.sourceId, sourceId));
+  }
+  const [visitCountRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(visits)
+    .where(and(...visitFilters));
+  const [activityCountRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(activities)
+    .where(and(...activityFilters));
+  await db.delete(visits).where(and(...visitFilters));
+  await db.delete(activities).where(and(...activityFilters));
+  const { days } = await rebuildTenantAggregates(db, tenant);
+  return {
+    visitCount: visitCountRow?.count ?? 0,
+    activityCount: activityCountRow?.count ?? 0,
+    days,
+  };
 }
 
 /** Find or create a data_sources row for tenant + label. */

@@ -349,6 +349,8 @@ describe("computeAllAnalytics keys", () => {
     expect(Array.isArray(all["lapsed-places"])).toBe(true);
     expect(all["hour-of-week"]).toHaveLength(7);
     expect(Array.isArray(all.personality)).toBe(true);
+    expect(Array.isArray(all["activity-guesses"])).toBe(true);
+    expect(all.badges).toMatchObject({ visitCount: 1 });
     expect(all["year-in-review"]?.["2024"]?.year).toBe(2024);
     expect(all["year-in-review:2024"]).toMatchObject({ year: 2024 });
     expect(all.monthly[0].days_tracked).toBe(1);

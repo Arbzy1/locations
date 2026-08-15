@@ -18,17 +18,24 @@ export type Env = {
   GRACE_DAYS?: string;
   MAP_TILE_DARK_URL?: string;
   MAP_TILE_LIGHT_URL?: string;
+  MAP_STYLE_DARK_URL?: string;
+  MAP_STYLE_LIGHT_URL?: string;
+  MAP_CUSTOM_TILE_HOSTS?: string;
   OSRM_BASE?: string;
   GEOCODE_BASE?: string;
   MAP_TILE_ATTR?: string;
   GLOBE_ENABLED?: string;
+  DEMO_TOUR?: string;
+  LANDING_ENABLED?: string;
 };
 
 export type ImportQueueMessage = {
+  kind?: "import";
   jobId: string;
   tenant: string;
   userId: string;
   r2Key: string;
   sourceId: string;
   merge?: boolean;
+  skipOverlappingDays?: boolean;
 };

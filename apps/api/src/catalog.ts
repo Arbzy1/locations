@@ -455,6 +455,7 @@ export async function listImportJobs(db: Db, tenant: TenantId) {
       activityCount: importJobs.activityCount,
       parsedCount: importJobs.parsedCount,
       merge: importJobs.merge,
+      chosenFile: importJobs.chosenFile,
       createdAt: importJobs.createdAt,
       updatedAt: importJobs.updatedAt,
     })
@@ -475,15 +476,43 @@ export async function staffTenantStats(db: Db, tenant: TenantId) {
     .from(dataSources)
     .where(eq(dataSources.tenant, tenant));
   const jobs = await db
-    .select({ status: importJobs.status, createdAt: importJobs.createdAt })
+    .select({
+      id: importJobs.id,
+      status: importJobs.status,
+      updatedAt: importJobs.updatedAt,
+      parsedCount: importJobs.parsedCount,
+      visitCount: importJobs.visitCount,
+      error: importJobs.error,
+    })
     .from(importJobs)
     .where(eq(importJobs.tenant, tenant))
-    .orderBy(desc(importJobs.createdAt))
-    .limit(5);
+    .orderBy(desc(importJobs.updatedAt))
+    .limit(20);
+  const now = Date.now();
+  const recentJobs = jobs.map((j) => {
+    const updated = j.updatedAt ? new Date(j.updatedAt).getTime() : now;
+    const ageMinutes = Number.isFinite(updated)
+      ? Math.max(0, Math.round((now - updated) / 60_000))
+      : 0;
+    return {
+      id: j.id,
+      status: j.status,
+      ageMinutes,
+      parsedCount: j.parsedCount ?? 0,
+      visitCount: j.visitCount ?? 0,
+      error: j.error,
+    };
+  });
+  const stuckJobs = recentJobs.filter(
+    (j) => (j.status === "pending" || j.status === "processing") && j.ageMinutes >= 15,
+  );
   return {
     visitCount: visitRow?.count ?? 0,
     sourceCount: sourceRow?.count ?? 0,
-    latestJobStatus: jobs[0]?.status ?? null,
-    recentJobCount: jobs.length,
+    latestJobStatus: recentJobs[0]?.status ?? null,
+    recentJobCount: recentJobs.length,
+    stuckJobCount: stuckJobs.length,
+    stuckJobs,
+    recentJobs,
   };
 }
