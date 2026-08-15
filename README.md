@@ -94,6 +94,8 @@ Full list: [docs/product/features.md](docs/product/features.md).
 | `npm run deploy:staging` | Build web + `wrangler deploy --env staging` |
 | `npm run deploy:prod` | Build web + `wrangler deploy --env production` |
 | `npm run deploy:both` | Build once, then staging, then production |
+| `npm run release` / `release:patch` / `release:minor` / `release:major` | Tag a semver release and promote `docs/changelog.md` |
+| `npm run release:set -- v1.2.3` | Tag a specific version |
 | `npm run db:migrate:dev` | Apply schema (local `.env`) |
 | `npm run db:migrate:staging` / `db:migrate:prod` | Apply schema to staging / production |
 | `npm run db:migrate:all` | Migrate local, staging, then production |

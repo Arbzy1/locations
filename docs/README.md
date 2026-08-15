@@ -38,7 +38,7 @@ Index of product, architecture, security, legal, and engineering docs. Agent con
 
 - [HTTP routes](api/routes.md)
 - [Local setup](engineering/local-setup.md)
-- [Deploy](engineering/deploy.md)
+- [Deploy](engineering/deploy.md) (includes `npm run release`)
 - [Testing](engineering/testing.md)
 - [UI (shadcn + Motion)](engineering/ui.md)
 - Runbooks: [rotate secrets](engineering/runbooks/rotate-secrets.md), [restore tenant](engineering/runbooks/restore-tenant.md), [stuck import](engineering/runbooks/stuck-import.md), [Stripe webhook replay](engineering/runbooks/stripe-webhook-replay.md)

@@ -67,10 +67,30 @@ Local CLI secrets: `.env` / `.dev.vars`. Staging: `.env.staging` / `.dev.vars.st
 | `deploy:prod` | Same for `--env production` |
 | `deploy:both` | Build once, then staging, then production |
 | `deploy:preview` | `wrangler versions upload --env staging --secrets-file` |
+| `release` / `release:patch` | Patch bump, changelog promote, tag, push |
+| `release:minor` / `release:major` | Minor or major bump, then the same |
+| `release:set -- vX.Y.Z` | Tag a specific version |
 
 `deploy:prod` always uses `--env production`. A deploy without `--env` targets the local-only Worker name `locations-dev`, not production.
 
 Local `deploy:*` scripts pass `--secrets-file` from `.env.<env>` / `.dev.vars.<env>`. That is required on first deploy: `wrangler secret bulk` can store secrets on a version that `secrets.required` does not count until they are attached to a code deploy.
+
+## Release tags
+
+`npm run release` (patch by default) bumps every workspace `package.json`, syncs `package-lock.json`, promotes the Unreleased section in `docs/changelog.md` into the new version, updates the in-app marketing changelog, commits, tags, and pushes the current branch plus the tag.
+
+```bash
+npm run release              # patch (vX.Y.Z+1)
+npm run release:patch
+npm run release:minor
+npm run release:major
+npm run release:set -- v1.3.0
+npm run release -- --current
+npm run release:minor -- --dry-run
+npm run release:patch -- --no-push
+```
+
+The working tree must be clean (untracked files are ignored). Use `--force` only to replace an existing tag of the same name. Staging still deploys on push to `main`; production is a separate promote (`npm run deploy:prod` or the production workflow).
 
 ## GitHub Actions
 
