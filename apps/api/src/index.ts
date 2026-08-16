@@ -10,6 +10,7 @@ import {
   type TenantId,
   type PlaceColorToken,
 } from "@locations/db";
+import { APP_VERSION } from "./version";
 import { googleAuthEnabled, type Env, type ImportQueueMessage } from "./env";
 import { createAuth } from "./auth";
 import { corsOriginFor } from "./cors";
@@ -310,6 +311,7 @@ app.get("/api/config", async (c) => {
     googleAuth: googleAuthEnabled(c.env),
     globe: flags.globeEnabled,
     billingConfigured: Boolean(c.env.STRIPE_SECRET_KEY),
+    version: APP_VERSION,
     flags: {
       globe: flags.globeEnabled,
       demoTour: flags.demoTour,
@@ -1353,7 +1355,7 @@ app.post("/api/billing/webhook", async (c) => {
 
 app.get("/api/health", async (c) => {
   const dbOk = await pingDatabase(c.env).catch(() => false);
-  return c.json({ ok: true, worker: "ok", db: dbOk ? "ok" : "error" });
+  return c.json({ ok: true, worker: "ok", db: dbOk ? "ok" : "error", version: APP_VERSION });
 });
 
 async function sendBillingNotice(

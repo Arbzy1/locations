@@ -5,6 +5,7 @@ import { Button } from "../ui/button";
 import { Card, CardTitle } from "../ui/card";
 import { useImportStatus, useSources } from "../../hooks/useApi";
 import { useUnits } from "../../lib/units";
+import { AppVersionLink } from "../shell/AppVersion";
 import type { SettingsSection } from "../../lib/settings/settings-section";
 
 type Props = {
@@ -98,6 +99,10 @@ export default function SettingsOverview({ name, email, emailVerified, onSelect 
           <span className="text-xs font-normal text-text-muted">Export or delete</span>
         </Button>
       </div>
+
+      <p className="text-center text-xs text-text-muted">
+        Locations <AppVersionLink />
+      </p>
     </div>
   );
 }

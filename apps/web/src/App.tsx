@@ -32,6 +32,7 @@ import ChangelogPage from './components/marketing/ChangelogPage';
 import DemoTour from './components/shell/DemoTour';
 import ThemeToggle from './components/shell/ThemeToggle';
 import CommandPalette from './components/shell/CommandPalette';
+import { AppVersion } from './components/shell/AppVersion';
 import { Button } from './components/ui/button';
 import ImportDropZone from './components/explorer/ImportDropZone';
 import { Toaster } from './components/ui/sonner';
@@ -426,6 +427,7 @@ function AppContent() {
             )}
           >
             <ThemeToggle className={navExpanded ? undefined : 'h-11 w-11'} showLabel={navExpanded} />
+            <AppVersion compact={!navExpanded} className={navExpanded ? 'w-full' : undefined} />
             {navExpanded && (
               <Button
                 asChild
@@ -549,6 +551,7 @@ function AppContent() {
                     <span className="text-xs text-text-muted">Theme</span>
                     <ThemeToggle className="h-11 w-11" />
                   </div>
+                  <AppVersion className="w-full justify-start" />
                   <Button
                     asChild
                     variant="ghost"

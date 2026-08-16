@@ -18,6 +18,7 @@ import {
   user,
   withTenant,
 } from "@locations/db";
+import { APP_VERSION } from "./version";
 import type { Env } from "./env";
 import { stripeClient } from "./billing";
 import { parseCustomTileHosts } from "./map-tiles";
@@ -788,6 +789,7 @@ export async function getOpsDiagnostics(env: Env) {
     worker: true,
     db: dbOk,
     flagsLoaded,
+    version: APP_VERSION,
     stripeConfigured: Boolean(env.STRIPE_SECRET_KEY),
     resendConfigured: Boolean(env.RESEND_API_KEY),
     r2Configured: Boolean(env.UPLOADS),

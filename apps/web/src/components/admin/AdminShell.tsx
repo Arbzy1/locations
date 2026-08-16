@@ -23,6 +23,7 @@ import { useSession } from "../../lib/auth";
 import { enterMotion } from "../../lib/motion";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
+import { AppVersionLink } from "../shell/AppVersion";
 import { Sheet, SheetContent } from "../ui/sheet";
 import { ADMIN_NAV, ADMIN_NAV_GROUPS, type AdminNavIcon } from "./adminNav";
 import { AdminStatus, roleStatus } from "./AdminUi";
@@ -170,6 +171,7 @@ export default function AdminShell() {
             {role === "developer" ? "Read-only" : roleMeta.label}
           </AdminStatus>
           {email && <span className="truncate text-xs text-text-muted">{email}</span>}
+          <AppVersionLink className="text-text-muted hover:text-accent" />
           <Button asChild variant="outline" size="sm" className="ml-auto" title="Back to Timeline">
             <Link to="/hotspots">Back to Timeline</Link>
           </Button>

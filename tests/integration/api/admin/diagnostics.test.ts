@@ -34,6 +34,7 @@ describe("admin diagnostics", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.worker).toBe(true);
+    expect(typeof body.version).toBe("string");
     expect(typeof body.stripeConfigured).toBe("boolean");
     expect(JSON.stringify(body)).not.toMatch(/sk_|whsec_|re_/);
     expect(payloadLooksLikeLocationPii(body)).toBe(false);

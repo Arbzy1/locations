@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Button } from '../ui/button';
 import ThemeToggle from '../shell/ThemeToggle';
+import { LegalFooter } from './LegalFooter';
 
 export default function LegalPage({
   title,
@@ -20,6 +21,7 @@ export default function LegalPage({
         <Button asChild variant="outline" className="mt-8" title="Back to home">
           <Link to="/">Back to home</Link>
         </Button>
+        <LegalFooter />
       </article>
     </div>
   );

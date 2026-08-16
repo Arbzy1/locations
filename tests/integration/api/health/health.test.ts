@@ -33,7 +33,7 @@ describe("GET /api/health", () => {
     const env = testEnv({ DATABASE_URL: "postgres://secret-user:secret-pass@host/db" });
     const res = await requestApp(app, "/api/health", undefined, env);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, worker: "ok", db: "ok" });
+    expect(await res.json()).toEqual({ ok: true, worker: "ok", db: "ok", version: expect.any(String) });
     expect(getSession).not.toHaveBeenCalled();
     const logged = [...info.mock.calls, ...error.mock.calls].map((c) => String(c[0])).join(" ");
     expect(logged).not.toContain("secret-pass");
@@ -44,13 +44,15 @@ describe("GET /api/health", () => {
     vi.mocked(pingDatabase).mockResolvedValue(false);
     const res = await requestApp(app, "/api/health");
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ ok: true, worker: "ok", db: "error" });
+    expect(await res.json()).toMatchObject({ ok: true, worker: "ok", db: "error", version: expect.any(String) });
   });
 
   it("reports db error when ping throws", async () => {
     vi.mocked(pingDatabase).mockRejectedValue(new Error("neon down"));
     const res = await requestApp(app, "/api/health");
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ db: "error" });
+    const body = (await res.json()) as { db: string; version: string };
+    expect(body.db).toBe("error");
+    expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
   });
 });

@@ -1,3 +1,4 @@
+import { APP_VERSION } from "@locations/api/version";
 import { vi } from "vitest";
 import { sessionUser } from "./api-app";
 
@@ -66,6 +67,7 @@ export function createAdminOpsMock(overrides: Record<string, unknown> = {}) {
       worker: true,
       db: true,
       flagsLoaded: true,
+      version: APP_VERSION,
       stripeConfigured: false,
       resendConfigured: false,
       r2Configured: true,

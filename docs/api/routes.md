@@ -6,9 +6,9 @@ All other `/api/*` require a session.
 
 | Method | Path | Notes |
 |--------|------|--------|
-| GET | `/api/health` | `{ ok, worker, db }` Worker liveness plus a database ping. `db` is `ok` or `error`. No connection strings. |
+| GET | `/api/health` | `{ ok, worker, db, version }` Worker liveness plus a database ping. `db` is `ok` or `error`. `version` is the root `package.json` semver. No connection strings. |
 | GET | `/api/me` | user, tenant, entitlements, settings |
-| GET | `/api/config` | map tile/style templates, `customTiles`, `signupDisabled`, `googleAuth`, `globe`, `billingConfigured`, `flags` (`globe`, `demoTour`, `landing`) |
+| GET | `/api/config` | map tile/style templates, `customTiles`, `signupDisabled`, `googleAuth`, `globe`, `billingConfigured`, `version`, `flags` (`globe`, `demoTour`, `landing`) |
 | GET | `/api/overview` | tenant summary; query `sourceId`, `from`, `to` |
 | GET | `/api/days` | |
 | DELETE | `/api/days` | `from`, `to`, optional `sourceId`; not demo; rebuilds aggregates |
@@ -51,7 +51,7 @@ All other `/api/*` require a session.
 | GET | `/api/admin/demo` | staff; exists, demo email, demo-tenant visit/source counts; no recreate |
 | GET | `/api/admin/analytics` | staff; role counts, unverified exact, entitled/lapsed sampled, signups by week |
 | GET | `/api/admin/audit` | staff; action log with scrubbed meta; `action`, `cursor` |
-| GET | `/api/admin/diagnostics` | staff; Worker/Neon/flag/vendor booleans |
+| GET | `/api/admin/diagnostics` | staff; Worker/Neon/flag/vendor booleans plus `version` |
 | GET | `/api/search` | `q=` places (cluster, type, labels, tags) and days; hidden omitted; ISO date is exact; rate-limited |
 | GET | `/api/sources` | |
 | PATCH/DELETE | `/api/sources/:id` | not demo; PATCH `label` and/or allowlisted `color` |

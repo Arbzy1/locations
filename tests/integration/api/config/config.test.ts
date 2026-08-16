@@ -26,6 +26,7 @@ describe("GET /api/config", () => {
     expect(body.billingConfigured).toBe(false);
     expect(body.googleAuth).toBe(false);
     expect(body.flags).toEqual({ globe: true, demoTour: true, landing: true });
+    expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(typeof body.mapTileDark).toBe("string");
     expect(body.mapStyleDark).toBeNull();
   });

@@ -6,6 +6,6 @@
     "lib": ["ES2022"],
     "noEmit": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../../package.json"],
   "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"]
 }
