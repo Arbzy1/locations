@@ -25,6 +25,9 @@ function visit(id: number, start: string, end: string, lat: number, lon: number)
     semanticType: "Unknown",
     placeId: null,
     durationMinutes: 60,
+    fixLat: null,
+    fixLon: null,
+    fixCount: null,
   };
 }
 
@@ -75,7 +78,16 @@ function dayDb(v: VisitRow[], a: ActivityRow[]) {
 }
 
 type DayResult = {
-  activities: Array<{ route_geometry: [number, number][]; route_source: string; gps_points: number }>;
+  visits: Array<{ lat: number; lon: number; place_lat: number; fix_count: number; moved_m: number }>;
+  activities: Array<{
+    route_geometry: [number, number][];
+    route_source: string;
+    gps_points: number;
+    recorded_geometry: [number, number][] | null;
+    predicted_geometry?: [number, number][];
+    prediction_gap?: { within100Pct: number } | null;
+    accuracy: { score: string; fixes: number };
+  }>;
   connectors: Array<{ from_time: string; to_time: string; is_routed: boolean }>;
 };
 
@@ -129,5 +141,31 @@ describe("getDay journey lines and gaps", () => {
     expect(day.connectors.map((c) => [c.from_time, c.to_time])).toEqual([
       [`${DATE}T10:30:00.000Z`, `${DATE}T12:00:00.000Z`],
     ]);
+  });
+
+  it("draws stays at their GPS position and reports how far Google's place was", async () => {
+    const homeFixed = { ...home, fixLat: 40.7138, fixLon: -74.006, fixCount: 4 };
+    const day = (await getDay(dayDb([homeFixed, work], []), "t1", DATE)) as DayResult;
+    expect(day.visits[0]).toMatchObject({ lat: 40.7138, place_lat: 40.7128, fix_count: 4 });
+    expect(day.visits[0].moved_m).toBeGreaterThan(100);
+  });
+
+  it("returns recorded and, with compare, predicted lines plus accuracy", async () => {
+    const t = Date.parse(`${DATE}T09:10:00Z`) / 1000;
+    const train = {
+      ...journey(10, "09:00", "09:30", [40.7135, -74.0065], [40.7575, -73.986]),
+      mode: "train",
+      path: [[40.73, -73.996, t], [40.74, -73.992, t + 300]] as [number, number, number][],
+    };
+    const plain = (await getDay(dayDb([home, work], [train]), "t1", DATE)) as DayResult;
+    expect(plain.activities[0].recorded_geometry).toContainEqual([40.73, -73.996]);
+    expect(plain.activities[0].predicted_geometry).toBeUndefined();
+    expect(plain.activities[0].accuracy.fixes).toBe(2);
+
+    const compared = (await getDay(dayDb([home, work], [train]), "t1", DATE, undefined, undefined, {
+      compare: true,
+    })) as DayResult;
+    expect(compared.activities[0].predicted_geometry!.length).toBeGreaterThan(2);
+    expect(compared.activities[0].prediction_gap).not.toBeNull();
   });
 });

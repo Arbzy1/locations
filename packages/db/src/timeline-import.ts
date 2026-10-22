@@ -15,6 +15,7 @@ import {
 } from "./schema.js";
 import {
   classifyLocation,
+  haversineM,
   mapTransportMode,
   METERS_TO_MILES,
   parseGeo,
@@ -57,6 +58,9 @@ type VisitDraft = {
   semanticType: string;
   placeId: string | null;
   durationMinutes: number;
+  fixLat: number | null;
+  fixLon: number | null;
+  fixCount: number | null;
 };
 
 type ActivityDraft = {
@@ -409,6 +413,59 @@ export function attachPathPoints(
   return attached;
 }
 
+/** Fixes further than this from Google's place are treated as a different spot. */
+const VISIT_FIX_MAX_M = 1500;
+
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+};
+
+/**
+ * Pin each stay to where the phone actually was: the median of GPS fixes
+ * recorded during the visit, when at least two sit near Google's place.
+ * Returns how many visits got a position.
+ */
+export function attachVisitFixes(
+  rows: Array<{
+    start: string;
+    end: string;
+    lat: number;
+    lon: number;
+    fixLat: number | null;
+    fixLon: number | null;
+    fixCount: number | null;
+  }>,
+  points: PathPoint[],
+): number {
+  if (!points.length || !rows.length) return 0;
+  const sorted = [...points].sort((a, b) => a[2] - b[2]);
+  let fixed = 0;
+  for (const row of rows) {
+    const startS = Date.parse(row.start) / 1000 - PATH_TOLERANCE_S;
+    const endS = Date.parse(row.end) / 1000 + PATH_TOLERANCE_S;
+    if (!Number.isFinite(startS) || !Number.isFinite(endS)) continue;
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid][2] < startS) lo = mid + 1;
+      else hi = mid;
+    }
+    const near: PathPoint[] = [];
+    for (let i = lo; i < sorted.length && sorted[i][2] <= endS; i++) {
+      if (haversineM(row.lat, row.lon, sorted[i][0], sorted[i][1]) <= VISIT_FIX_MAX_M) near.push(sorted[i]);
+    }
+    if (near.length < 2) continue;
+    row.fixLat = round6(median(near.map((p) => p[0])));
+    row.fixLon = round6(median(near.map((p) => p[1])));
+    row.fixCount = near.length;
+    fixed += 1;
+  }
+  return fixed;
+}
+
 function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
   const visitRows: VisitDraft[] = [];
   const activityRows: ActivityDraft[] = [];
@@ -440,6 +497,9 @@ function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
         semanticType: top.semanticType ?? "Unknown",
         placeId: top.placeID ?? null,
         durationMinutes: Math.round(duration * 10) / 10,
+        fixLat: null,
+        fixLon: null,
+        fixCount: null,
       });
     } else if (record.activity) {
       const act = record.activity;
@@ -467,6 +527,7 @@ function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
   }
 
   attachPathPoints(activityRows, pathPoints);
+  attachVisitFixes(visitRows, pathPoints);
 
   return { visits: visitRows, activities: activityRows };
 }

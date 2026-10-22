@@ -202,3 +202,105 @@ export function makeTraceCacheKey(trace: PathPoint[], profile: string): string {
   const body = trace.map((p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`).join(";");
   return `trace:${profile}:${trace.length}:${fnv1a(body, 0x811c9dc5)}${fnv1a(body, 0x9747b28c)}`;
 }
+
+type LatLonLike = readonly [number, number, ...number[]];
+
+/** Distance in metres from a point to a polyline (local equirectangular projection). */
+export function distanceToPolylineM(lat: number, lon: number, line: ReadonlyArray<LatLonLike>): number {
+  if (!line.length) return Infinity;
+  if (line.length === 1) return haversineM(lat, lon, line[0][0], line[0][1]);
+  const kx = 111_320 * Math.cos((lat * Math.PI) / 180);
+  const ky = 110_540;
+  let best = Infinity;
+  for (let i = 1; i < line.length; i++) {
+    const ax = (line[i - 1][1] - lon) * kx;
+    const ay = (line[i - 1][0] - lat) * ky;
+    const bx = (line[i][1] - lon) * kx;
+    const by = (line[i][0] - lat) * ky;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2));
+    const px = ax + t * dx;
+    const py = ay + t * dy;
+    best = Math.min(best, Math.sqrt(px * px + py * py));
+  }
+  return best;
+}
+
+/** How far a drawn line strays from recorded fixes. */
+export function traceDeviation(
+  fixes: ReadonlyArray<LatLonLike>,
+  line: ReadonlyArray<LatLonLike>,
+): { medianM: number; maxM: number; within100Pct: number } | null {
+  if (!fixes.length || line.length < 2) return null;
+  const d = fixes.map((f) => distanceToPolylineM(f[0], f[1], line)).sort((a, b) => a - b);
+  return {
+    medianM: Math.round(d[Math.floor((d.length - 1) / 2)]),
+    maxM: Math.round(d[d.length - 1]),
+    within100Pct: Math.round((d.filter((x) => x <= 100).length / d.length) * 100),
+  };
+}
+
+/** Points every `everyM` metres along a trace (excluding the ends), at most `max`. */
+export function sampleAlongTrace(
+  trace: ReadonlyArray<LatLonLike>,
+  everyM: number,
+  max: number,
+): [number, number][] {
+  const total = polylineLengthM(trace);
+  if (trace.length < 2 || total < everyM) return [];
+  const count = Math.min(max, Math.floor(total / everyM));
+  const step = total / (count + 1);
+  const out: [number, number][] = [];
+  let walked = 0;
+  let target = step;
+  for (let i = 1; i < trace.length && out.length < count; i++) {
+    const seg = haversineM(trace[i - 1][0], trace[i - 1][1], trace[i][0], trace[i][1]);
+    while (seg > 0 && walked + seg >= target && out.length < count) {
+      const t = (target - walked) / seg;
+      out.push([
+        trace[i - 1][0] + (trace[i][0] - trace[i - 1][0]) * t,
+        trace[i - 1][1] + (trace[i][1] - trace[i - 1][1]) * t,
+      ]);
+      target += step;
+    }
+    walked += seg;
+  }
+  return out;
+}
+
+export type JourneyAccuracy = {
+  score: "high" | "medium" | "low";
+  fixes: number;
+  maxGapMin: number;
+  meanOffsetM: number | null;
+};
+
+/**
+ * How much to trust a drawn journey: GPS fix count, the longest stretch without
+ * a fix, and how far the fixes sit from the line actually drawn.
+ */
+export function journeyAccuracy(opts: {
+  path: PathPoint[] | null | undefined;
+  startS: number;
+  endS: number;
+  drawnLine: ReadonlyArray<LatLonLike>;
+}): JourneyAccuracy {
+  const fixes = opts.path ?? [];
+  if (!fixes.length) return { score: "low", fixes: 0, maxGapMin: Math.round((opts.endS - opts.startS) / 60), meanOffsetM: null };
+  const times = [opts.startS, ...fixes.map((f) => f[2]), opts.endS].sort((a, b) => a - b);
+  let maxGap = 0;
+  for (let i = 1; i < times.length; i++) maxGap = Math.max(maxGap, times[i] - times[i - 1]);
+  const maxGapMin = Math.round(maxGap / 60);
+  const offsets = opts.drawnLine.length >= 2 ? fixes.map((f) => distanceToPolylineM(f[0], f[1], opts.drawnLine)) : [];
+  const meanOffsetM = offsets.length ? Math.round(offsets.reduce((s, x) => s + x, 0) / offsets.length) : null;
+  const offset = meanOffsetM ?? 0;
+  const score =
+    fixes.length >= 3 && maxGapMin <= 5 && offset <= 60
+      ? "high"
+      : maxGapMin > 15 || offset > 250
+        ? "low"
+        : "medium";
+  return { score, fixes: fixes.length, maxGapMin, meanOffsetM };
+}

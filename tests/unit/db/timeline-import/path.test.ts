@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   attachPathPoints,
+  attachVisitFixes,
   MAX_PATH_POINTS,
   parseTimelineJson,
   pathPointsFromRecord,
@@ -94,3 +95,28 @@ describe("timelinePath import", () => {
     expect(rows[0].path?.at(-1)).toEqual(points.at(-1));
   });
 });
+
+describe("attachVisitFixes", () => {
+  it("pins stays to the median of nearby GPS fixes recorded during them", () => {
+    const parsed = parseTimelineJson(loadTimelineFixture("classic-with-path.json"));
+    const [home, work] = parsed.visits;
+    expect(home.fixCount).toBe(2);
+    expect(home.fixLat).toBeCloseTo((40.7128 + 40.72) / 2, 5);
+    expect(work.fixCount).toBe(2);
+    expect(work.fixLon).toBeCloseTo((-73.986 + -73.9855) / 2, 5);
+  });
+
+  it("ignores far-away fixes and stays with fewer than two fixes", () => {
+    const rows = [
+      { start: "2024-06-01T08:00:00.000Z", end: "2024-06-01T09:00:00.000Z", lat: 40.7, lon: -74, fixLat: null, fixLon: null, fixCount: null },
+    ];
+    const t = Date.parse("2024-06-01T08:10:00Z") / 1000;
+    const fixed = attachVisitFixes(rows, [
+      [40.7001, -74, t],
+      [41.5, -74, t + 60],
+    ]);
+    expect(fixed).toBe(0);
+    expect(rows[0].fixCount).toBeNull();
+  });
+});
+

@@ -186,6 +186,10 @@ export const visits = pgTable(
     semanticType: text("semantic_type").notNull(),
     placeId: text("place_id"),
     durationMinutes: real("duration_minutes").notNull(),
+    /** Median of the GPS fixes recorded during the stay (Timeline timelinePath). */
+    fixLat: real("fix_lat"),
+    fixLon: real("fix_lon"),
+    fixCount: integer("fix_count"),
   },
   (t) => [
     index("visits_tenant_date_idx").on(t.tenant, t.date),

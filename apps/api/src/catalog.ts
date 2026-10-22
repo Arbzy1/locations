@@ -17,6 +17,10 @@ import {
   ilike,
   gte,
   lte,
+  journeyTrace,
+  thinTrace,
+  haversineM,
+  METERS_TO_MILES,
   type TenantId,
 } from "@locations/db";
 
@@ -337,6 +341,173 @@ export async function getTripRange(db: Db, tenant: TenantId, start: string, end:
       distance_meters: a.distanceMeters,
       duration_minutes: a.durationMinutes,
     })),
+  };
+}
+
+const ROUTE_RANGE_MAX_DAYS = 366;
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const round5 = (n: number) => Math.round(n * 1e5) / 1e5;
+
+function addDays(day: string, n: number): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Every journey line in a date range, as recorded (GPS trace when the journey has
+ * fixes, else a straight start-to-end line). No routing calls, so a whole year
+ * loads quickly; lines are thinned more the longer the range.
+ */
+export async function getRouteLines(
+  db: Db,
+  tenant: TenantId,
+  opts: { from: string; to: string; sourceIds?: string[] },
+) {
+  const { from } = opts;
+  if (!ISO_DAY.test(from) || !ISO_DAY.test(opts.to) || from > opts.to) {
+    return { error: "from and to must be YYYY-MM-DD with from <= to" as const };
+  }
+  const lastAllowed = addDays(from, ROUTE_RANGE_MAX_DAYS - 1);
+  const to = opts.to > lastAllowed ? lastAllowed : opts.to;
+  const spanDays = Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
+  const minSpacingM = spanDays <= 2 ? 25 : spanDays <= 45 ? 120 : 350;
+
+  const rows = await db
+    .select({
+      date: activities.date,
+      start: activities.start,
+      end: activities.end,
+      startLat: activities.startLat,
+      startLon: activities.startLon,
+      endLat: activities.endLat,
+      endLon: activities.endLon,
+      mode: activities.mode,
+      distanceMeters: activities.distanceMeters,
+      sourceId: activities.sourceId,
+      path: activities.path,
+    })
+    .from(activities)
+    .where(and(eq(activities.tenant, tenant), gte(activities.date, from), lte(activities.date, to)))
+    .orderBy(activities.start);
+  const picked = opts.sourceIds?.length
+    ? rows.filter((r) => r.sourceId && opts.sourceIds!.includes(r.sourceId))
+    : rows;
+
+  const modes: Record<string, { count: number; miles: number }> = {};
+  const dates = new Set<string>();
+  let totalMiles = 0;
+  const lines = picked.map((a) => {
+    const miles = a.distanceMeters * METERS_TO_MILES;
+    totalMiles += miles;
+    dates.add(a.date);
+    const m = (modes[a.mode] ??= { count: 0, miles: 0 });
+    m.count += 1;
+    m.miles += miles;
+    const trace = journeyTrace(a);
+    const pts = trace
+      ? thinTrace(trace, { minSpacingM, maxPoints: 200 })
+      : [
+          [a.startLat, a.startLon],
+          [a.endLat, a.endLon],
+        ];
+    return {
+      date: a.date,
+      start: a.start,
+      mode: a.mode,
+      source_id: a.sourceId,
+      recorded: Boolean(trace),
+      miles: Math.round(miles * 10) / 10,
+      coords: pts.map((p) => [round5(p[0]), round5(p[1])] as [number, number]),
+    };
+  });
+  for (const m of Object.values(modes)) m.miles = Math.round(m.miles * 10) / 10;
+
+  return {
+    from,
+    to,
+    truncated: to !== opts.to,
+    days: dates.size,
+    total_miles: Math.round(totalMiles * 10) / 10,
+    modes,
+    lines,
+  };
+}
+
+const HOTSPOT_RADIUS_DEFAULT_M = 150;
+const HOTSPOT_RADIUS_MAX_M = 2000;
+const HOTSPOT_DAYS_MAX = 400;
+
+/** Days with a stay near a point (a hotspot), newest first, with time spent. */
+export async function getHotspotDays(
+  db: Db,
+  tenant: TenantId,
+  opts: { lat: number; lon: number; radiusM?: number },
+) {
+  const { lat, lon } = opts;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    return { error: "lat and lon are required" as const };
+  }
+  const radiusM = Math.min(
+    HOTSPOT_RADIUS_MAX_M,
+    Math.max(10, Number.isFinite(opts.radiusM) ? opts.radiusM! : HOTSPOT_RADIUS_DEFAULT_M),
+  );
+  const dLat = radiusM / 110_540;
+  const dLon = radiusM / (111_320 * Math.max(0.01, Math.cos((lat * Math.PI) / 180)));
+  const rows = await db
+    .select({
+      date: visits.date,
+      start: visits.start,
+      end: visits.end,
+      lat: visits.lat,
+      lon: visits.lon,
+      cluster: visits.cluster,
+      semanticType: visits.semanticType,
+      durationMinutes: visits.durationMinutes,
+    })
+    .from(visits)
+    .where(
+      and(
+        eq(visits.tenant, tenant),
+        gte(visits.lat, lat - dLat),
+        lte(visits.lat, lat + dLat),
+        gte(visits.lon, lon - dLon),
+        lte(visits.lon, lon + dLon),
+      ),
+    );
+
+  const byDate = new Map<string, { minutes: number; visits: number; first: string; last: string }>();
+  let totalMinutes = 0;
+  for (const v of rows) {
+    if (haversineM(lat, lon, v.lat, v.lon) > radiusM) continue;
+    totalMinutes += v.durationMinutes;
+    const day = byDate.get(v.date);
+    if (!day) {
+      byDate.set(v.date, { minutes: v.durationMinutes, visits: 1, first: v.start, last: v.end });
+    } else {
+      day.minutes += v.durationMinutes;
+      day.visits += 1;
+      if (v.start < day.first) day.first = v.start;
+      if (v.end > day.last) day.last = v.end;
+    }
+  }
+  const days = [...byDate.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([date, d]) => ({
+      date,
+      minutes: Math.round(d.minutes),
+      visits: d.visits,
+      first: d.first,
+      last: d.last,
+    }));
+  return {
+    lat,
+    lon,
+    radius_m: radiusM,
+    total_days: days.length,
+    total_minutes: Math.round(totalMinutes),
+    truncated: days.length > HOTSPOT_DAYS_MAX,
+    days: days.slice(0, HOTSPOT_DAYS_MAX),
   };
 }
 

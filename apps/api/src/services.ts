@@ -27,6 +27,9 @@ import {
   journeyTrace,
   thinTrace,
   polylineLengthM,
+  sampleAlongTrace,
+  traceDeviation,
+  journeyAccuracy,
   haversineM,
   METERS_TO_MILES,
   deleteSourceData,
@@ -603,12 +606,24 @@ export async function resolveSettlement(
   }
 }
 
+/** Where a stay is drawn: the GPS-fix median when recorded, else Google's place. */
+export function stayPosition(v: Pick<VisitRow, "lat" | "lon" | "fixLat" | "fixLon" | "fixCount">): LatLon {
+  return v.fixCount && v.fixCount >= 2 && v.fixLat != null && v.fixLon != null
+    ? [v.fixLat, v.fixLon]
+    : [v.lat, v.lon];
+}
+
 function visitToApi(v: VisitRow) {
+  const [lat, lon] = stayPosition(v);
   return {
     start: v.start,
     end: v.end,
-    lat: v.lat,
-    lon: v.lon,
+    lat,
+    lon,
+    place_lat: v.lat,
+    place_lon: v.lon,
+    fix_count: v.fixCount ?? 0,
+    moved_m: Math.round(haversineM(v.lat, v.lon, lat, lon)),
     cluster: v.cluster,
     semantic_type: v.semanticType,
     place_id: v.placeId,
@@ -928,12 +943,48 @@ export type DayProgressEvent = {
   total?: number;
 };
 
+/** Live Nominatim lookups allowed per Day View for "via" places (cache hits are free). */
+const MAX_LIVE_VIA_LOOKUPS = 10;
+const VIA_SAMPLE_EVERY_M = 2500;
+const VIA_SAMPLES_MAX = 5;
+
+/**
+ * Towns or areas a recorded journey passed through, in order, without the
+ * places it started and ended in.
+ */
+export async function placesAlongTrace(
+  db: ReturnType<typeof createDb>,
+  trace: PathPoint[],
+  budget: { live: number },
+): Promise<string[]> {
+  const samples = sampleAlongTrace(trace, VIA_SAMPLE_EVERY_M, VIA_SAMPLES_MAX);
+  if (!samples.length) return [];
+  const points: [number, number][] = [
+    [trace[0][0], trace[0][1]],
+    ...samples,
+    [trace[trace.length - 1][0], trace[trace.length - 1][1]],
+  ];
+  const names: (string | null)[] = [];
+  for (const [lat, lon] of points) {
+    const { settlement, fetched } = await resolveSettlement(db, lat, lon, { allowLive: budget.live > 0 });
+    if (fetched) budget.live -= 1;
+    names.push(settlement);
+  }
+  const ends = new Set([names[0], names[names.length - 1]].filter(Boolean));
+  const via: string[] = [];
+  for (const name of names.slice(1, -1)) {
+    if (name && !ends.has(name) && via[via.length - 1] !== name) via.push(name);
+  }
+  return via;
+}
+
 export async function getDay(
   db: ReturnType<typeof createDb>,
   tenant: TenantId,
   date: string,
   onProgress?: (event: DayProgressEvent) => void | Promise<void>,
   sourceIds?: string[],
+  opts?: { compare?: boolean },
 ) {
   const report = async (event: DayProgressEvent) => {
     await onProgress?.(event);
@@ -1005,12 +1056,13 @@ export async function getDay(
 
   const events: Event[] = [];
   for (const v of dayVisits) {
+    const [lat, lon] = stayPosition(v);
     events.push({
       time: v.start,
       end_time: v.end,
       type: "visit",
-      lat: v.lat,
-      lon: v.lon,
+      lat,
+      lon,
       data: v,
     });
   }
@@ -1042,6 +1094,7 @@ export async function getDay(
   /** Where each journey line is actually drawn from and to, for gap lines. */
   const drawnEnds = new Map<ActivityRow, { start: LatLon; end: LatLon }>();
 
+  const viaBudget = { live: MAX_LIVE_VIA_LOOKUPS };
   const enrichedActivities = [];
   for (let idx = 0; idx < events.length; idx++) {
     const ev = events[idx];
@@ -1086,6 +1139,47 @@ export async function getDay(
     d.is_rail = a.mode === "train" || a.mode === "subway";
     d.route_source = route.source;
     d.gps_points = route.gpsPoints;
+
+    // What the phone recorded, joined to the same stops as the drawn line.
+    const recorded = journeyTrace({
+      ...a,
+      startLat: anchors.start[0],
+      startLon: anchors.start[1],
+      endLat: anchors.end[0],
+      endLon: anchors.end[1],
+    });
+    d.recorded_geometry = recorded
+      ? snapGeometry(
+          recorded.map((p) => [p[0], p[1]] as [number, number]),
+          snapStartLat,
+          snapStartLon,
+          snapEndLat,
+          snapEndLon,
+        )
+      : null;
+    d.accuracy = journeyAccuracy({
+      path: a.path,
+      startS: Date.parse(a.start) / 1000,
+      endS: Date.parse(a.end) / 1000,
+      drawnLine: d.route_geometry as [number, number][],
+    });
+
+    if (opts?.compare) {
+      const predicted =
+        a.mode === "train" || a.mode === "subway"
+          ? makeRailArc(snapStartLat, snapStartLon, snapEndLat, snapEndLon)
+          : snapGeometry(
+              (await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode)).geometry,
+              snapStartLat,
+              snapStartLon,
+              snapEndLat,
+              snapEndLon,
+            );
+      d.predicted_geometry = predicted;
+      d.prediction_gap = a.path?.length ? traceDeviation(a.path, predicted) : null;
+    }
+
+    d.via_places = recorded ? await placesAlongTrace(db, recorded, viaBudget) : [];
 
     let fromPlace: string | null = null;
     for (let j = idx - 1; j >= 0; j--) {
@@ -2146,6 +2240,8 @@ export {
   listClusterVisits,
   getCorridorDetail,
   getTripRange,
+  getRouteLines,
+  getHotspotDays,
   listNamedTrips,
   upsertNamedTrip,
   deleteNamedTrip,
