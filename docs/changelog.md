@@ -6,6 +6,8 @@ Day View no longer crashes when a day loads. The playback marker was added to th
 
 Maps load again. Carto raster tiles now return "API key required" images, so the default basemap is OpenFreeMap's keyless vector styles (`dark` and `positron`) when `MAP_STYLE_*` and `MAP_TILE_*` are unset; the CSP allows `tiles.openfreemap.org` only while that default is in use, and raster tiles saved in Settings still win. Day View journey lines draw again: source colours were `var(--token)` strings that MapLibre cannot paint, so they are resolved to the theme's colour, and with a single data source each journey keeps its own colour. Timeline journey rows no longer nest the road-steps button inside another button.
 
+Production maps draw their overlays again. MapLibre 6 loads its worker from beside its own module, which Vite bundles into `/assets/index-*.js` without emitting the worker, so every GeoJSON layer (journeys, stops, heatmap) and vector tile stayed pending in production builds. The worker is now built by Vite (`?worker&url`) and passed to `setWorkerUrl` in `lib/map/maplibre.ts`; import `maplibregl` from there. Stop cluster counts use Noto Sans, which OpenFreeMap serves. The Globe uses the configured vector style, sets its projection once the style has loaded (it threw "Style is not done loading"), and no longer rebuilds on every render.
+
 ## 0.0.1
 
 Colour moods in Settings, Display: 30 named palettes (light and dark each) on top of the existing theme toggle. Stored in `locations-mood`. Map tiles still follow light and dark.

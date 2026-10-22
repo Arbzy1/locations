@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import * as maplibregl from 'maplibre-gl';
+import { maplibregl } from '../../lib/map/maplibre';
 import type { GeoJSONSource, Map as MLMap, Marker, PositionAnchor, StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { Visit, Activity, HeatmapPoint, Connector, MapFocusTarget, HotspotLabel } from '../../types';
@@ -514,6 +514,9 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         filter: ['has', 'point_count'],
         layout: {
           'text-field': ['get', 'point_count_abbreviated'],
+          // MapLibre's default Open Sans / Arial Unicode stack 404s on OpenFreeMap
+          // (and most OpenMapTiles glyph servers); Noto Sans ships with them.
+          'text-font': ['Noto Sans Regular'],
           'text-size': 11,
         },
         paint: { 'text-color': onAccent },
