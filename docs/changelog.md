@@ -4,6 +4,8 @@
 
 Day View no longer crashes when a day loads. The playback marker was added to the map before it had a position, which threw inside MapLibre and blanked the page. The map also stops redrawing every line and marker on each playback frame.
 
+Maps load again. Carto raster tiles now return "API key required" images, so the default basemap is OpenFreeMap's keyless vector styles (`dark` and `positron`) when `MAP_STYLE_*` and `MAP_TILE_*` are unset; the CSP allows `tiles.openfreemap.org` only while that default is in use, and raster tiles saved in Settings still win. Day View journey lines draw again: source colours were `var(--token)` strings that MapLibre cannot paint, so they are resolved to the theme's colour, and with a single data source each journey keeps its own colour. Timeline journey rows no longer nest the road-steps button inside another button.
+
 ## 0.0.1
 
 Colour moods in Settings, Display: 30 named palettes (light and dark each) on top of the existing theme toggle. Stored in `locations-mood`. Map tiles still follow light and dark.

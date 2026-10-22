@@ -22,6 +22,7 @@ import { resolveOpsFlags } from "./ops-flags";
 import {
   cspSourcesForHosts,
   extraCspHostsFromEnv,
+  mapStyleUrls,
   parseCustomTileHosts,
   sanitizeBookmarks,
   validateTileTemplate,
@@ -303,8 +304,8 @@ app.get("/api/config", async (c) => {
       c.env.MAP_TILE_LIGHT_URL ||
       "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     mapAttr: c.env.MAP_TILE_ATTR || "&copy; OSM &copy; CARTO",
-    mapStyleDark: c.env.MAP_STYLE_DARK_URL || null,
-    mapStyleLight: c.env.MAP_STYLE_LIGHT_URL || null,
+    mapStyleDark: mapStyleUrls(c.env).dark,
+    mapStyleLight: mapStyleUrls(c.env).light,
     customTiles: customTileHosts.length > 0,
     customTileHosts,
     signupDisabled: flags.signupDisabled,

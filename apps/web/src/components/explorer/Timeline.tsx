@@ -269,6 +269,10 @@ function buildTimelineEvents(
   return events;
 }
 
+/** Translucent colour for hex values and `var(--token)` alike (`${hex}55` breaks on var()). */
+const tint = (color: string, percent: number) =>
+  `color-mix(in srgb, ${color} ${percent}%, transparent)`;
+
 const rowBtnClass =
   'flex w-full text-left rounded-lg -mx-1 px-1 transition-colors duration-ui-emphasis ease-ui cursor-pointer hover:bg-bg/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40';
 
@@ -451,10 +455,17 @@ export default function Timeline({
 
           return (
             <div key={`a-${i}`} className="relative">
-              <button
-                type="button"
+              {/* Not a <button>: it contains the road-steps toggle button. */}
+              <div
+                role="button"
+                tabIndex={onActivityClick ? 0 : -1}
+                aria-disabled={!onActivityClick}
                 onClick={() => onActivityClick?.(a)}
-                disabled={!onActivityClick}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+                  e.preventDefault();
+                  onActivityClick?.(a);
+                }}
                 title={onActivityClick ? 'Show this journey on the map' : 'Journey details'}
                 className={cn(
                   onActivityClick ? rowBtnClass : 'flex w-full text-left',
@@ -462,21 +473,21 @@ export default function Timeline({
                 )}
               >
                 <div className="w-16 shrink-0 flex flex-col items-center">
-                  <div className="text-[10px] font-mono w-full text-center" style={{ color: `${color}99` }}>
+                  <div className="text-[10px] font-mono w-full text-center" style={{ color: tint(color, 60) }}>
                     {formatTime(a.start, timezone)}
                   </div>
                   <div className="flex-1 flex flex-col items-center py-0.5">
                     <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 z-10"
-                      style={{ backgroundColor: `${color}25`, border: `2px solid ${color}66` }}>
+                      style={{ backgroundColor: tint(color, 15), border: `2px solid ${tint(color, 40)}` }}>
                       <span style={{ color }}>{MODE_ICONS[a.mode] || <CircleDot size={10} />}</span>
                     </div>
-                    <div className="w-0.5 flex-1 min-h-3" style={{ backgroundColor: `${color}55` }} />
-                    <ArrowDown size={10} style={{ color: `${color}77` }} className="shrink-0 -mt-1" />
+                    <div className="w-0.5 flex-1 min-h-3" style={{ backgroundColor: tint(color, 33) }} />
+                    <ArrowDown size={10} style={{ color: tint(color, 47) }} className="shrink-0 -mt-1" />
                   </div>
                 </div>
 
                 <div className="flex-1 min-w-0 py-1.5">
-                  <div className="rounded-lg px-2.5 py-1.5" style={{ backgroundColor: `${color}08`, borderLeft: `3px solid ${color}55` }}>
+                  <div className="rounded-lg px-2.5 py-1.5" style={{ backgroundColor: tint(color, 3), borderLeft: `3px solid ${tint(color, 33)}` }}>
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold" style={{ color }}>
                         {a.from_place && a.to_place
@@ -486,7 +497,7 @@ export default function Timeline({
                     </div>
                     <div className="flex items-center gap-1 mt-0.5">
                       <span className="text-[10px] px-1 rounded font-mono"
-                        style={{ backgroundColor: `${color}20`, color }}>
+                        style={{ backgroundColor: tint(color, 13), color }}>
                         {MODE_LABELS[a.mode] || a.mode}
                       </span>
                       <span className="text-[11px] text-text-muted">
@@ -501,7 +512,7 @@ export default function Timeline({
                     <ActivitySteps activity={a} />
                   </div>
                 </div>
-              </button>
+              </div>
             </div>
           );
         })}

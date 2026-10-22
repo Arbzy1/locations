@@ -93,6 +93,8 @@ export default function DayView({ initialDate }: Props) {
 
   const sourceColors = useMemo(() => {
     const map: Record<string, string> = {};
+    // One source would paint every journey the same colour; keep per-journey colours then.
+    if ((sources?.length ?? 0) < 2) return map;
     for (const s of sources ?? []) map[s.id] = sourceTokenVar(s.color);
     return map;
   }, [sources]);

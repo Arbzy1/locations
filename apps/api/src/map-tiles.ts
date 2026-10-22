@@ -25,14 +25,36 @@ function hostnameFromHttpsUrl(raw?: string | null): string | null {
   }
 }
 
-/** Extra CSP hosts from custom tiles and env vector style URLs. */
-export function extraCspHostsFromEnv(env: {
-  MAP_CUSTOM_TILE_HOSTS?: string;
+/**
+ * Keyless OpenFreeMap vector styles, used when MAP_STYLE_* is unset. The old Carto
+ * raster fallback now serves "API key required" tiles for every request.
+ */
+export const DEFAULT_MAP_STYLE_DARK_URL = "https://tiles.openfreemap.org/styles/dark";
+export const DEFAULT_MAP_STYLE_LIGHT_URL = "https://tiles.openfreemap.org/styles/positron";
+
+type MapStyleEnv = {
   MAP_STYLE_DARK_URL?: string;
   MAP_STYLE_LIGHT_URL?: string;
-}): string[] {
+  MAP_TILE_DARK_URL?: string;
+  MAP_TILE_LIGHT_URL?: string;
+};
+
+/**
+ * Vector style URL per theme: env style, else null when env configures raster tiles
+ * for that theme, else the OpenFreeMap default.
+ */
+export function mapStyleUrls(env: MapStyleEnv): { dark: string | null; light: string | null } {
+  return {
+    dark: env.MAP_STYLE_DARK_URL || (env.MAP_TILE_DARK_URL ? null : DEFAULT_MAP_STYLE_DARK_URL),
+    light: env.MAP_STYLE_LIGHT_URL || (env.MAP_TILE_LIGHT_URL ? null : DEFAULT_MAP_STYLE_LIGHT_URL),
+  };
+}
+
+/** Extra CSP hosts from custom tiles and the vector style URLs in use. */
+export function extraCspHostsFromEnv(env: MapStyleEnv & { MAP_CUSTOM_TILE_HOSTS?: string }): string[] {
   const hosts = [...parseCustomTileHosts(env.MAP_CUSTOM_TILE_HOSTS)];
-  for (const raw of [env.MAP_STYLE_DARK_URL, env.MAP_STYLE_LIGHT_URL]) {
+  const styles = mapStyleUrls(env);
+  for (const raw of [styles.dark, styles.light]) {
     const host = hostnameFromHttpsUrl(raw);
     if (host) hosts.push(host);
   }
