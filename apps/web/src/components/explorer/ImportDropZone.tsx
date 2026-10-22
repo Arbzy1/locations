@@ -6,6 +6,9 @@ import { hoverSpring } from '../../lib/motion';
 import { Button } from '../ui/button';
 import { AlertDialog, AlertDialogContent } from '../ui/alert-dialog';
 import { useInvalidateLocationQueries } from '../../hooks/useApi';
+import { useUnits } from '../../lib/units';
+
+const formatMb = (bytes: number) => `${Math.round(bytes / 1024 / 1024)} MB`;
 
 export type ImportPreview = {
   chosenPath: string | null;
@@ -51,6 +54,7 @@ export default function ImportDropZone({
   onError?: (message: string) => void;
 }) {
   const reduce = useReducedMotion();
+  const { uploadLimitBytes } = useUnits();
   const invalidate = useInvalidateLocationQueries();
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -65,6 +69,13 @@ export default function ImportDropZone({
 
   const runPreview = async (next: File) => {
     if (disabled) return;
+    if (uploadLimitBytes && next.size > uploadLimitBytes) {
+      onError?.(
+        `${next.name} is ${formatMb(next.size)}; your plan accepts up to ${formatMb(uploadLimitBytes)}. ` +
+          'Export Location History only (not the whole Takeout), or zip the JSON.',
+      );
+      return;
+    }
     setBusy(true);
     onError?.('');
     try {
@@ -137,7 +148,7 @@ export default function ImportDropZone({
       >
         <p className="mb-3 text-sm text-text-muted">
           Drop a Timeline JSON or Takeout zip here, or choose a file. Zip the Takeout folder if you
-          have a directory of files.
+          have a directory of files.{uploadLimitBytes ? ` Up to ${formatMb(uploadLimitBytes)}.` : ''}
         </p>
         {disabledReason && <p className="mb-3 text-sm text-text-muted">{disabledReason}</p>}
         <div className="flex flex-wrap items-center gap-2">
@@ -151,7 +162,7 @@ export default function ImportDropZone({
               const next = e.target.files?.[0];
               if (next) void runPreview(next);
             }}
-            className="w-full max-w-md text-sm text-text-muted file:mr-3 file:h-11 file:rounded-md file:border-0 file:bg-accent/20 file:px-3 file:text-sm file:text-accent"
+            className="sr-only"
           />
           <Button
             type="button"

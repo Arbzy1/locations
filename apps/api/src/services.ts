@@ -11,6 +11,9 @@ import {
   routeCache,
   placeCache,
   placeLabels,
+  timelineOverrides,
+  TRANSPORT_MODE_MAP,
+  type TimelineOverrideRow,
   namedTrips,
   lifeChapters,
   userSettings,
@@ -26,7 +29,14 @@ import {
   makeRouteCacheKey,
   makeCoordPlaceKey,
   makeRailArc,
+  makeTraceCacheKey,
   snapGeometry,
+  journeyTrace,
+  thinTrace,
+  polylineLengthM,
+  sampleAlongTrace,
+  traceDeviation,
+  journeyAccuracy,
   haversineM,
   METERS_TO_MILES,
   deleteSourceData,
@@ -51,6 +61,7 @@ import {
   lte,
   lt,
   type RouteStep,
+  type PathPoint,
   type ActivityRow,
   type VisitRow,
   type TenantId,
@@ -64,6 +75,8 @@ import {
 import type { Env } from "./env";
 
 const OSRM_BASE_DEFAULT = "https://router.project-osrm.org/route/v1";
+/** OSRM and Nominatim calls give up after this, so one slow upstream cannot hang a request. */
+const EXTERNAL_FETCH_TIMEOUT_MS = 6000;
 const NOMINATIM_DEFAULT = "https://nominatim.openstreetmap.org/reverse";
 
 let OSRM_BASE = OSRM_BASE_DEFAULT;
@@ -143,6 +156,21 @@ export function getDb(env: Env) {
   return createDb(env.DATABASE_URL);
 }
 
+/**
+ * Connection for the shared route/place caches, used outside any tenant transaction
+ * (they have no RLS). A pooled WebSocket, not the HTTP driver: on Workers every HTTP
+ * query is a subrequest, and a busy day makes far more lookups than the cap allows.
+ * Callers close it with `closeDb`.
+ */
+export function getCacheDb(env: Env) {
+  return createDb(env.DATABASE_URL);
+}
+
+/** End a pool-backed connection; safe on test doubles without one. */
+export async function closeDb(db: unknown) {
+  await (db as { $client?: { end?: () => Promise<void> } }).$client?.end?.().catch(() => undefined);
+}
+
 /** Worker liveness helper. Never logs the connection string or query errors. */
 export async function pingDatabase(env: Env): Promise<boolean> {
   if (!env.DATABASE_URL) return false;
@@ -162,6 +190,7 @@ export async function fetchRoute(
   endLat: number,
   endLon: number,
   mode: string,
+  budget?: LiveLookupBudget,
 ): Promise<{ geometry: [number, number][]; steps: RouteStep[] }> {
   const fallback = {
     geometry: [[startLat, startLon], [endLat, endLon]] as [number, number][],
@@ -173,13 +202,18 @@ export async function fetchRoute(
   const key = makeRouteCacheKey(startLat, startLon, endLat, endLon, profile);
   const cached = await db.select().from(routeCache).where(eq(routeCache.key, key)).limit(1);
   if (cached[0]) return { geometry: cached[0].geometry, steps: cached[0].steps };
+  // Out of live calls for this request: draw it straight now, route it on a later view.
+  if (budget) {
+    if (budget.live < 1) return fallback;
+    budget.live -= 1;
+  }
 
   const url =
     `${OSRM_BASE}/${profile}/${startLon},${startLat};${endLon},${endLat}` +
     `?overview=full&geometries=geojson&steps=true&annotations=duration,distance`;
 
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS) });
     if (!resp.ok) return fallback;
     const data = (await resp.json()) as {
       code?: string;
@@ -197,6 +231,267 @@ export async function fetchRoute(
   } catch {
     return fallback;
   }
+}
+
+/** Public OSRM rejects map-matching radii above ~30m. */
+const OSRM_MATCH_RADIUS_M = 30;
+/** Public OSRM rejects map matching with more than 10 coordinates, so long traces go in chunks. */
+const OSRM_MATCH_CHUNK = 10;
+const TRACE_MIN_SPACING_M = 40;
+/** At most four chunked match requests per journey. */
+const TRACE_MAX_MATCH_POINTS = 37;
+const TRACE_MAX_VIA_POINTS = 25;
+/** Modes OSRM has no network for: draw the recorded fixes as-is. */
+const RAW_TRACE_MODES = new Set(["flying", "train", "subway"]);
+/** Journeys join an adjacent stop with a straight hop only when it is this close. */
+const SNAP_MAX_M = 500;
+
+/**
+ * How a journey line was drawn, from most to least trustworthy:
+ * - `gps-road`: recorded GPS fixes snapped onto roads (OSRM map matching / via points)
+ * - `gps`: straight lines between recorded GPS fixes
+ * - `road-estimate`: no fixes; fastest road route between start and end
+ * - `rail-arc`: no fixes; drawn curve between stations
+ * - `straight`: no fixes and no road route
+ */
+export type RouteSource = "gps-road" | "gps" | "road-estimate" | "rail-arc" | "straight";
+
+type RoutedLine = { geometry: [number, number][]; steps: RouteStep[] };
+type RouteAttempt = RoutedLine | "rejected" | "error";
+type OsrmLeg = { steps?: unknown[] };
+
+function osrmMatchBase(): string {
+  return OSRM_BASE.replace(/\/route\/v1\/?$/, "/match/v1");
+}
+
+async function osrmJson<T>(url: string): Promise<T | "error"> {
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS) });
+    // OSRM answers 400 with a JSON code (NoMatch, NoRoute...) for definite failures.
+    if (resp.status === 429 || resp.status >= 500) return "error";
+    return (await resp.json()) as T;
+  } catch {
+    return "error";
+  }
+}
+
+/** OSRM maneuver types; parseSteps uses one as the name of an unnamed road. */
+const MANEUVER_TYPES = new Set([
+  "depart", "arrive", "turn", "new name", "continue", "merge", "on ramp", "off ramp",
+  "fork", "end of road", "use lane", "roundabout", "rotary", "roundabout turn",
+  "exit roundabout", "exit rotary", "notification", "road",
+]);
+
+/**
+ * Matched and via-point routes have one leg per GPS fix, so every fix adds an
+ * Arrive + Depart pair. Keep the first Depart and last Arrive only, and blank
+ * names that are really maneuver types so "via" lists show roads.
+ */
+export function joinLegSteps(steps: RouteStep[]): RouteStep[] {
+  const out: RouteStep[] = [];
+  steps.forEach((s, i) => {
+    const isArrive = s.direction.startsWith("Arrive");
+    const isDepart = s.direction.startsWith("Depart");
+    if (isArrive && i < steps.length - 1) return;
+    out.push({
+      ...s,
+      direction: isDepart && i > 0 ? "Continue" : s.direction,
+      name: MANEUVER_TYPES.has(s.name) ? "" : s.name,
+    });
+  });
+  return out;
+}
+
+/** A road line is believable when its length is close to what was recorded. */
+export function plausibleRouteLength(routeM: number, referenceM: number): boolean {
+  if (!(routeM > 0) || !(referenceM > 0)) return false;
+  return routeM <= Math.max(referenceM * 1.5, referenceM + 1000) && routeM >= referenceM * 0.6;
+}
+
+function tracePointsForMatch(trace: PathPoint[]): PathPoint[] {
+  return thinTrace(trace, { minSpacingM: TRACE_MIN_SPACING_M, maxPoints: TRACE_MAX_MATCH_POINTS });
+}
+
+/** route_cache key used for a journey trace (same thinning as fetchTraceRoute). */
+export function traceRouteCacheKey(trace: PathPoint[], mode: string): string {
+  return makeTraceCacheKey(tracePointsForMatch(trace), MODE_TO_PROFILE[mode] ?? "driving");
+}
+
+async function matchChunk(
+  pts: PathPoint[],
+  times: number[],
+  profile: string,
+): Promise<(RoutedLine & { distance: number }) | "rejected" | "error"> {
+  const coords = pts.map((p) => `${p[1]},${p[0]}`).join(";");
+  const radiuses = pts.map(() => OSRM_MATCH_RADIUS_M).join(";");
+  const url =
+    `${osrmMatchBase()}/${profile}/${coords}` +
+    `?geometries=geojson&overview=full&steps=true&gaps=ignore` +
+    `&timestamps=${times.join(";")}&radiuses=${radiuses}`;
+  const data = await osrmJson<{
+    code?: string;
+    matchings?: Array<{ geometry: { coordinates: number[][] }; legs: OsrmLeg[]; distance: number }>;
+    tracepoints?: Array<unknown | null>;
+  }>(url);
+  if (data === "error") return "error";
+  if (data.code !== "Ok" || !data.matchings?.length) return "rejected";
+  const matchedPoints = (data.tracepoints ?? []).filter(Boolean).length;
+  if (matchedPoints < Math.max(2, Math.ceil(pts.length * 0.6))) return "rejected";
+  return {
+    distance: data.matchings.reduce((s, m) => s + m.distance, 0),
+    geometry: data.matchings.flatMap((m) =>
+      m.geometry.coordinates.map((c) => [c[1], c[0]] as [number, number]),
+    ),
+    steps: data.matchings.flatMap((m) => parseSteps(m.legs ?? [])),
+  };
+}
+
+async function matchTrace(pts: PathPoint[], profile: string, referenceM: number): Promise<RouteAttempt> {
+  // OSRM needs strictly increasing timestamps; minute-offset fixes can tie.
+  const times: number[] = [];
+  for (const p of pts) times.push(times.length ? Math.max(p[2], times[times.length - 1] + 1) : p[2]);
+  const geometry: [number, number][] = [];
+  const steps: RouteStep[] = [];
+  let distance = 0;
+  // Consecutive chunks share their boundary fix so the matched pieces join up.
+  for (let from = 0; from < pts.length - 1; from += OSRM_MATCH_CHUNK - 1) {
+    const to = from + OSRM_MATCH_CHUNK;
+    const piece = await matchChunk(pts.slice(from, to), times.slice(from, to), profile);
+    if (piece === "rejected" || piece === "error") return piece;
+    geometry.push(...piece.geometry);
+    steps.push(...piece.steps);
+    distance += piece.distance;
+  }
+  if (!plausibleRouteLength(distance, referenceM)) return "rejected";
+  return { geometry, steps };
+}
+
+async function routeViaTrace(pts: PathPoint[], profile: string, referenceM: number): Promise<RouteAttempt> {
+  const via = thinTrace(pts, { minSpacingM: TRACE_MIN_SPACING_M, maxPoints: TRACE_MAX_VIA_POINTS });
+  const coords = via.map((p) => `${p[1]},${p[0]}`).join(";");
+  const url =
+    `${OSRM_BASE}/${profile}/${coords}` +
+    `?overview=full&geometries=geojson&steps=true&continue_straight=false`;
+  const data = await osrmJson<{
+    code?: string;
+    routes?: Array<{ geometry: { coordinates: number[][] }; legs: OsrmLeg[]; distance: number }>;
+  }>(url);
+  if (data === "error") return "error";
+  const route = data.routes?.[0];
+  if (data.code !== "Ok" || !route) return "rejected";
+  if (!plausibleRouteLength(route.distance, referenceM)) return "rejected";
+  return {
+    geometry: route.geometry.coordinates.map((c) => [c[1], c[0]] as [number, number]),
+    steps: parseSteps(route.legs ?? []),
+  };
+}
+
+/**
+ * Road route that follows a journey's recorded GPS fixes: OSRM map matching first,
+ * then a route through the fixes as via points. Either is dropped when it strays
+ * far from the recorded distance (the public OSRM server routes walks as a car).
+ * Definite answers, including "no believable road route", are cached by trace hash.
+ */
+/** Upper bound of OSRM calls one GPS journey costs (map-matching chunks plus a fallback route). */
+const TRACE_ROUTE_CALLS = 5;
+/**
+ * Live OSRM calls per Day View request. Workers cap outbound requests per request
+ * (50 on the free plan), shared with place-name lookups; cached routes cost nothing.
+ */
+export const MAX_LIVE_ROUTE_CALLS = 25;
+
+export async function fetchTraceRoute(
+  db: ReturnType<typeof createDb>,
+  trace: PathPoint[],
+  mode: string,
+  recordedDistanceM = 0,
+  budget?: LiveLookupBudget,
+): Promise<RoutedLine | null> {
+  const profile = MODE_TO_PROFILE[mode] ?? "driving";
+  const pts = tracePointsForMatch(trace);
+  if (pts.length < 2) return null;
+  const key = makeTraceCacheKey(pts, profile);
+  const cached = await db.select().from(routeCache).where(eq(routeCache.key, key)).limit(1);
+  if (cached[0]) {
+    return cached[0].geometry.length ? { geometry: cached[0].geometry, steps: cached[0].steps } : null;
+  }
+  if (budget) {
+    if (budget.live < TRACE_ROUTE_CALLS) return null;
+    budget.live -= TRACE_ROUTE_CALLS;
+  }
+
+  const referenceM = Math.max(polylineLengthM(pts), recordedDistanceM || 0);
+  let attempt = await matchTrace(pts, profile, referenceM);
+  if (attempt === "rejected") attempt = await routeViaTrace(pts, profile, referenceM);
+  if (attempt === "error") return null;
+
+  const line =
+    attempt === "rejected"
+      ? { geometry: [], steps: [] }
+      : { geometry: attempt.geometry, steps: joinLegSteps(attempt.steps) };
+  await db
+    .insert(routeCache)
+    .values({ key, geometry: line.geometry, steps: line.steps })
+    .onConflictDoUpdate({ target: routeCache.key, set: { geometry: line.geometry, steps: line.steps } });
+  return line.geometry.length ? line : null;
+}
+
+type LatLon = [number, number];
+
+/**
+ * Where a journey really started (or ended). Timeline's recorded endpoint is
+ * sometimes kilometres off; when the adjacent stop sits closer to the first (or
+ * last) GPS fix, trust the stop instead.
+ */
+export function journeyAnchor(recorded: LatLon, stop: LatLon | null, fix: PathPoint | undefined): LatLon {
+  if (!stop || !fix) return recorded;
+  if (haversineM(recorded[0], recorded[1], stop[0], stop[1]) <= SNAP_MAX_M) return recorded;
+  return haversineM(stop[0], stop[1], fix[0], fix[1]) < haversineM(recorded[0], recorded[1], fix[0], fix[1])
+    ? stop
+    : recorded;
+}
+
+/** Best available line for one journey, before snapping to neighbouring stops. */
+export async function routeActivity(
+  db: ReturnType<typeof createDb>,
+  a: ActivityRow,
+  anchors?: { start: LatLon; end: LatLon },
+  budget?: LiveLookupBudget,
+): Promise<RoutedLine & { source: RouteSource; gpsPoints: number }> {
+  const gpsPoints = a.path?.length ?? 0;
+  const trace = journeyTrace(
+    anchors
+      ? { ...a, startLat: anchors.start[0], startLon: anchors.start[1], endLat: anchors.end[0], endLon: anchors.end[1] }
+      : a,
+  );
+  if (trace && trace.length >= 3) {
+    if (!RAW_TRACE_MODES.has(a.mode)) {
+      const road = await fetchTraceRoute(db, trace, a.mode, a.distanceMeters, budget);
+      if (road) return { ...road, source: "gps-road", gpsPoints };
+    }
+    return {
+      geometry: trace.map((p) => [p[0], p[1]] as [number, number]),
+      steps: [],
+      source: "gps",
+      gpsPoints,
+    };
+  }
+  if (a.mode === "train" || a.mode === "subway") {
+    return { geometry: [], steps: [], source: "rail-arc", gpsPoints };
+  }
+  const estimate = await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode, budget);
+  return {
+    ...estimate,
+    source: estimate.steps.length ? "road-estimate" : "straight",
+    gpsPoints,
+  };
+}
+
+/** Routing mode for a gap with no recorded journey, guessed from implied speed. */
+export function connectorMode(gapM: number, fromIso: string, toIso: string): string {
+  const hours = (Date.parse(toIso) - Date.parse(fromIso)) / 3_600_000;
+  if (gapM <= 5000 && hours > 0 && gapM / 1000 / hours <= 7) return "walking";
+  return "car";
 }
 
 const NOMINATIM_UA = "LocationExplorer/1.0 (portfolio; contact via aden.website)";
@@ -228,10 +523,18 @@ function makeSettlementPlaceKey(lat: number, lon: number): string {
   return `settlement:${lat.toFixed(5)},${lon.toFixed(5)}`;
 }
 
+/**
+ * Live Nominatim lookups allowed per request, spaced to its 1 request/second policy.
+ * Misses past the cap stay unnamed this time and resolve on a later view.
+ */
+export type LiveLookupBudget = { live: number; lastAt?: number };
+const NOMINATIM_SPACING_MS = 1100;
+
 export async function resolveCoords(
   db: ReturnType<typeof createDb>,
   lat: number,
   lon: number,
+  budget?: LiveLookupBudget,
 ): Promise<{ name: string; address: string; data: Record<string, unknown> }> {
   const key = makeCoordPlaceKey(lat, lon);
   const cached = await db.select().from(placeCache).where(eq(placeCache.placeId, key)).limit(1);
@@ -239,10 +542,19 @@ export async function resolveCoords(
     return { name: cached[0].name, address: cached[0].address, data: cached[0].data };
   }
 
+  if (budget) {
+    if (budget.live <= 0) return { name: "Unknown", address: "", data: {} };
+    budget.live -= 1;
+    const wait = budget.lastAt ? budget.lastAt + NOMINATIM_SPACING_MS - Date.now() : 0;
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    budget.lastAt = Date.now();
+  }
+
   try {
     const url = `${NOMINATIM}?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=18`;
     const resp = await fetch(url, {
       headers: { "User-Agent": NOMINATIM_UA },
+      signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS),
     });
     if (!resp.ok) return { name: "Unknown", address: "", data: {} };
     const data = (await resp.json()) as {
@@ -273,6 +585,9 @@ export async function resolveCoords(
   }
 }
 
+/** place_cache name for a settlement lookup that found no town (negative cache). */
+const SETTLEMENT_MISS = "(none)";
+
 /**
  * Guess town / city / village for coordinates via Nominatim (cached).
  * Reuses street-level place_cache address details when present to avoid extra fetches.
@@ -291,6 +606,10 @@ export async function resolveSettlement(
     .from(placeCache)
     .where(eq(placeCache.placeId, settlementKey))
     .limit(1);
+  if (cachedSettlement[0]?.name === SETTLEMENT_MISS) {
+    // Nominatim already said there is no town here; do not ask again on every load.
+    return { settlement: null, fetched: false };
+  }
   if (cachedSettlement[0]?.name && cachedSettlement[0].name !== "Unknown") {
     return { settlement: cachedSettlement[0].name, fetched: false };
   }
@@ -328,6 +647,7 @@ export async function resolveSettlement(
     const url = `${NOMINATIM}?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=14`;
     const resp = await fetch(url, {
       headers: { "User-Agent": NOMINATIM_UA },
+      signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS),
     });
     if (!resp.ok) return { settlement: null, fetched: true };
     const data = (await resp.json()) as {
@@ -335,7 +655,13 @@ export async function resolveSettlement(
       address?: Record<string, string>;
     };
     const settlement = settlementFromAddress(data.address);
-    if (!settlement) return { settlement: null, fetched: true };
+    if (!settlement) {
+      await db
+        .insert(placeCache)
+        .values({ placeId: settlementKey, name: SETTLEMENT_MISS, address: "", data: { source: "nominatim_settlement" } })
+        .onConflictDoNothing();
+      return { settlement: null, fetched: true };
+    }
     const address = data.display_name ?? "";
     await db
       .insert(placeCache)
@@ -355,13 +681,26 @@ export async function resolveSettlement(
   }
 }
 
+/** Where a stay is drawn: the GPS-fix median when recorded, else Google's place. */
+export function stayPosition(v: Pick<VisitRow, "lat" | "lon" | "fixLat" | "fixLon" | "fixCount">): LatLon {
+  return v.fixCount && v.fixCount >= 2 && v.fixLat != null && v.fixLon != null
+    ? [v.fixLat, v.fixLon]
+    : [v.lat, v.lon];
+}
+
 function visitToApi(v: VisitRow) {
+  const [lat, lon] = stayPosition(v);
   return {
     start: v.start,
     end: v.end,
-    lat: v.lat,
-    lon: v.lon,
+    lat,
+    lon,
+    place_lat: v.lat,
+    place_lon: v.lon,
+    fix_count: v.fixCount ?? 0,
+    moved_m: Math.round(haversineM(v.lat, v.lon, lat, lon)),
     cluster: v.cluster,
+    place_key: v.placeKey,
     semantic_type: v.semanticType,
     place_id: v.placeId,
     duration_minutes: v.durationMinutes,
@@ -460,9 +799,11 @@ export async function getHeatmap(
       semanticType: visits.semanticType,
       durationMinutes: visits.durationMinutes,
       date: visits.date,
+      placeKey: visits.placeKey,
     })
     .from(visits)
     .where(and(...filters));
+  const hidden = await hiddenPlaceKeySet(db, tenant);
 
   type Cell = {
     lat: number;
@@ -477,6 +818,8 @@ export async function getHeatmap(
   const cells = new Map<string, Cell>();
 
   for (const r of rows) {
+    // A place hidden in the directory drops out of the heatmap entirely.
+    if (r.placeKey && hidden.has(r.placeKey)) continue;
     const lat = Math.round(r.lat * 1e5) / 1e5;
     const lon = Math.round(r.lon * 1e5) / 1e5;
     const key = `${lat},${lon}`;
@@ -529,7 +872,8 @@ export async function getHeatmap(
 
   // Enrich top hotspots with settlement names (cache first; limited live Nominatim).
   const TOP_SETTLEMENT = 20;
-  const MAX_LIVE_SETTLEMENT = 8;
+  // Misses are cached too, so repeat loads converge on zero live lookups.
+  const MAX_LIVE_SETTLEMENT = 4;
   let liveLookups = 0;
   for (const point of points.slice(0, TOP_SETTLEMENT)) {
     const { settlement, fetched } = await resolveSettlement(db, point.lat, point.lon, {
@@ -543,8 +887,6 @@ export async function getHeatmap(
       }
     }
   }
-
-  const hidden = await hiddenPlaceKeySet(db, tenant);
 
   return points
     .filter((p) => {
@@ -635,34 +977,9 @@ export function filterHiddenAnalytics(key: string, data: unknown, hidden: Set<st
 }
 
 export async function getRouteProgress(db: ReturnType<typeof createDb>, tenant: TenantId) {
-  const rows = await db
-    .select({
-      startLat: activities.startLat,
-      startLon: activities.startLon,
-      endLat: activities.endLat,
-      endLon: activities.endLon,
-      mode: activities.mode,
-    })
-    .from(activities)
-    .where(eq(activities.tenant, tenant));
-
-  const keys: string[] = [];
-  for (const a of rows) {
-    if (SKIP.has(a.mode)) continue;
-    const profile = MODE_TO_PROFILE[a.mode] ?? "driving";
-    keys.push(makeRouteCacheKey(a.startLat, a.startLon, a.endLat, a.endLon, profile));
-  }
-  const total = keys.length;
-  let cached = 0;
-  for (let i = 0; i < keys.length; i += 400) {
-    const batch = keys.slice(i, i + 400);
-    if (!batch.length) continue;
-    const found = await db
-      .select({ key: routeCache.key })
-      .from(routeCache)
-      .where(inArray(routeCache.key, batch));
-    cached += found.length;
-  }
+  const { candidates, cachedKeys } = await loadRouteCandidates(db, tenant);
+  const total = new Set(candidates.map((c) => c.key)).size;
+  const cached = cachedKeys.size;
   return {
     running: false,
     total,
@@ -680,26 +997,61 @@ export type DayProgressEvent = {
   total?: number;
 };
 
-export async function getDay(
+/** Live Nominatim lookups allowed per Day View for "via" places (cache hits are free). */
+const MAX_LIVE_VIA_LOOKUPS = 8;
+const VIA_SAMPLE_EVERY_M = 2500;
+const VIA_SAMPLES_MAX = 5;
+
+/**
+ * Towns or areas a recorded journey passed through, in order, without the
+ * places it started and ended in.
+ */
+export async function placesAlongTrace(
+  db: ReturnType<typeof createDb>,
+  trace: PathPoint[],
+  budget: { live: number },
+): Promise<string[]> {
+  const samples = sampleAlongTrace(trace, VIA_SAMPLE_EVERY_M, VIA_SAMPLES_MAX);
+  if (!samples.length) return [];
+  const points: [number, number][] = [
+    [trace[0][0], trace[0][1]],
+    ...samples,
+    [trace[trace.length - 1][0], trace[trace.length - 1][1]],
+  ];
+  const names: (string | null)[] = [];
+  for (const [lat, lon] of points) {
+    const { settlement, fetched } = await resolveSettlement(db, lat, lon, { allowLive: budget.live > 0 });
+    if (fetched) budget.live -= 1;
+    names.push(settlement);
+  }
+  const ends = new Set([names[0], names[names.length - 1]].filter(Boolean));
+  const via: string[] = [];
+  for (const name of names.slice(1, -1)) {
+    if (name && !ends.has(name) && via[via.length - 1] !== name) via.push(name);
+  }
+  return via;
+}
+
+/** Live place-name lookups per Day View request (see LiveLookupBudget). */
+const MAX_LIVE_PLACE_LOOKUPS = 10;
+
+/**
+ * Tenant rows for one day. Run this inside `withTenant`; it is quick, so the
+ * transaction closes before any routing or geocoding starts.
+ */
+export async function loadDayRows(
   db: ReturnType<typeof createDb>,
   tenant: TenantId,
   date: string,
-  onProgress?: (event: DayProgressEvent) => void | Promise<void>,
   sourceIds?: string[],
 ) {
-  const report = async (event: DayProgressEvent) => {
-    await onProgress?.(event);
-  };
-
-  await report({ stage: "Loading day records", detail: date, percent: 2 });
-
   const dayRows = await db
     .select()
     .from(dayStats)
     .where(and(eq(dayStats.tenant, tenant), eq(dayStats.date, date)))
     .limit(1);
   const day = dayRows[0];
-  if (!day) return { error: "No data for this date" };
+  if (!day) return null;
 
   const dayVisitsRaw = await db
     .select()
@@ -728,6 +1080,60 @@ export async function getDay(
   const dayActivities = sourceIds?.length
     ? dayActivitiesRaw.filter((a) => a.sourceId && sourceIds.includes(a.sourceId))
     : dayActivitiesRaw;
+  // The user's names for these places (tenant table, so read here, not in buildDay).
+  const placeKeys = [...new Set(dayVisits.map((v) => v.placeKey).filter((k): k is string => !!k))];
+  const labelRows = placeKeys.length
+    ? await db
+        .select({ placeKey: placeLabels.placeKey, label: placeLabels.label })
+        .from(placeLabels)
+        .where(and(eq(placeLabels.tenant, tenant), inArray(placeLabels.placeKey, placeKeys)))
+    : [];
+  const placeLabelsByKey = new Map(labelRows.map((r) => [r.placeKey, r.label]));
+
+  const starts = [...dayVisits.map((v) => v.start), ...dayActivities.map((a) => a.start)];
+  const overrideRows = starts.length
+    ? await db
+        .select()
+        .from(timelineOverrides)
+        .where(and(eq(timelineOverrides.tenant, tenant), inArray(timelineOverrides.itemStart, starts)))
+    : [];
+  const overrides = new Map(overrideRows.map((o) => [`${o.kind}|${o.itemStart}`, o]));
+  // A corrected mode replaces Google's guess before routing, so the line follows it too.
+  const correctedActivities = dayActivities.map((a) => {
+    const mode = overrides.get(`activity|${a.start}`)?.mode;
+    return mode && mode !== a.mode ? { ...a, mode } : a;
+  });
+  return {
+    day,
+    visits: dayVisits,
+    activities: correctedActivities,
+    placeLabels: placeLabelsByKey,
+    overrides,
+    originalModes: new Map(dayActivities.map((a) => [a.start, a.mode])),
+  };
+}
+
+export type DayRows = NonNullable<Awaited<ReturnType<typeof loadDayRows>>>;
+
+/** Day View for already-loaded rows. Only touches the shared route and place caches. */
+export async function buildDay(
+  cacheDb: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  date: string,
+  rows: DayRows,
+  onProgress?: (event: DayProgressEvent) => void | Promise<void>,
+  opts?: { compare?: boolean; signal?: AbortSignal },
+) {
+  const db = cacheDb;
+  const report = async (event: DayProgressEvent) => {
+    // Stop routing and geocoding once the client has gone away.
+    opts?.signal?.throwIfAborted();
+    await onProgress?.(event);
+  };
+  const { day, visits: dayVisits, activities: dayActivities } = rows;
+  const userPlaceLabels = rows.placeLabels ?? new Map<string, string>();
+  const overrides = rows.overrides ?? new Map<string, TimelineOverrideRow>();
+  const originalModes = rows.originalModes ?? new Map<string, string>();
 
   await report({
     stage: "Building timeline",
@@ -757,12 +1163,13 @@ export async function getDay(
 
   const events: Event[] = [];
   for (const v of dayVisits) {
+    const [lat, lon] = stayPosition(v);
     events.push({
       time: v.start,
       end_time: v.end,
       type: "visit",
-      lat: v.lat,
-      lon: v.lon,
+      lat,
+      lon,
       data: v,
     });
   }
@@ -783,6 +1190,19 @@ export async function getDay(
   const activityTotal = dayActivities.length;
   let activityDone = 0;
 
+  const adjacentStop = (neighbour: Event | undefined): LatLon | null =>
+    neighbour?.type === "visit" ? [neighbour.lat, neighbour.lon] : null;
+  // A journey line hops to a stop only when that stop is the very next/previous
+  // event and close by. Otherwise the jump stays visible as unknown movement.
+  const snapTo = (stop: LatLon | null, at: LatLon): LatLon | null =>
+    stop && haversineM(stop[0], stop[1], at[0], at[1]) <= SNAP_MAX_M ? stop : null;
+  const snappedStart = new Set<ActivityRow>();
+  const snappedEnd = new Set<ActivityRow>();
+  /** Where each journey line is actually drawn from and to, for gap lines. */
+  const drawnEnds = new Map<ActivityRow, { start: LatLon; end: LatLon }>();
+
+  const viaBudget = { live: MAX_LIVE_VIA_LOOKUPS };
+  const routeBudget: LiveLookupBudget = { live: MAX_LIVE_ROUTE_CALLS };
   const enrichedActivities = [];
   for (let idx = 0; idx < events.length; idx++) {
     const ev = events[idx];
@@ -795,53 +1215,86 @@ export async function getDay(
         : 8 + Math.round((activityDone / activityTotal) * 42);
     await report({
       stage: "Routing journeys",
-      detail: `${a.mode} (${activityDone}/${activityTotal})`,
+      detail: `${a.mode}${a.path?.length ? " via GPS" : ""} (${activityDone}/${activityTotal})`,
       percent: pct,
       done: activityDone,
       total: activityTotal,
     });
 
-    const routeData = await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode);
+    const prevStop = adjacentStop(events[idx - 1]);
+    const nextStop = adjacentStop(events[idx + 1]);
+    const anchors = {
+      start: journeyAnchor([a.startLat, a.startLon], prevStop, a.path?.[0]),
+      end: journeyAnchor([a.endLat, a.endLon], nextStop, a.path?.at(-1)),
+    };
+    const route = await routeActivity(db, a, anchors, routeBudget);
     const d = activityToApi(a) as Record<string, unknown>;
+    d.note = overrides.get(`activity|${a.start}`)?.note ?? null;
+    const googleMode = originalModes.get(a.start);
+    d.mode_corrected = Boolean(googleMode && googleMode !== a.mode);
+    if (d.mode_corrected) d.google_mode = googleMode;
 
-    let snapStartLat = a.startLat;
-    let snapStartLon = a.startLon;
-    for (let j = idx - 1; j >= 0; j--) {
-      const prev = events[j];
-      if (prev.type === "visit") {
-        snapStartLat = prev.lat;
-        snapStartLon = prev.lon;
-        break;
-      }
-    }
-    let snapEndLat = a.endLat;
-    let snapEndLon = a.endLon;
-    for (let j = idx + 1; j < events.length; j++) {
-      const next = events[j];
-      if (next.type === "visit") {
-        snapEndLat = next.lat;
-        snapEndLon = next.lon;
-        break;
-      }
+    const snapStart = snapTo(prevStop, anchors.start);
+    const snapEnd = snapTo(nextStop, anchors.end);
+    if (snapStart) snappedStart.add(a);
+    if (snapEnd) snappedEnd.add(a);
+    const [snapStartLat, snapStartLon] = snapStart ?? anchors.start;
+    const [snapEndLat, snapEndLon] = snapEnd ?? anchors.end;
+    drawnEnds.set(a, { start: [snapStartLat, snapStartLon], end: [snapEndLat, snapEndLon] });
+
+    d.route_geometry =
+      route.source === "rail-arc"
+        ? makeRailArc(snapStartLat, snapStartLon, snapEndLat, snapEndLon)
+        : snapGeometry(route.geometry, snapStartLat, snapStartLon, snapEndLat, snapEndLon);
+    d.steps = route.steps;
+    d.has_osrm_route = route.steps.length > 0;
+    d.is_rail = a.mode === "train" || a.mode === "subway";
+    d.route_source = route.source;
+    d.gps_points = route.gpsPoints;
+    // Raw fixes as recorded ([lat, lon, unixSeconds]) for the Points view: no joining,
+    // snapping or endpoints, so sparse journeys look sparse.
+    d.gps_fixes = (a.path ?? []).map(([lat, lon, s]) => [lat, lon, s]);
+
+    // What the phone recorded, joined to the same stops as the drawn line.
+    const recorded = journeyTrace({
+      ...a,
+      startLat: anchors.start[0],
+      startLon: anchors.start[1],
+      endLat: anchors.end[0],
+      endLon: anchors.end[1],
+    });
+    d.recorded_geometry = recorded
+      ? snapGeometry(
+          recorded.map((p) => [p[0], p[1]] as [number, number]),
+          snapStartLat,
+          snapStartLon,
+          snapEndLat,
+          snapEndLon,
+        )
+      : null;
+    d.accuracy = journeyAccuracy({
+      path: a.path,
+      startS: Date.parse(a.start) / 1000,
+      endS: Date.parse(a.end) / 1000,
+      drawnLine: d.route_geometry as [number, number][],
+    });
+
+    if (opts?.compare) {
+      const predicted =
+        a.mode === "train" || a.mode === "subway"
+          ? makeRailArc(snapStartLat, snapStartLon, snapEndLat, snapEndLon)
+          : snapGeometry(
+              (await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode, routeBudget)).geometry,
+              snapStartLat,
+              snapStartLon,
+              snapEndLat,
+              snapEndLon,
+            );
+      d.predicted_geometry = predicted;
+      d.prediction_gap = a.path?.length ? traceDeviation(a.path, predicted) : null;
     }
 
-    if (a.mode === "train" || a.mode === "subway") {
-      d.route_geometry = makeRailArc(snapStartLat, snapStartLon, snapEndLat, snapEndLon);
-      d.steps = [];
-      d.has_osrm_route = false;
-      d.is_rail = true;
-    } else {
-      d.route_geometry = snapGeometry(
-        routeData.geometry,
-        snapStartLat,
-        snapStartLon,
-        snapEndLat,
-        snapEndLon,
-      );
-      d.steps = routeData.steps;
-      d.has_osrm_route = routeData.steps.length > 0;
-      d.is_rail = false;
-    }
+    d.via_places = recorded ? await placesAlongTrace(db, recorded, viaBudget) : [];
 
     let fromPlace: string | null = null;
     for (let j = idx - 1; j >= 0; j--) {
@@ -878,10 +1331,19 @@ export async function getDay(
   for (let i = 0; i < events.length - 1; i++) {
     const prevEv = events[i];
     const nextEv = events[i + 1];
-    const fromLat = prevEv.type === "visit" ? prevEv.lat : prevEv.end_lat;
-    const fromLon = prevEv.type === "visit" ? prevEv.lon : prevEv.end_lon;
-    const toLat = nextEv.type === "visit" ? nextEv.lat : nextEv.start_lat;
-    const toLon = nextEv.type === "visit" ? nextEv.lon : nextEv.start_lon;
+    // Already joined by the journey line itself.
+    if (prevEv.type === "activity" && nextEv.type === "visit" && snappedEnd.has(prevEv.data)) continue;
+    if (prevEv.type === "visit" && nextEv.type === "activity" && snappedStart.has(nextEv.data)) continue;
+    // Overlapping events (Timeline nests stays inside longer ones): nothing moved in between.
+    if (Date.parse(nextEv.time) < Date.parse(prevEv.end_time) - 60_000) continue;
+    const [fromLat, fromLon] =
+      prevEv.type === "visit"
+        ? [prevEv.lat, prevEv.lon]
+        : (drawnEnds.get(prevEv.data)?.end ?? [prevEv.end_lat, prevEv.end_lon]);
+    const [toLat, toLon] =
+      nextEv.type === "visit"
+        ? [nextEv.lat, nextEv.lon]
+        : (drawnEnds.get(nextEv.data)?.start ?? [nextEv.start_lat, nextEv.start_lon]);
     const gapM = haversineM(fromLat, fromLon, toLat, toLon);
     if (gapM < 15) continue;
     connectorCandidates.push({
@@ -941,7 +1403,8 @@ export async function getDay(
         c.fromLon,
         c.toLat,
         c.toLon,
-        "car",
+        connectorMode(c.gapM, c.from_time, c.to_time),
+        routeBudget,
       );
       connectors.push({
         from_time: c.from_time,
@@ -983,6 +1446,7 @@ export async function getDay(
   >();
   let placeDone = 0;
   const placeTotal = uniqueCoords.size;
+  const placeBudget: LiveLookupBudget = { live: MAX_LIVE_PLACE_LOOKUPS };
   for (const [key, [lat, lon]] of uniqueCoords) {
     placeDone += 1;
     await report({
@@ -1012,7 +1476,7 @@ export async function getDay(
         },
       });
     } else {
-      placeNames.set(key, await resolveCoords(db, lat, lon));
+      placeNames.set(key, await resolveCoords(db, lat, lon, placeBudget));
     }
   }
 
@@ -1024,6 +1488,7 @@ export async function getDay(
     if (ev.type !== "visit") continue;
     const v = ev.data;
     const vd = visitToApi(v) as Record<string, unknown>;
+    vd.note = overrides.get(`visit|${v.start}`)?.note ?? null;
 
     let prevMode: string | null = null;
     for (let j = idx - 1; j >= 0; j--) {
@@ -1051,7 +1516,9 @@ export async function getDay(
 
     const coordKey = `${Math.round(v.lat * 1e5) / 1e5},${Math.round(v.lon * 1e5) / 1e5}`;
     const placeInfo = placeNames.get(coordKey) ?? { name: "", address: "", data: {} };
-    vd.place_name = placeInfo.name;
+    const userLabel = v.placeKey ? userPlaceLabels.get(v.placeKey) : undefined;
+    // The user's name first, then Google's own name from the export, then geocoding.
+    vd.place_name = userLabel || v.googleName || placeInfo.name;
     vd.place_address = placeInfo.address;
     if ("short" in placeInfo && placeInfo.short) {
       vd.place_short_address = placeInfo.short;
@@ -1106,6 +1573,21 @@ export async function getDay(
     modes: day.modes,
     clusters: day.clusters,
   };
+}
+
+/** Load and build a day on one connection (scripts and tests). */
+export async function getDay(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  date: string,
+  onProgress?: (event: DayProgressEvent) => void | Promise<void>,
+  sourceIds?: string[],
+  opts?: { compare?: boolean; signal?: AbortSignal },
+) {
+  await onProgress?.({ stage: "Loading day records", detail: date, percent: 2 });
+  const rows = await loadDayRows(db, tenant, date, sourceIds);
+  if (!rows) return { error: "No data for this date" };
+  return buildDay(db, tenant, date, rows, onProgress, opts);
 }
 
 export async function getSourceById(
@@ -1250,6 +1732,7 @@ export async function getImportStatus(
     .from(visits)
     .where(eq(visits.tenant, tenant));
 
+  await failStaleImportJobs(db, tenant);
   const jobs = await db
     .select()
     .from(importJobs)
@@ -1345,7 +1828,33 @@ export async function getImportJob(
   return rows[0] ?? null;
 }
 
+/** A Worker import cannot outlive this, so an older open job died without reporting. */
+export const STALE_IMPORT_MS = 15 * 60_000;
+
+/** Fail this tenant's pending/processing jobs that have not moved for STALE_IMPORT_MS. */
+export async function failStaleImportJobs(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  now = Date.now(),
+) {
+  await db
+    .update(importJobs)
+    .set({
+      status: "error",
+      error: "Import stopped without finishing. Upload the file again.",
+      updatedAt: new Date(now),
+    })
+    .where(
+      and(
+        eq(importJobs.tenant, tenant),
+        or(eq(importJobs.status, "pending"), eq(importJobs.status, "processing")),
+        lt(importJobs.updatedAt, new Date(now - STALE_IMPORT_MS)),
+      ),
+    );
+}
+
 export async function getActiveImportJob(db: ReturnType<typeof createDb>, tenant: TenantId) {
+  await failStaleImportJobs(db, tenant);
   const rows = await db
     .select()
     .from(importJobs)
@@ -1532,9 +2041,31 @@ export async function getUserSettings(db: ReturnType<typeof createDb>, tenant: T
       mapBookmarks: [] as MapBookmark[],
       mapTileDarkUrl: null as string | null,
       mapTileLightUrl: null as string | null,
+      retentionYears: null as number | null,
       updatedAt: new Date(),
     }
   );
+}
+
+/** Choices offered for auto-delete; anything else is rejected. */
+export const RETENTION_YEAR_OPTIONS = [1, 2, 3, 5, 10] as const;
+
+/** First date kept when only the last `years` years are retained. */
+export function retentionCutoff(years: number, now = new Date()): string {
+  const d = new Date(Date.UTC(now.getUTCFullYear() - years, now.getUTCMonth(), now.getUTCDate()));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Delete this tenant's history from before its retention cutoff. */
+export async function applyRetention(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  years: number,
+  now = new Date(),
+) {
+  const cutoff = retentionCutoff(years, now);
+  const dayBefore = new Date(Date.parse(cutoff) - 86_400_000).toISOString().slice(0, 10);
+  return deleteDateRange(db, { tenant, from: "0001-01-01", to: dayBefore });
 }
 
 export async function upsertUserSettings(
@@ -1548,9 +2079,12 @@ export async function upsertUserSettings(
     mapBookmarks?: MapBookmark[];
     mapTileDarkUrl?: string | null;
     mapTileLightUrl?: string | null;
+    retentionYears?: number | null;
   },
 ) {
   const current = await getUserSettings(db, tenant);
+  const retentionYears =
+    patch.retentionYears === undefined ? (current.retentionYears ?? null) : patch.retentionYears;
   const distanceUnit = patch.distanceUnit ?? current.distanceUnit ?? "mi";
   const timezone = patch.timezone === undefined ? current.timezone : patch.timezone;
   const monthlyRecapEnabled =
@@ -1582,6 +2116,7 @@ export async function upsertUserSettings(
       mapBookmarks,
       mapTileDarkUrl,
       mapTileLightUrl,
+      retentionYears,
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
@@ -1594,6 +2129,7 @@ export async function upsertUserSettings(
         mapBookmarks,
         mapTileDarkUrl,
         mapTileLightUrl,
+        retentionYears,
         updatedAt: new Date(),
       },
     });
@@ -1609,7 +2145,66 @@ export async function upsertUserSettings(
     mapBookmarks,
     mapTileDarkUrl,
     mapTileLightUrl,
+    retentionYears,
   };
+}
+
+/** Modes a journey can be corrected to (the app's own mode names). */
+export const OVERRIDE_MODES = [...new Set(Object.values(TRANSPORT_MODE_MAP))].filter((m) => m !== "unknown");
+const OVERRIDE_NOTE_MAX = 500;
+
+/**
+ * Save or clear the user's note and mode fix for one stay or journey. Clearing both
+ * deletes the row. Validates against the tenant's own item so ids cannot be probed.
+ */
+export async function saveTimelineOverride(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  input: { kind: unknown; start: unknown; note?: unknown; mode?: unknown },
+) {
+  if (input.kind !== "visit" && input.kind !== "activity") return { error: "kind must be visit or activity" as const, status: 400 as const };
+  if (typeof input.start !== "string" || !input.start || input.start.length > 40) {
+    return { error: "start is required" as const, status: 400 as const };
+  }
+  if (input.note !== undefined && input.note !== null && typeof input.note !== "string") {
+    return { error: "note must be text" as const, status: 400 as const };
+  }
+  const note = typeof input.note === "string" ? input.note.trim().slice(0, OVERRIDE_NOTE_MAX) || null : null;
+  let mode: string | null = null;
+  if (input.mode !== undefined && input.mode !== null && input.mode !== "") {
+    if (input.kind !== "activity") return { error: "Only journeys have a mode" as const, status: 400 as const };
+    if (typeof input.mode !== "string" || !OVERRIDE_MODES.includes(input.mode)) {
+      return { error: "Unknown mode" as const, status: 400 as const };
+    }
+    mode = input.mode;
+  }
+  const kind = input.kind;
+  const start = input.start;
+  const table = kind === "visit" ? visits : activities;
+  const exists = await db
+    .select({ start: table.start })
+    .from(table)
+    .where(and(eq(table.tenant, tenant), eq(table.start, start)))
+    .limit(1);
+  if (!exists.length) return { error: "Not found" as const, status: 404 as const };
+
+  const where = and(
+    eq(timelineOverrides.tenant, tenant),
+    eq(timelineOverrides.kind, kind),
+    eq(timelineOverrides.itemStart, start),
+  );
+  if (!note && !mode) {
+    await db.delete(timelineOverrides).where(where);
+    return { kind, start, note: null, mode: null };
+  }
+  await db
+    .insert(timelineOverrides)
+    .values({ tenant, kind, itemStart: start, note, mode, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: [timelineOverrides.tenant, timelineOverrides.kind, timelineOverrides.itemStart],
+      set: { note, mode, updatedAt: new Date() },
+    });
+  return { kind, start, note, mode };
 }
 
 export function filterHiddenSearchPlaces<T extends { cluster?: string | null }>(
@@ -1643,10 +2238,13 @@ export async function searchTenant(
     .map((row) => row.placeKey)
     .slice(0, 30);
   const clusterMatch = [ilike(visits.cluster, like), ilike(visits.semanticType, like)];
-  if (labelKeys.length) clusterMatch.push(inArray(visits.cluster, labelKeys));
-  const places = await db
+  if (labelKeys.length) {
+    clusterMatch.push(inArray(visits.cluster, labelKeys), inArray(visits.placeKey, labelKeys));
+  }
+  const rows = await db
     .select({
       cluster: visits.cluster,
+      placeKey: visits.placeKey,
       lat: visits.lat,
       lon: visits.lon,
       date: visits.date,
@@ -1655,6 +2253,11 @@ export async function searchTenant(
     .where(and(eq(visits.tenant, tenant), or(...clusterMatch)))
     .orderBy(desc(visits.date))
     .limit(40);
+  // A region-name match links to the region; anything else (a label, Home, Work) to the real place.
+  const places = rows.map(({ placeKey, ...row }) => ({
+    ...row,
+    cluster: row.cluster.toLowerCase().includes(needle) || !placeKey ? row.cluster : placeKey,
+  }));
   const unique: typeof places = [];
   const seen = new Set<string>();
   for (const row of places) {
@@ -1785,56 +2388,77 @@ export async function deleteTenantDateRange(
   return deleteDateRange(db, { tenant, ...opts });
 }
 
-const REWARM_CAP = 100;
+/** Journeys per rewarm request; a GPS journey can take up to five OSRM calls. */
+const REWARM_CAP = 8;
 
-export async function rewarmRoutes(
-  db: ReturnType<typeof createDb>,
-  tenant: TenantId,
-) {
+/**
+ * Every journey's route_cache key, built the same way Day View routes it: GPS
+ * journeys use trace keys, the rest endpoint keys. Shared by progress and rewarm
+ * so the two always agree.
+ */
+async function loadRouteCandidates(db: ReturnType<typeof createDb>, tenant: TenantId) {
   const rows = await db
     .select({
+      start: activities.start,
+      end: activities.end,
       startLat: activities.startLat,
       startLon: activities.startLon,
       endLat: activities.endLat,
       endLon: activities.endLon,
       mode: activities.mode,
+      distanceMeters: activities.distanceMeters,
+      path: activities.path,
     })
     .from(activities)
     .where(eq(activities.tenant, tenant));
 
-  const candidates: Array<{
-    startLat: number;
-    startLon: number;
-    endLat: number;
-    endLon: number;
-    mode: string;
-    key: string;
-  }> = [];
+  // Without neighbouring stops this cannot apply journeyAnchor, so the few journeys
+  // whose recorded endpoint gets replaced in Day View are routed on first view instead.
+  const candidates: Array<(typeof rows)[number] & { key: string; trace: PathPoint[] | null }> = [];
   for (const a of rows) {
+    const trace = journeyTrace(a);
+    if (trace && trace.length >= 3) {
+      if (RAW_TRACE_MODES.has(a.mode)) continue;
+      candidates.push({ ...a, trace, key: traceRouteCacheKey(trace, a.mode) });
+      continue;
+    }
     if (SKIP.has(a.mode)) continue;
     const profile = MODE_TO_PROFILE[a.mode] ?? "driving";
     candidates.push({
       ...a,
+      trace: null,
       key: makeRouteCacheKey(a.startLat, a.startLon, a.endLat, a.endLon, profile),
     });
   }
 
   const cachedKeys = new Set<string>();
-  const keys = candidates.map((c) => c.key);
+  const keys = [...new Set(candidates.map((c) => c.key))];
   for (let i = 0; i < keys.length; i += 400) {
     const batch = keys.slice(i, i + 400);
-    if (!batch.length) continue;
     const found = await db
       .select({ key: routeCache.key })
       .from(routeCache)
       .where(inArray(routeCache.key, batch));
     for (const row of found) cachedKeys.add(row.key);
   }
+  return { candidates, cachedKeys };
+}
 
-  const uncached = candidates.filter((c) => !cachedKeys.has(c.key));
+export async function rewarmRoutes(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+) {
+  const { candidates, cachedKeys } = await loadRouteCandidates(db, tenant);
+  const seen = new Set<string>();
+  const uncached = candidates.filter((c) => {
+    if (cachedKeys.has(c.key) || seen.has(c.key)) return false;
+    seen.add(c.key);
+    return true;
+  });
   const batch = uncached.slice(0, REWARM_CAP);
   for (const a of batch) {
-    await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode);
+    if (a.trace) await fetchTraceRoute(db, a.trace, a.mode, a.distanceMeters);
+    else await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode);
   }
   return {
     warmed: batch.length,
@@ -1890,6 +2514,12 @@ export {
   listClusterVisits,
   getCorridorDetail,
   getTripRange,
+  getRouteLines,
+  getHotspotDays,
+  getExportRows,
+  deletePlaceData,
+  getRangeInsights,
+  getOnThisDay,
   listNamedTrips,
   upsertNamedTrip,
   deleteNamedTrip,

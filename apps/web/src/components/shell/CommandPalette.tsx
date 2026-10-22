@@ -39,6 +39,7 @@ type Row = {
 const TAB_PAGES = [
   { to: '/hotspots', label: 'Hotspots', title: 'Open Hotspots' },
   { to: '/day', label: 'Day View', title: 'Open Day View' },
+  { to: '/routes', label: 'Routes', title: 'Open Routes: every journey line for a month, year, or day' },
   { to: '/trips', label: 'Day Trips', title: 'Open Day Trips' },
   { to: '/insights', label: 'Insights', title: 'Open Insights' },
   { to: '/journey-cost', label: 'Journey Cost', title: 'Price a trip: fuel, tolls, clean-air zones' },
@@ -56,7 +57,7 @@ const HINT_ROWS: Row[] = [
   {
     id: 'hint-g',
     group: 'Hints',
-    label: 'g then h, d, t, i, j, e, or s jumps pages',
+    label: 'g then h, d, r, t, i, j, e, or s jumps pages',
     title: 'Keyboard chords for main pages',
     to: '',
   },
@@ -360,7 +361,7 @@ export default function CommandPalette() {
                 onClick={() => choose(row)}
               >
                 <span className="truncate">
-                  <span className="mr-2 text-[10px] uppercase tracking-wide text-text-muted">{row.group}</span>
+                  <span className="mr-2 text-[11px] uppercase tracking-wide text-text-muted">{row.group}</span>
                   {row.label}
                 </span>
                 {row.hint && <span className="shrink-0 font-mono text-xs text-text-muted">{row.hint}</span>}
@@ -397,8 +398,8 @@ export default function CommandPalette() {
               Remove {p.name}
             </Button>
           ))}
-          <p className="w-full text-[10px] text-text-muted">
-            Type ? for shortcuts. Ctrl/Cmd+K search. g then h/d/t/i/j/e/s jumps.
+          <p className="w-full text-[11px] text-text-muted">
+            Type ? for shortcuts. Ctrl/Cmd+K search. g then h/d/r/t/i/j/e/s jumps.
           </p>
         </div>
       )}
@@ -418,7 +419,7 @@ export default function CommandPalette() {
         >
           <Search size={14} />
           Search
-          <span className="ml-auto hidden font-mono text-[10px] sm:inline">Ctrl K</span>
+          <span className="ml-auto hidden font-mono text-[11px] sm:inline">Ctrl K</span>
         </Button>
       ) : (
         <Button

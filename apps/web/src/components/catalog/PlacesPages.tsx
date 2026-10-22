@@ -17,13 +17,21 @@ import { parseCoverageRange } from '../../lib/nav/view-search-params';
 import { rememberRecentPlace } from '../../lib/nav/nav-memory';
 import { formatDuration, formatTime } from '../../utils/format';
 import { MODE_LABELS } from '../../types';
+import { Skeleton } from '../ui/skeleton';
+import { EmptyState, ErrorState } from '../ui/states';
+import PlaceActions from './PlaceActions';
+import { useSession } from '../../lib/auth';
+
+/** Real places (`g:` Google id, `c:` snapped spot) can be renamed and deleted; regions cannot. */
+const isRealPlaceKey = (key: string) => key.startsWith('g:') || key.startsWith('c:');
 
 export function PlacesDirectory() {
   const [q, setQ] = useState('');
   const [sort, setSort] = useState('visits');
-  const { data } = useClusters(q, sort);
+  const { data, isLoading, isError, refetch } = useClusters(q, sort);
+  const places = data?.clusters ?? [];
   return (
-    <CatalogPage title="Place directory" description="Every named cluster in your imported Timeline. Hidden places are omitted here; Day View still lists those visits.">
+    <CatalogPage title="Place directory" description="Every place you stayed, from Google's place or the spot itself. Rename one and Day View uses your name. Hidden places are left out here and on the heatmap; Day View still lists those visits.">
       <div className="flex flex-wrap gap-2">
         <EjectField label="Filter places" htmlFor="places-filter" className="max-w-sm min-w-0 flex-1">
           <Input
@@ -47,8 +55,22 @@ export function PlacesDirectory() {
           </select>
         </EjectField>
       </div>
+      {isLoading ? (
+        <div className="space-y-2" aria-busy="true">
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} className="h-11 w-full" />
+          ))}
+        </div>
+      ) : isError ? (
+        <ErrorState title="Places did not load." onRetry={() => void refetch()} />
+      ) : places.length === 0 ? (
+        <EmptyState
+          title={q.trim() ? `No places match "${q.trim()}".` : 'No places yet.'}
+          body={q.trim() ? 'Try part of the name, or clear the filter.' : 'Places appear once your Timeline is imported.'}
+        />
+      ) : (
       <ul className="divide-y divide-border rounded-lg border border-border bg-bg">
-        {(data?.clusters ?? []).map((c) => (
+        {places.map((c) => (
           <li key={c.cluster}>
             <Button
               variant="ghost"
@@ -66,6 +88,7 @@ export function PlacesDirectory() {
           </li>
         ))}
       </ul>
+      )}
     </CatalogPage>
   );
 }
@@ -75,20 +98,25 @@ export function PlacePage() {
   const decoded = decodeURIComponent(key);
   const { data, isError } = useCluster(decoded);
   const { data: visitPage } = useClusterVisits(decoded);
+  const { data: session } = useSession();
+  const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
   useEffect(() => {
     if (data?.cluster) rememberRecentPlace(data.cluster, data.label || data.cluster);
   }, [data?.cluster, data?.label]);
   if (isError) {
     return (
       <CatalogPage title="Place">
-        <p className="text-sm text-text-muted">This place was not found for your account.</p>
+        <EmptyState title="Place not found." body="It may have been removed by a re-import. Open the place directory to find it again." />
       </CatalogPage>
     );
   }
   if (!data) {
     return (
       <CatalogPage title="Place">
-        <p className="text-sm text-text-muted">Loading…</p>
+        <div className="space-y-2" aria-busy="true">
+          <Skeleton className="h-56 w-full" />
+          <Skeleton className="h-11 w-1/2" />
+        </div>
       </CatalogPage>
     );
   }
@@ -101,6 +129,9 @@ export function PlacePage() {
           areaMarkers={[{ lat: data.lat, lon: data.lon, label: data.label, visits: data.visits }]}
         />
       </div>
+      {!isDemo && isRealPlaceKey(data.cluster) && (
+        <PlaceActions key={data.cluster} placeKey={data.cluster} label={data.label} hidden={Boolean(data.hidden)} />
+      )}
       <div>
         <h3 className="mb-2 text-sm font-semibold text-text-muted">Time of day (UTC)</h3>
         <div className="flex h-16 items-end gap-px">

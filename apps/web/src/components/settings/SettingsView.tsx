@@ -30,6 +30,16 @@ function initials(name?: string, email?: string) {
   return src.slice(0, 2).toUpperCase() || "?";
 }
 
+/** Short plan words for the header badge. */
+const PLAN_BADGE: Record<string, string> = {
+  active: 'Plan active',
+  trialing: 'Free trial',
+  past_due: 'Payment failed',
+  unpaid: 'Payment failed',
+  paused: 'Paused',
+  canceled: 'Plan ended',
+};
+
 export default function SettingsView() {
   const { data: session } = useSession();
   const { entitlements } = useUnits();
@@ -147,7 +157,7 @@ export default function SettingsView() {
               {user?.emailVerified ? "Verified" : "Unverified"}
             </Badge>
             <Badge title={`Billing status: ${status}`}>
-              {entitlements?.entitled ? `${status} · entitled` : status}
+              {PLAN_BADGE[status] ?? (entitlements?.entitled ? 'Can import' : 'No plan')}
             </Badge>
             {graceActive && (
               <Badge title="Import is paused during the read-only grace period">Grace</Badge>
@@ -156,7 +166,7 @@ export default function SettingsView() {
         </div>
         {message && <p className="mt-3 text-sm text-walk">{message}</p>}
         {error && (
-          <div className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+          <div className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
           </div>
         )}
@@ -165,7 +175,7 @@ export default function SettingsView() {
       <div className="flex min-h-0 flex-1">
         {isDesktop && (
           <aside className="flex w-52 shrink-0 flex-col overflow-y-auto border-r border-border p-3">
-            <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+            <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
               Workspace
             </p>
             <SettingsNav section={section} onSelect={setSection} orientation="rail" />

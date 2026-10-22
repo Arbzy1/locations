@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useQuery, useQueryClient, useQueries } from '@tanstack/react-query';
 import type {
   DayData,
+  RouteLinesResponse,
+  HotspotDaysResponse,
   DaySummary,
   Overview,
   HeatmapPoint,
@@ -71,14 +73,19 @@ export type DayLoadProgress = {
   logs: string[];
 };
 
+const NO_DAY_DATA = 'No data for this date';
+export type DayMissing = { error: string };
+
 async function fetchDayStreaming(
   date: string,
   onProgress: (p: DayLoadProgress) => void,
   signal?: AbortSignal,
   sourceIds?: string[],
-): Promise<DayData> {
+  compare?: boolean,
+): Promise<DayData | DayMissing> {
   const params = new URLSearchParams({ stream: '1' });
   if (sourceIds?.length) params.set('sources', sourceIds.join(','));
+  if (compare) params.set('compare', '1');
   const res = await fetch(`/api/day/${date}?${params.toString()}`, {
     credentials: 'include',
     signal,
@@ -140,21 +147,24 @@ async function fetchDayStreaming(
     }
   }
 
+  // An empty day is an answer, not a failure: no retries, no error state.
+  if (streamError === NO_DAY_DATA || (!streamError && !result)) return { error: NO_DAY_DATA };
   if (streamError) throw new Error(streamError);
-  if (!result) throw new Error('No data for this date');
-  return result;
+  return result!;
 }
 
-export function useDayData(date: string, sourceIds?: string[]) {
+/** `compare` also loads the OSRM-predicted line for each journey (Day View toggle). */
+export function useDayData(date: string, sourceIds?: string[], opts?: { compare?: boolean }) {
   const tenantKey = useTenantKey();
   const [progress, setProgress] = useState<DayLoadProgress | null>(null);
   const sourceKey = sourceIds?.slice().sort().join(',') ?? '';
+  const compare = Boolean(opts?.compare);
 
-  const query = useQuery<DayData>({
-    queryKey: ['day', tenantKey, date, sourceKey],
+  const query = useQuery<DayData | DayMissing>({
+    queryKey: ['day', tenantKey, date, sourceKey, compare],
     queryFn: ({ signal }) => {
       setProgress({ stage: 'Starting', percent: 0, logs: ['Starting…'] });
-      return fetchDayStreaming(date, setProgress, signal, sourceIds);
+      return fetchDayStreaming(date, setProgress, signal, sourceIds, compare);
     },
     enabled: !!date && tenantKey !== 'anon',
     staleTime: Infinity,
@@ -659,5 +669,87 @@ export function usePublicConfig() {
     queryKey: ['public-config'],
     queryFn: () => fetchJson('/api/config'),
     staleTime: 60_000,
+  });
+}
+
+/** Every journey line in a date range, as recorded (Routes view). */
+export function useRouteLines(opts: { from: string; to: string; sources?: string[] }) {
+  const tenantKey = useTenantKey();
+  const params = new URLSearchParams({ from: opts.from, to: opts.to });
+  if (opts.sources?.length) params.set('sources', opts.sources.join(','));
+  const qs = params.toString();
+  return useQuery<RouteLinesResponse>({
+    queryKey: ['routes', tenantKey, qs],
+    queryFn: () => fetchJson(`/api/routes?${qs}`),
+    enabled: tenantKey !== 'anon' && Boolean(opts.from && opts.to),
+    staleTime: Infinity,
+    placeholderData: (prev) => prev,
+  });
+}
+
+export type RangeSummary = {
+  from: string;
+  to: string;
+  days_with_data: number;
+  miles: number;
+  journeys: number;
+  visits: number;
+  places: number;
+  modes: Record<string, { journeys: number; miles: number }>;
+};
+
+export type RangeInsights = {
+  current: RangeSummary;
+  last_year: RangeSummary;
+  top_places: { key: string; label: string; minutes: number; visits: number }[];
+  new_places: { count: number; sample: { key: string; label: string }[] };
+};
+
+/** Insights for any period, with the same dates last year. */
+export function useRangeInsights(range: { from: string; to: string }) {
+  const tenantKey = useTenantKey();
+  const qs = new URLSearchParams(range).toString();
+  return useQuery<RangeInsights>({
+    queryKey: ['insights-range', tenantKey, qs],
+    queryFn: () => fetchJson(`/api/insights/range?${qs}`),
+    enabled: tenantKey !== 'anon' && Boolean(range.from && range.to && range.from <= range.to),
+    staleTime: Infinity,
+    placeholderData: (prev) => prev,
+  });
+}
+
+export type OnThisDay = {
+  date: string;
+  years: {
+    date: string;
+    years_ago: number;
+    miles: number;
+    visits: number;
+    journeys: number;
+    modes: Record<string, number>;
+    places: { key: string; label: string }[];
+  }[];
+};
+
+/** The same calendar day in earlier years. */
+export function useOnThisDay(date: string) {
+  const tenantKey = useTenantKey();
+  return useQuery<OnThisDay>({
+    queryKey: ['on-this-day', tenantKey, date],
+    queryFn: () => fetchJson(`/api/on-this-day?date=${encodeURIComponent(date)}`),
+    enabled: tenantKey !== 'anon' && Boolean(date),
+    staleTime: Infinity,
+  });
+}
+
+/** Days with a stay at a hotspot, newest first. */
+export function useHotspotDays(point: { lat: number; lon: number } | null) {
+  const tenantKey = useTenantKey();
+  const qs = point ? new URLSearchParams({ lat: String(point.lat), lon: String(point.lon) }).toString() : '';
+  return useQuery<HotspotDaysResponse>({
+    queryKey: ['hotspot-days', tenantKey, qs],
+    queryFn: () => fetchJson(`/api/hotspots/days?${qs}`),
+    enabled: tenantKey !== 'anon' && Boolean(point),
+    staleTime: Infinity,
   });
 }

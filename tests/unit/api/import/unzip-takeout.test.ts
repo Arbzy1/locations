@@ -53,4 +53,31 @@ describe("extractTimelineJsonFromZip", () => {
       /Zip should include Timeline\.json or Records\.json/,
     );
   });
+
+  it("merges every Semantic Location History month", async () => {
+    const month = (ts: string) =>
+      new TextEncoder().encode(
+        JSON.stringify({
+          timelineObjects: [
+            {
+              placeVisit: {
+                location: { latitudeE7: 515000000, longitudeE7: -1000000 },
+                duration: { startTimestamp: `${ts}T08:00:00Z`, endTimestamp: `${ts}T09:00:00Z` },
+              },
+            },
+          ],
+        }),
+      );
+    const zipped = zipSync({
+      "Takeout/Location History/Semantic Location History/2019/2019_JANUARY.json": month("2019-01-05"),
+      "Takeout/Location History/Semantic Location History/2019/2019_FEBRUARY.json": month("2019-02-05"),
+      "Takeout/Location History/Settings.json": new TextEncoder().encode("{}"),
+    });
+    const result = await extractTimelineJsonFromZip(zipped);
+    expect(result.chosenPath).toBe("Semantic Location History (2 months)");
+    const merged = JSON.parse(result.text) as { timelineObjects: unknown[] };
+    expect(merged.timelineObjects).toHaveLength(2);
+    expect(result.text).toContain("2019-01-05");
+    expect(result.text).toContain("2019-02-05");
+  });
 });

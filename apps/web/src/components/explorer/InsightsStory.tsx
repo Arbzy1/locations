@@ -285,11 +285,11 @@ function HourHeatmap({ grid, accent }: { grid: number[][]; accent: string }) {
         <div className="grid min-w-[36rem] grid-cols-[2.5rem_repeat(24,minmax(0,1fr))] gap-0.5">
           <div />
           {Array.from({ length: 24 }, (_, h) => (
-            <div key={h} className="text-center text-[9px] text-text-muted">{h}</div>
+            <div key={h} className="text-center text-[11px] text-text-muted">{h}</div>
           ))}
           {grid.map((row, d) => (
             <div key={d} className="contents">
-              <div className="text-[10px] text-text-muted">{WEEKDAYS[d]}</div>
+              <div className="text-[11px] text-text-muted">{WEEKDAYS[d]}</div>
               {row.map((n, h) => {
                 const t = n / max;
                 return (

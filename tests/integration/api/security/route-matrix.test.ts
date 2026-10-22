@@ -44,7 +44,7 @@ import {
   deleteChapter,
   deleteNamedTrip,
   getActiveImportJob,
-  getDay,
+  loadDayRows,
   patchSource,
   resolveCoords,
   staffTenantStats,
@@ -79,7 +79,7 @@ describe("API threat matrix", () => {
     createCheckout.mockClear();
     createPortal.mockClear();
     resetRateLimits();
-    vi.mocked(getDay).mockResolvedValue({ error: "No data for this date" });
+    vi.mocked(loadDayRows).mockResolvedValue(null);
     vi.mocked(getActiveImportJob).mockResolvedValue(null);
     vi.mocked(upsertNamedTrip).mockResolvedValue({ error: "Not found" });
     vi.mocked(deleteNamedTrip).mockResolvedValue({ error: "Not found" });

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import type { DataSourceInfo } from "../../types";
-import { useImportStatus, useInvalidateLocationQueries, useSources } from "../../hooks/useApi";
+import { useImportStatus, useInvalidateLocationQueries, useRouteProgress, useSources } from "../../hooks/useApi";
 import { useSession } from "../../lib/auth";
 import { PLACE_COLOR_TOKENS, sourceTokenVar } from "../../lib/explorer/hotspots";
 import { Button } from "../ui/button";
@@ -37,6 +37,7 @@ export default function SettingsTimeline({ onMessage, onError }: Props) {
   const [rangeSourceId, setRangeSourceId] = useState("");
   const [rangeOpen, setRangeOpen] = useState(false);
   const [rewarmBusy, setRewarmBusy] = useState(false);
+  const { data: routeProgress, refetch: refetchRouteProgress } = useRouteProgress();
   const [rewarmMsg, setRewarmMsg] = useState("");
 
   const latest = importStatus?.latestJob;
@@ -137,8 +138,9 @@ export default function SettingsTimeline({ onMessage, onError }: Props) {
         remaining?: number;
       };
       if (!res.ok) throw new Error(body.error || "Rewarm failed");
-      setRewarmMsg(`Warmed ${body.warmed ?? 0} routes. ${body.remaining ?? 0} remaining.`);
+      setRewarmMsg(`Prepared ${body.warmed ?? 0} routes. ${body.remaining ?? 0} still to do.`);
       invalidate();
+      void refetchRouteProgress();
     } catch (err) {
       onError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -397,20 +399,27 @@ export default function SettingsTimeline({ onMessage, onError }: Props) {
         </Card>
 
         <Card>
-          <CardTitle className="text-base">Predicted routes</CardTitle>
+          <CardTitle className="text-base">Road routes</CardTitle>
           <p className="mt-1 mb-4 text-xs text-text-muted">
-            Warm up to 100 uncached walking/driving journeys. Click again if more remain. Flights
-            and rail are skipped.
+            Day View draws each journey along real roads and saves the result. Preparing them ahead
+            makes days open faster. This does a few journeys at a time; press again to continue.
+            {routeProgress && (
+              <>
+                {' '}
+                <span className="text-text">{routeProgress.percent}% ready</span> ({routeProgress.cached} of{' '}
+                {routeProgress.total}).
+              </>
+            )}
           </p>
           <Button
             type="button"
             variant="outline"
             disabled={isDemo || rewarmBusy}
-            title="Reprocess uncached predicted routes"
+            title="Prepare road routes for more journeys"
             onClick={() => void rewarm()}
           >
             {rewarmBusy ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-            Reprocess routes
+            Prepare more routes
           </Button>
           {rewarmMsg && <p className="mt-3 text-sm text-text-muted">{rewarmMsg}</p>}
         </Card>

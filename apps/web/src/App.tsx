@@ -5,9 +5,9 @@ import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate,
 import type { TabId } from './types';
 import {
   useImportStatus,
+  useInvalidateLocationQueries,
   useOverview,
   usePublicConfig,
-  useRouteProgress,
 } from './hooks/useApi';
 import { useSession, signOut } from './lib/auth';
 import { UnitsProvider } from './lib/units';
@@ -17,6 +17,7 @@ import { interactiveMotion, reducedInteractiveMotion } from './lib/motion';
 import { cn } from './lib/utils';
 import HotspotsView from './components/explorer/HotspotsView';
 import DayView from './components/explorer/DayView';
+import RoutesView from './components/explorer/RoutesView';
 import DayTripsView from './components/explorer/DayTripsView';
 import InsightsView from './components/explorer/InsightsView';
 import SettingsView from './components/settings/SettingsView';
@@ -34,24 +35,27 @@ import ThemeToggle from './components/shell/ThemeToggle';
 import CommandPalette from './components/shell/CommandPalette';
 import { AppVersion } from './components/shell/AppVersion';
 import { Button } from './components/ui/button';
-import ImportDropZone from './components/explorer/ImportDropZone';
+import { Sheet, SheetContent } from './components/ui/sheet';
+import GetStarted from './components/shell/GetStarted';
 import { Toaster } from './components/ui/sonner';
 import ExploreMenu from './components/shell/ExploreMenu';
+import MapModeSwitch from './components/shell/MapModeSwitch';
+import { loadMapMode, mapModePath, saveMapMode, type MapMode } from './lib/nav/map-mode';
 import CatalogRouter from './components/catalog/CatalogRouter';
 import ImportCutIn from './components/ImportCutIn';
 import { isCatalogPath, catalogTitle } from './lib/nav/paths';
 import { shouldFireImportCutIn, type ImportCutInJob } from './lib/explorer/import-cut-in';
 import { adminPageLabel } from './components/admin/adminNav';
 import {
-  Flame,
   Fuel,
+  Map as MapIcon,
+  MapPin,
   Calendar,
   Compass,
   TrendingUp,
   Loader2,
   LogOut,
   Settings,
-  Upload,
   MoreHorizontal,
   PanelLeft,
   PanelLeftClose,
@@ -72,24 +76,30 @@ const queryClient = new QueryClient({
 const TAB_LABELS: Record<TabId, string> = {
   hotspots: 'Hotspots',
   day: 'Day View',
+  routes: 'Routes',
   trips: 'Day Trips',
   insights: 'Insights',
   'journey-cost': 'Journey Cost',
   settings: 'Settings',
 };
 
-const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: 'hotspots', label: TAB_LABELS.hotspots, icon: <Flame size={18} /> },
-  { id: 'day', label: TAB_LABELS.day, icon: <Calendar size={18} /> },
-  { id: 'trips', label: TAB_LABELS.trips, icon: <Compass size={18} /> },
-  { id: 'insights', label: TAB_LABELS.insights, icon: <TrendingUp size={18} /> },
-  { id: 'journey-cost', label: TAB_LABELS['journey-cost'], icon: <Fuel size={18} /> },
+type NavId = 'map' | 'day' | 'trips' | 'places' | 'insights' | 'journey-cost';
+
+/** The primary destinations. Map opens the heatmap or the journey lines. */
+const NAV: { id: NavId; label: string; short: string; icon: React.ReactNode }[] = [
+  { id: 'map', label: 'Map', short: 'Map', icon: <MapIcon size={18} /> },
+  { id: 'day', label: 'Days', short: 'Days', icon: <Calendar size={18} /> },
+  { id: 'trips', label: 'Trips', short: 'Trips', icon: <Compass size={18} /> },
+  { id: 'places', label: 'Places', short: 'Places', icon: <MapPin size={18} /> },
+  { id: 'insights', label: 'Insights', short: 'Insights', icon: <TrendingUp size={18} /> },
+  { id: 'journey-cost', label: TAB_LABELS['journey-cost'], short: 'Cost', icon: <Fuel size={18} /> },
 ];
 
 const JourneyCostView = lazy(() => import('./components/brim/JourneyCostView'));
 
 function tabFromPath(pathname: string): TabId {
   if (pathname.startsWith('/day')) return 'day';
+  if (pathname.startsWith('/routes')) return 'routes';
   if (pathname === '/trips' || pathname === '/trips/') return 'trips';
   if (pathname.startsWith('/insights') || pathname.startsWith('/review')) return 'insights';
   if (pathname.startsWith('/settings')) return 'settings';
@@ -106,41 +116,6 @@ function useDocumentTitle(title: string) {
   useEffect(() => {
     document.title = title;
   }, [title]);
-}
-
-function EmptyDataState({
-  onOpenSettings,
-  isDemo,
-}: {
-  onOpenSettings: () => void;
-  isDemo: boolean;
-}) {
-  return (
-    <div className="flex h-full min-h-0 flex-col items-center justify-center gap-4 bg-bg px-6 text-center">
-      <div className="rounded-full bg-accent/15 p-4 text-accent">
-        <Upload size={28} />
-      </div>
-      <div className="max-w-sm">
-        <h2 className="font-display text-lg font-semibold text-text">Import your Timeline</h2>
-        <p className="mt-2 text-sm text-text-muted">
-          Drop a Google Timeline JSON or Takeout zip here. You can replace it anytime with a newer
-          export.
-        </p>
-      </div>
-      <div className="w-full max-w-md text-left">
-        <ImportDropZone
-          disabled={isDemo}
-          disabledReason={isDemo ? 'Demo accounts cannot import Timeline data.' : undefined}
-        />
-      </div>
-      <Button type="button" title="Open Settings to upload Timeline data" onClick={onOpenSettings}>
-        Open Settings
-      </Button>
-      <Button type="button" variant="outline" title="Open onboarding steps" asChild>
-        <Link to="/onboarding">Onboarding</Link>
-      </Button>
-    </div>
-  );
 }
 
 const RAIL_COLLAPSED = 56;
@@ -172,7 +147,7 @@ function NavTabButton({
   compact,
   expanded,
 }: {
-  tab: { id: TabId; label: string; icon: React.ReactNode };
+  tab: { label: string; short: string; icon: React.ReactNode };
   active: boolean;
   onSelect: () => void;
   compact?: boolean;
@@ -187,7 +162,7 @@ function NavTabButton({
       className={cn(
         'flex items-center rounded-lg transition-colors duration-300 ease-ui',
         compact
-          ? 'h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 px-1 text-[10px]'
+          ? 'h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 px-1 text-[11px]'
           : expanded
             ? 'h-11 w-full justify-start gap-2 px-3'
             : 'h-11 w-11 justify-center',
@@ -199,7 +174,7 @@ function NavTabButton({
       {...motionProps}
     >
       {tab.icon}
-      {compact && <span className="truncate">{tab.label.split(' ')[0]}</span>}
+      {compact && <span className="truncate">{tab.short}</span>}
       <RailLabel show={!!expanded}>{tab.label}</RailLabel>
     </motion.button>
   );
@@ -219,11 +194,11 @@ function AppContent() {
   const navReady = useRef(false);
   const cutInPrimed = useRef(false);
   const cutInPrev = useRef<{ id: string; status: string } | null>(null);
-  const { data: routeProgress } = useRouteProgress();
   const { data: overview, isLoading: overviewLoading } = useOverview();
   const { data: importStatus } = useImportStatus({
     poll: true,
   });
+  const invalidateLocation = useInvalidateLocationQueries();
   const { data: session } = useSession();
   const { moodName } = useTheme();
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
@@ -243,6 +218,24 @@ function AppContent() {
   const selectTab = (id: TabId, date?: string) => {
     setMoreOpen(false);
     void navigate(pathForTab(id, date ?? dayViewDate));
+  };
+
+  const onMapTab = !exploring && (activeTab === 'hotspots' || activeTab === 'routes');
+  const mapMode: MapMode = activeTab === 'routes' ? 'lines' : 'heat';
+  useEffect(() => {
+    if (onMapTab) saveMapMode(mapMode);
+  }, [onMapTab, mapMode]);
+
+  const navActive = (id: NavId) => {
+    if (id === 'places') return location.pathname.startsWith('/places');
+    if (id === 'map') return onMapTab;
+    return !exploring && activeTab === id;
+  };
+  const selectNav = (id: NavId) => {
+    setMoreOpen(false);
+    if (id === 'map') void navigate(mapModePath(loadMapMode()));
+    else if (id === 'places') void navigate('/places');
+    else selectTab(id);
   };
 
   const importing =
@@ -271,8 +264,17 @@ function AppContent() {
     if (shouldFireImportCutIn(cutInPrev.current, snapshot) && latest && !isDemo) {
       setCutInJob(latest);
     }
+    // Cached location queries never go stale on their own; reload them once new data lands.
+    const prev = cutInPrev.current;
+    if (
+      latest?.status === 'ready' &&
+      prev?.id === latest.id &&
+      (prev.status === 'pending' || prev.status === 'processing')
+    ) {
+      invalidateLocation();
+    }
     cutInPrev.current = snapshot;
-  }, [importStatus, isDemo, sessionUserId]);
+  }, [importStatus, isDemo, sessionUserId, invalidateLocation]);
 
   useEffect(() => {
     if (isDemo || overviewLoading || importing || hasData) return;
@@ -383,12 +385,12 @@ function AppContent() {
             {navExpanded ? 'Locations' : 'L'}
           </Link>
 
-          {TABS.map((tab) => (
+          {NAV.map((tab) => (
             <NavTabButton
               key={tab.id}
               tab={tab}
-              active={!exploring && activeTab === tab.id}
-              onSelect={() => selectTab(tab.id)}
+              active={navActive(tab.id)}
+              onSelect={() => selectNav(tab.id)}
               expanded={navExpanded}
             />
           ))}
@@ -463,18 +465,6 @@ function AppContent() {
                 <RailLabel show={navExpanded}>Settings</RailLabel>
               </Button>
             )}
-            {routeProgress && routeProgress.percent < 100 && (
-              <div
-                className={cn(
-                  'flex items-center text-xs text-text-muted',
-                  navExpanded ? 'h-11 gap-2 px-3' : 'h-11 w-11 justify-center',
-                )}
-                title={`Routes cached: ${routeProgress.percent}%`}
-              >
-                <Loader2 size={16} className="animate-spin text-accent" />
-                <RailLabel show={navExpanded}>Routes {routeProgress.percent}%</RailLabel>
-              </div>
-            )}
             {signOutButton}
           </div>
         </motion.aside>
@@ -521,13 +511,21 @@ function AppContent() {
                 </div>
               ) : (
                 <div key="empty" className="ui-enter h-full">
-                  <EmptyDataState isDemo={isDemo} onOpenSettings={() => selectTab('settings')} />
+                  <GetStarted isDemo={isDemo} />
                 </div>
               )
             ) : (
-              <div key={activeTab} className="ui-enter h-full overflow-hidden">
+              <div key={activeTab} className="ui-enter relative h-full overflow-hidden">
+                {onMapTab && (
+                  <MapModeSwitch
+                    mode={mapMode}
+                    onChange={(m) => void navigate(mapModePath(m))}
+                    className="absolute top-3 left-1/2 z-[1100] -translate-x-1/2 lg:left-[calc(50%+12rem)]"
+                  />
+                )}
                 {activeTab === 'hotspots' && <HotspotsView />}
                 {activeTab === 'day' && <DayView initialDate={dayViewDate} />}
+                {activeTab === 'routes' && <RoutesView />}
                 {activeTab === 'trips' && <DayTripsView onSelectDate={handleSelectDate} />}
                 {activeTab === 'insights' && <InsightsView />}
               </div>
@@ -538,12 +536,12 @@ function AppContent() {
             className="absolute inset-x-0 bottom-0 z-[1200] flex items-stretch gap-0.5 border-t border-border bg-surface/95 px-1 pt-1 backdrop-blur-sm safe-pb lg:hidden"
             aria-label="Main"
           >
-            {TABS.map((tab) => (
+            {NAV.map((tab) => (
               <NavTabButton
                 key={tab.id}
                 tab={tab}
-                active={!exploring && activeTab === tab.id}
-                onSelect={() => selectTab(tab.id)}
+                active={navActive(tab.id)}
+                onSelect={() => selectNav(tab.id)}
                 compact
               />
             ))}
@@ -554,8 +552,8 @@ function AppContent() {
                 aria-label="More options"
                 aria-expanded={moreOpen}
                 onClick={() => setMoreOpen((v) => !v)}
-                className={`flex h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[10px] transition-colors duration-300 ease-ui ${
-                  moreOpen || activeTab === 'settings' || exploring
+                className={`flex h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[11px] transition-colors duration-300 ease-ui ${
+                  moreOpen || activeTab === 'settings' || (exploring && !navActive('places'))
                     ? 'bg-accent/20 text-accent'
                     : 'text-text-muted hover:bg-bg/50 hover:text-text'
                 }`}
@@ -563,8 +561,10 @@ function AppContent() {
                 <MoreHorizontal size={18} />
                 <span>More</span>
               </button>
-              {moreOpen && (
-                <div className="absolute bottom-full right-0 mb-2 flex min-w-[10rem] flex-col gap-1 rounded-lg border border-border bg-surface p-2 shadow-lg ui-enter">
+              <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+                <SheetContent side="bottom" title="More" className="safe-pb">
+                  <h2 className="mb-2 text-sm font-semibold text-text">More</h2>
+                  <div className="flex flex-col gap-1">
                   <div className="flex items-center justify-between gap-2 px-1">
                     <span className="text-xs text-text-muted">Theme</span>
                     <ThemeToggle className="h-11 w-11" />
@@ -581,6 +581,14 @@ function AppContent() {
                   <div className="max-h-48 overflow-y-auto">
                     <ExploreMenu compact />
                   </div>
+                  {isStaff && (
+                    <Button asChild variant="ghost" className="h-11 justify-start" title="Open Admin panel">
+                      <Link to="/admin" onClick={() => setMoreOpen(false)}>
+                        <Shield size={16} />
+                        Admin
+                      </Link>
+                    </Button>
+                  )}
                   {!isDemo && (
                     <Button
                       type="button"
@@ -593,15 +601,6 @@ function AppContent() {
                       <Settings size={16} />
                       Settings
                     </Button>
-                  )}
-                  {routeProgress && routeProgress.percent < 100 && (
-                    <div
-                      className="flex h-11 items-center gap-2 px-3 text-xs text-text-muted"
-                      title={`Routes cached: ${routeProgress.percent}%`}
-                    >
-                      <Loader2 size={14} className="animate-spin text-accent" />
-                      Routes {routeProgress.percent}%
-                    </div>
                   )}
                   <Button
                     type="button"
@@ -621,7 +620,8 @@ function AppContent() {
                     Sign out
                   </Button>
                 </div>
-              )}
+                </SheetContent>
+              </Sheet>
             </div>
           </nav>
         </div>
@@ -638,6 +638,7 @@ function AuthedShell() {
         <Route path="/" element={<Navigate to="/hotspots" replace />} />
         <Route path="/hotspots" element={<AppContent />} />
         <Route path="/day/:date?" element={<AppContent />} />
+        <Route path="/routes" element={<AppContent />} />
         <Route path="/trips" element={<AppContent />} />
         <Route path="/trips/new" element={<AppContent />} />
         <Route path="/trips/:start/:end" element={<AppContent />} />

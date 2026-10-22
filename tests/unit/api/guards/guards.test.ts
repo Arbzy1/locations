@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isStaffRole, tenantForUser } from "@locations/db";
-import { blockDemo } from "@locations/api/guards";
+import { blockDemo, isDemoBlockedAuthPath } from "@locations/api/guards";
 
 describe("tenantForUser", () => {
   it("maps demo role to the demo tenant", () => {
@@ -51,5 +51,32 @@ describe("blockDemo", () => {
       }),
     ).toBeNull();
     expect(blockDemo(null)).toBeNull();
+  });
+});
+
+describe("isDemoBlockedAuthPath", () => {
+  it("covers Better Auth account mutations", () => {
+    for (const path of [
+      "/api/auth/change-password",
+      "/api/auth/change-email",
+      "/api/auth/update-user",
+      "/api/auth/delete-user",
+      "/api/auth/change-password/",
+      "/api/auth/revoke-session",
+      "/api/auth/revoke-other-sessions",
+    ]) {
+      expect(isDemoBlockedAuthPath("POST", path)).toBe(true);
+    }
+  });
+
+  it("hides the shared session list", () => {
+    expect(isDemoBlockedAuthPath("GET", "/api/auth/list-sessions")).toBe(true);
+  });
+
+  it("leaves sign-in, sign-out, and the current session alone", () => {
+    expect(isDemoBlockedAuthPath("POST", "/api/auth/sign-in/email")).toBe(false);
+    expect(isDemoBlockedAuthPath("POST", "/api/auth/sign-out")).toBe(false);
+    expect(isDemoBlockedAuthPath("GET", "/api/auth/get-session")).toBe(false);
+    expect(isDemoBlockedAuthPath("GET", "/api/auth/change-password")).toBe(false);
   });
 });

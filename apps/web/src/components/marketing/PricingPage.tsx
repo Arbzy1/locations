@@ -18,34 +18,32 @@ export default function PricingPage() {
   return (
     <MarketingLayout title="Pricing">
       <p>
-        Locations is a hosted Timeline explorer. Checkout runs on the server. The browser never sends a
-        Stripe price id or customer id.
+        Locations turns your Google Timeline export into maps, days, trips and insights. One plan,
+        paid monthly or yearly.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <Card>
           <CardTitle>Monthly</CardTitle>
           <p className="mt-2 text-sm text-text-muted">
-            Billed each month through Stripe Checkout. Pause or cancel from Settings (the Stripe customer
-            portal).
+            Pay each month. Pause or cancel any time from Settings.
           </p>
         </Card>
         <Card>
           <CardTitle>Yearly</CardTitle>
           <p className="mt-2 text-sm text-text-muted">
-            Same import access, billed once a year. Invoices stay in the Stripe portal.
+            The same plan, paid once a year. Receipts are in Settings.
           </p>
         </Card>
       </div>
       {billed ? (
         <p>
-          When billing is enabled, Timeline import needs an active or trial subscription. Demo and staff
-          accounts skip that gate. Failed payment is a read-only grace, then import turns off. Timeline
-          rows are not deleted on the first failed charge.
+          You need a plan (or a trial) to import. If a payment fails you can still look at everything
+          for a while; only new imports pause. Your history is never deleted because of a missed
+          payment.
         </p>
       ) : (
         <p>
-          This deployment does not have Stripe configured. Self-host and local dev can import without a
-          subscription.
+          Payments are not switched on here, so importing is free on this site.
         </p>
       )}
       <div className="flex flex-wrap gap-2">

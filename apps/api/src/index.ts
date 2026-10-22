@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { stream } from "hono/streaming";
 import {
@@ -7,6 +7,7 @@ import {
   isEntitled,
   isStaffRole,
   quotaForEntitled,
+  countTimelineRecords,
   type TenantId,
   type PlaceColorToken,
 } from "@locations/db";
@@ -14,7 +15,7 @@ import { APP_VERSION } from "./version";
 import { googleAuthEnabled, type Env, type ImportQueueMessage } from "./env";
 import { createAuth } from "./auth";
 import { corsOriginFor } from "./cors";
-import { blockDemo } from "./guards";
+import { blockDemo, isDemoBlockedAuthPath } from "./guards";
 import { clientIp, rateLimit } from "./rate-limit";
 import { applySecurityHeaders, isProductionHttps } from "./security-headers";
 import { registerAdminRoutes } from "./admin";
@@ -24,6 +25,7 @@ import { resolveOpsFlags } from "./ops-flags";
 import {
   cspSourcesForHosts,
   extraCspHostsFromEnv,
+  mapStyleUrls,
   parseCustomTileHosts,
   sanitizeBookmarks,
   validateTileTemplate,
@@ -43,7 +45,10 @@ import {
   ensureDataSource,
   getActiveImportJob,
   getAnalytics,
-  getDay,
+  loadDayRows,
+  buildDay,
+  getCacheDb,
+  closeDb,
   getDays,
   getDb,
   getHeatmap,
@@ -75,6 +80,15 @@ import {
   listClusterVisits,
   getCorridorDetail,
   getTripRange,
+  getRouteLines,
+  getHotspotDays,
+  getExportRows,
+  deletePlaceData,
+  getRangeInsights,
+  getOnThisDay,
+  saveTimelineOverride,
+  applyRetention,
+  RETENTION_YEAR_OPTIONS,
   listNamedTrips,
   upsertNamedTrip,
   deleteNamedTrip,
@@ -91,15 +105,49 @@ import {
 import { billingEmailKind, sendProductEmail } from "./email";
 import { parsePlaceColor, sanitizePlaceTags } from "./place-labels";
 import { runMonthlyRecaps } from "./monthly-recap";
+import { runRetention } from "./retention";
 import { runExportPackJob } from "./export-pack-job";
 import { publicExportJob } from "./export-pack";
+import {
+  EXPORT_FORMATS,
+  blurHome,
+  guessHomePlace,
+  toGeoJson,
+  toGpx,
+  toVisitsCsv,
+  type ExportFormat,
+} from "./exports";
 
 type Variables = {
   user: { id: string; email: string; name: string; role: string } | null;
   tenant: TenantId;
+  /** Neon pools opened by this request, closed once the response is sent. */
+  pools: { end: () => Promise<void> }[];
 };
 
-export const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+type AppEnv = { Bindings: Env; Variables: Variables };
+
+export const app = new Hono<AppEnv>();
+
+/** Pool-backed DB for this request; the pool is closed after the response. */
+function requestDb(c: Context<AppEnv>) {
+  const db = getDb(c.env);
+  const client = (db as { $client?: { end?: () => Promise<void> } }).$client;
+  if (client?.end) c.get("pools")?.push(client as { end: () => Promise<void> });
+  return db;
+}
+
+app.use("/api/*", async (c, next) => {
+  const pools: Variables["pools"] = [];
+  c.set("pools", pools);
+  try {
+    await next();
+  } finally {
+    if (pools.length) {
+      c.executionCtx.waitUntil(Promise.allSettled(pools.map((p) => p.end())));
+    }
+  }
+});
 
 app.use("*", async (c, next) => {
   await next();
@@ -155,6 +203,12 @@ app.all("/api/auth/*", async (c) => {
   }
   const flags = await resolveOpsFlags(c.env);
   const auth = createAuth(c.env, { disableSignUp: flags.signupDisabled });
+  if (isDemoBlockedAuthPath(c.req.method, c.req.path)) {
+    const current = await auth.api.getSession({ headers: c.req.raw.headers });
+    if ((current?.user as { role?: string } | undefined)?.role === "demo") {
+      return c.json({ error: "The shared demo account cannot change account settings" }, 403);
+    }
+  }
   const res = await auth.handler(c.req.raw);
   if (res.ok && c.req.method === "POST" && c.req.path.endsWith("/change-password")) {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
@@ -305,8 +359,8 @@ app.get("/api/config", async (c) => {
       c.env.MAP_TILE_LIGHT_URL ||
       "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     mapAttr: c.env.MAP_TILE_ATTR || "&copy; OSM &copy; CARTO",
-    mapStyleDark: c.env.MAP_STYLE_DARK_URL || null,
-    mapStyleLight: c.env.MAP_STYLE_LIGHT_URL || null,
+    mapStyleDark: mapStyleUrls(c.env).dark,
+    mapStyleLight: mapStyleUrls(c.env).light,
     customTiles: customTileHosts.length > 0,
     customTileHosts,
     signupDisabled: flags.signupDisabled,
@@ -323,7 +377,7 @@ app.get("/api/config", async (c) => {
 });
 
 app.get("/api/me", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const user = c.get("user");
   const [sub, settings] = await withTenant(db, tenant, async (tx) => [
@@ -340,27 +394,41 @@ app.get("/api/me", async (c) => {
       status: sub?.status ?? "none",
       graceUntil: sub?.graceUntil ?? null,
     },
+    // Same plan quota the import routes enforce, so the UI can check size up front.
+    uploadLimitBytes: quotaForEntitled(Boolean(c.env.STRIPE_SECRET_KEY) ? entitled : true).maxUploadBytes,
     settings,
   });
 });
 
 app.get("/api/overview", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getOverview(tx, tenant)));
 });
 
 app.get("/api/days", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getDays(tx, tenant)));
 });
 
 app.get("/api/day/:date", async (c) => {
-  const db = getDb(c.env);
   const date = c.req.param("date");
   const tenant = c.get("tenant");
   const sourceIds = parseSourceIds(c.req.query("sources"));
+  // compare=1 also fetches the OSRM-predicted route for each journey.
+  const dayOpts = { compare: c.req.query("compare") === "1", signal: c.req.raw.signal };
+  // Tenant rows in a short transaction; routing and geocoding then run on the
+  // stateless cache connection so a slow day never holds a pooled transaction.
+  const loadRows = async () => {
+    const db = getDb(c.env);
+    try {
+      return await withTenant(db, tenant, (tx) => loadDayRows(tx, tenant, date, sourceIds));
+    } finally {
+      const client = (db as { $client?: { end?: () => Promise<void> } }).$client;
+      await client?.end?.().catch(() => undefined);
+    }
+  };
 
   if (c.req.query("stream") === "1") {
     c.header("Content-Type", "application/x-ndjson; charset=utf-8");
@@ -370,26 +438,37 @@ app.get("/api/day/:date", async (c) => {
         await out.write(`${JSON.stringify(payload)}\n`);
       };
       try {
-        const result = await withTenant(db, tenant, (tx) =>
-          getDay(tx, tenant, date, async (progress) => {
+        await write({ type: "progress", stage: "Loading day records", detail: date, percent: 2 });
+        const rows = await loadRows();
+        if (!rows) {
+          await write({ type: "error", error: "No data for this date" });
+          return;
+        }
+        const cacheDb = getCacheDb(c.env);
+        try {
+          const result = await buildDay(cacheDb, tenant, date, rows, async (progress) => {
             await write({ type: "progress", ...progress });
-          }, sourceIds),
-        );
-        if ("error" in result) {
-          await write({ type: "error", error: result.error });
-        } else {
+          }, dayOpts);
           await write({ type: "result", data: result });
+        } finally {
+          await closeDb(cacheDb);
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        await write({ type: "error", error: message });
+        // Never send query text or coordinates to the client; log the kind only.
+        console.error(JSON.stringify({ kind: "day_build", ok: false, error: err instanceof Error ? err.name : "unknown" }));
+        await write({ type: "error", error: "Building this day failed. Try again in a moment." });
       }
     });
   }
 
-  const result = await withTenant(db, tenant, (tx) => getDay(tx, tenant, date, undefined, sourceIds));
-  if ("error" in result) return c.json(result, 404);
-  return c.json(result);
+  const rows = await loadRows();
+  if (!rows) return c.json({ error: "No data for this date" }, 404);
+  const cacheDb = getCacheDb(c.env);
+  try {
+    return c.json(await buildDay(cacheDb, tenant, date, rows, undefined, dayOpts));
+  } finally {
+    await closeDb(cacheDb);
+  }
 });
 
 app.delete("/api/days", async (c) => {
@@ -403,7 +482,7 @@ app.delete("/api/days", async (c) => {
     return c.json({ error: "from and to must be YYYY-MM-DD with from <= to" }, 400);
   }
 
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const result = await withTenant(db, tenant, (tx) =>
     deleteTenantDateRange(tx, tenant, { from, to, sourceId }),
@@ -413,7 +492,7 @@ app.delete("/api/days", async (c) => {
 });
 
 app.get("/api/heatmap", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const sources = c.req.query("sources");
   return c.json(
@@ -428,55 +507,55 @@ app.get("/api/heatmap", async (c) => {
 });
 
 app.get("/api/analytics/monthly", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "monthly")));
 });
 
 app.get("/api/analytics/yearly", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "yearly")));
 });
 
 app.get("/api/analytics/day-trips", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "day-trips")));
 });
 
 app.get("/api/analytics/corridors", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "corridors")));
 });
 
 app.get("/api/analytics/facts", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "facts")));
 });
 
 app.get("/api/analytics/multi-day", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "multi-day")));
 });
 
 app.get("/api/analytics/home-work", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "home-work")));
 });
 
 app.get("/api/analytics/areas", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "areas")));
 });
 
 app.get("/api/analytics/year-in-review", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const yearRaw = c.req.query("year");
   const year = yearRaw ? Number(yearRaw) : undefined;
@@ -511,25 +590,25 @@ app.get("/api/analytics/year-in-review", async (c) => {
 });
 
 app.get("/api/analytics/flights", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "flights")));
 });
 
 app.get("/api/analytics/train-hops", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "train-hops")));
 });
 
 app.get("/api/analytics/low-movement", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, "low-movement")));
 });
 
 app.get("/api/route-progress", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getRouteProgress(tx, tenant)));
 });
@@ -537,7 +616,7 @@ app.get("/api/route-progress", async (c) => {
 app.post("/api/routes/rewarm", async (c) => {
   const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => rewarmRoutes(tx, tenant)));
 });
@@ -547,7 +626,7 @@ app.get("/api/place/:placeId", async (c) => {
   const ip = clientIp(c.req.raw.headers);
   const limited = await rejectIfLimited(c, `place:${user.id}:${ip}`, 30, 60_000);
   if (limited) return limited;
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const lat = Number(c.req.query("lat") ?? 0);
   const lon = Number(c.req.query("lon") ?? 0);
   if (
@@ -565,7 +644,7 @@ app.get("/api/place/:placeId", async (c) => {
 });
 
 app.get("/api/sources", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => listSources(tx, tenant)));
 });
@@ -586,7 +665,7 @@ app.patch("/api/sources/:id", async (c) => {
     color = parsed.value;
   }
 
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const result = await withTenant(db, tenant, (tx) =>
     patchSource(tx, tenant, c.req.param("id"), {
@@ -605,7 +684,7 @@ app.delete("/api/sources/:id", async (c) => {
   const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
 
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const result = await withTenant(db, tenant, (tx) => removeSource(tx, tenant, c.req.param("id")));
   if ("error" in result) return c.json(result, 404);
@@ -613,7 +692,7 @@ app.delete("/api/sources/:id", async (c) => {
 });
 
 app.get("/api/import/status", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getImportStatus(tx, tenant)));
 });
@@ -635,7 +714,7 @@ app.post("/api/import/preview", async (c) => {
     return c.json({ error: "Too many import requests. Try again later." }, 429);
   }
 
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const sessionUser = c.get("user")!;
   const verified = Boolean(
     (await createAuth(c.env).api.getSession({ headers: c.req.raw.headers }))?.user
@@ -720,7 +799,7 @@ app.post("/api/import", async (c) => {
     return c.json({ error: "Too many import requests. Try again later." }, 429);
   }
 
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const sessionUser = c.get("user")!;
   const verified = Boolean(
     (await createAuth(c.env).api.getSession({ headers: c.req.raw.headers }))?.user
@@ -833,13 +912,13 @@ app.get("/api/search", async (c) => {
   const limited = await rejectIfLimited(c, `search:${user.id}:${ip}`, 60, 60_000);
   if (limited) return limited;
   const q = c.req.query("q") ?? "";
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => searchTenant(tx, tenant, q)));
 });
 
 app.get("/api/clusters", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const limit = Number(c.req.query("limit") ?? 50);
   return c.json(
@@ -855,7 +934,7 @@ app.get("/api/clusters", async (c) => {
 });
 
 app.get("/api/clusters/:key/visits", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const key = decodeURIComponent(c.req.param("key"));
   return c.json(
@@ -871,7 +950,7 @@ app.get("/api/clusters/:key/visits", async (c) => {
 });
 
 app.get("/api/clusters/:key", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const key = decodeURIComponent(c.req.param("key"));
   const row = await withTenant(db, tenant, (tx) => getCluster(tx, tenant, key));
@@ -880,7 +959,7 @@ app.get("/api/clusters/:key", async (c) => {
 });
 
 app.get("/api/corridors/:a/:b", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const a = decodeURIComponent(c.req.param("a"));
   const b = decodeURIComponent(c.req.param("b"));
@@ -889,8 +968,119 @@ app.get("/api/corridors/:a/:b", async (c) => {
   return c.json(row);
 });
 
+app.get("/api/routes", async (c) => {
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    getRouteLines(tx, tenant, {
+      from: (c.req.query("from") ?? "").trim(),
+      to: (c.req.query("to") ?? "").trim(),
+      sourceIds: parseSourceIds(c.req.query("sources")),
+    }),
+  );
+  if (isErrorResult(result)) return c.json(result, 400);
+  return c.json(result);
+});
+
+app.delete("/api/places/:key/data", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    deletePlaceData(tx, tenant, decodeURIComponent(c.req.param("key"))),
+  );
+  if ("error" in result) return c.json({ error: result.error }, result.status);
+  return c.json(result);
+});
+
+app.patch("/api/overrides", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body) return c.json({ error: "JSON body required" }, 400);
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  // Pick fields explicitly: never spread the request body into a write.
+  const result = await withTenant(db, tenant, (tx) =>
+    saveTimelineOverride(tx, tenant, { kind: body.kind, start: body.start, note: body.note, mode: body.mode }),
+  );
+  if ("error" in result) return c.json({ error: result.error }, result.status);
+  return c.json(result);
+});
+
+app.get("/api/on-this-day", async (c) => {
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  // The client sends its local date so "today" matches the user's calendar.
+  const date = (c.req.query("date") ?? new Date().toISOString().slice(0, 10)).trim();
+  const result = await withTenant(db, tenant, (tx) => getOnThisDay(tx, tenant, { date }));
+  if (isErrorResult(result)) return c.json(result, 400);
+  return c.json(result);
+});
+
+app.get("/api/insights/range", async (c) => {
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    getRangeInsights(tx, tenant, {
+      from: (c.req.query("from") ?? "").trim(),
+      to: (c.req.query("to") ?? "").trim(),
+    }),
+  );
+  if (isErrorResult(result)) return c.json(result, 400);
+  return c.json(result);
+});
+
+app.get("/api/export/:format", async (c) => {
+  const format = c.req.param("format") as ExportFormat;
+  if (!EXPORT_FORMATS.includes(format)) return c.json({ error: "Format must be gpx, geojson or csv" }, 400);
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    getExportRows(tx, tenant, {
+      from: c.req.query("from"),
+      to: c.req.query("to"),
+      journeys: format !== "csv",
+    }),
+  );
+  if (isErrorResult(result)) return c.json(result, 400);
+  // Home is guessed from all of the range's stays, before anything is blurred.
+  const data =
+    c.req.query("blur_home") === "1" ? blurHome(result, guessHomePlace(result.visits)) : result;
+  const span = [c.req.query("from"), c.req.query("to")].filter(Boolean).join("_to_") || "all";
+  const name = `locations-${span}`;
+  if (format === "gpx") {
+    c.header("Content-Type", "application/gpx+xml; charset=utf-8");
+    c.header("Content-Disposition", `attachment; filename="${name}.gpx"`);
+    return c.body(toGpx(data));
+  }
+  if (format === "geojson") {
+    c.header("Content-Type", "application/geo+json; charset=utf-8");
+    c.header("Content-Disposition", `attachment; filename="${name}.geojson"`);
+    return c.body(JSON.stringify(toGeoJson(data)));
+  }
+  c.header("Content-Type", "text/csv; charset=utf-8");
+  c.header("Content-Disposition", `attachment; filename="${name}-stays.csv"`);
+  return c.body(toVisitsCsv(data.visits));
+});
+
+app.get("/api/hotspots/days", async (c) => {
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    getHotspotDays(tx, tenant, {
+      lat: Number(c.req.query("lat")),
+      lon: Number(c.req.query("lon")),
+      radiusM: c.req.query("radius_m") ? Number(c.req.query("radius_m")) : undefined,
+    }),
+  );
+  if (isErrorResult(result)) return c.json(result, 400);
+  return c.json(result);
+});
+
 app.get("/api/trip-range/:start/:end", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const result = await withTenant(db, tenant, (tx) =>
     getTripRange(tx, tenant, c.req.param("start"), c.req.param("end")),
@@ -902,7 +1092,7 @@ app.get("/api/trip-range/:start/:end", async (c) => {
 });
 
 app.get("/api/trips", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => listNamedTrips(tx, tenant)));
 });
@@ -916,7 +1106,7 @@ app.post("/api/trips", async (c) => {
     end?: string;
     dates?: string[];
   } | null;
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const result = await withTenant(db, tenant, (tx) =>
     upsertNamedTrip(tx, tenant, {
@@ -941,7 +1131,7 @@ app.patch("/api/trips/:id", async (c) => {
     end?: string;
     dates?: string[];
   } | null;
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const result = await withTenant(db, tenant, (tx) =>
     upsertNamedTrip(tx, tenant, {
@@ -961,7 +1151,7 @@ app.patch("/api/trips/:id", async (c) => {
 app.delete("/api/trips/:id", async (c) => {
   const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const result = await withTenant(db, tenant, (tx) => deleteNamedTrip(tx, tenant, c.req.param("id")));
   if (isErrorResult(result)) return c.json(result, 404);
@@ -969,7 +1159,7 @@ app.delete("/api/trips/:id", async (c) => {
 });
 
 app.get("/api/chapters", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => listChapters(tx, tenant)));
 });
@@ -982,7 +1172,7 @@ app.post("/api/chapters", async (c) => {
     start?: string;
     end?: string;
   } | null;
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const result = await withTenant(db, tenant, (tx) =>
     upsertChapter(tx, tenant, {
@@ -1005,7 +1195,7 @@ app.patch("/api/chapters/:id", async (c) => {
     start?: string;
     end?: string;
   } | null;
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const result = await withTenant(db, tenant, (tx) =>
     upsertChapter(tx, tenant, {
@@ -1024,7 +1214,7 @@ app.patch("/api/chapters/:id", async (c) => {
 app.delete("/api/chapters/:id", async (c) => {
   const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const result = await withTenant(db, tenant, (tx) => deleteChapter(tx, tenant, c.req.param("id")));
   if (isErrorResult(result)) return c.json(result, 404);
@@ -1032,7 +1222,7 @@ app.delete("/api/chapters/:id", async (c) => {
 });
 
 app.get("/api/import/jobs", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => listImportJobs(tx, tenant)));
 });
@@ -1056,7 +1246,7 @@ for (const key of [
   "badges",
 ] as const) {
   app.get(`/api/analytics/${key}`, async (c) => {
-    const db = getDb(c.env);
+    const db = requestDb(c);
     const tenant = c.get("tenant");
     return c.json(await withTenant(db, tenant, (tx) => getAnalytics(tx, tenant, key)));
   });
@@ -1072,7 +1262,16 @@ app.patch("/api/account/settings", async (c) => {
     mapBookmarks?: unknown;
     mapTileDarkUrl?: string | null;
     mapTileLightUrl?: string | null;
+    retentionYears?: number | null;
   } | null;
+  const retentionYears = body?.retentionYears;
+  if (
+    retentionYears !== undefined &&
+    retentionYears !== null &&
+    !(RETENTION_YEAR_OPTIONS as readonly number[]).includes(retentionYears)
+  ) {
+    return c.json({ error: `Keep history for ${RETENTION_YEAR_OPTIONS.join(", ")} years, or forever` }, 400);
+  }
   const allowedHosts = parseCustomTileHosts(c.env.MAP_CUSTOM_TILE_HOSTS);
   if (body?.mapTileDarkUrl != null && body.mapTileDarkUrl !== "") {
     const check = validateTileTemplate(body.mapTileDarkUrl, allowedHosts);
@@ -1087,7 +1286,7 @@ app.patch("/api/account/settings", async (c) => {
     mapBookmarks = sanitizeBookmarks(body.mapBookmarks);
     if (!Array.isArray(mapBookmarks)) return c.json({ error: mapBookmarks.error }, 400);
   }
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const settings = await withTenant(db, tenant, (tx) =>
     upsertUserSettings(tx, tenant, {
@@ -1097,13 +1296,27 @@ app.patch("/api/account/settings", async (c) => {
       mapBookmarks: Array.isArray(mapBookmarks) ? mapBookmarks : undefined,
       mapTileDarkUrl: body?.mapTileDarkUrl,
       mapTileLightUrl: body?.mapTileLightUrl,
+      retentionYears,
     }),
   );
+  if (typeof retentionYears === "number") {
+    // Apply the new limit now rather than waiting for the monthly run.
+    c.executionCtx.waitUntil(
+      (async () => {
+        const jobDb = getDb(c.env);
+        try {
+          await withTenant(jobDb, tenant, (tx) => applyRetention(tx, tenant, retentionYears));
+        } finally {
+          await (jobDb as { $client?: { end?: () => Promise<void> } }).$client?.end?.();
+        }
+      })(),
+    );
+  }
   return c.json(settings);
 });
 
 app.get("/api/account/export", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const data = await withTenant(db, tenant, (tx) => getAccountExportPayload(tx, tenant));
   const stamp = new Date().toISOString().slice(0, 10);
@@ -1113,6 +1326,10 @@ app.get("/api/account/export", async (c) => {
 
 app.post("/api/account/export-pack", async (c) => {
   const user = c.get("user")!;
+  // The demo tenant is shared sample data; a pack job per visitor is wasted work.
+  if (user.role === "demo") {
+    return c.json({ error: "The demo account cannot build export packs" }, 403);
+  }
   const tenant = c.get("tenant");
   const ip = clientIp(c.req.raw.headers);
   const limited = rateLimit({ key: `export-pack:${tenant}:${ip}`, limit: 3, windowMs: 10 * 60_000 });
@@ -1120,7 +1337,7 @@ app.post("/api/account/export-pack", async (c) => {
     c.header("Retry-After", String(limited.retryAfterSec));
     return c.json({ error: "Too many export requests" }, 429);
   }
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const active = await withTenant(db, tenant, (tx) => getActiveExportJob(tx, tenant));
   if (active) {
     return c.json({ error: "An export is already running", job: publicExportJob(active) }, 409);
@@ -1135,7 +1352,7 @@ app.post("/api/account/export-pack", async (c) => {
 });
 
 app.get("/api/account/export-pack/:jobId/file", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const jobId = c.req.param("jobId");
   const job = await withTenant(db, tenant, (tx) => getExportJob(tx, jobId, tenant));
@@ -1166,7 +1383,7 @@ app.get("/api/account/export-pack/:jobId/file", async (c) => {
 });
 
 app.get("/api/account/export-pack/:jobId", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const jobId = c.req.param("jobId");
   const job = await withTenant(db, tenant, (tx) => getExportJob(tx, jobId, tenant));
@@ -1175,7 +1392,7 @@ app.get("/api/account/export-pack/:jobId", async (c) => {
 });
 
 app.get("/api/places/labels", async (c) => {
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const labels = await withTenant(db, tenant, (tx) => listPlaceLabels(tx, tenant));
   return c.json(labels);
@@ -1186,7 +1403,7 @@ app.post("/api/account/delete", async (c) => {
   if (blocked) return c.json(blocked, 403);
   const user = c.get("user")!;
   const tenant = c.get("tenant");
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const prefix = `uploads/${user.id}/`;
   await deleteR2Prefix(c.env.UPLOADS, prefix);
   await deleteR2Prefix(c.env.UPLOADS, `exports/${user.id}/`);
@@ -1239,7 +1456,7 @@ app.patch("/api/places/labels", async (c) => {
     if (!parsed.ok) return c.json({ error: "Invalid tags" }, 400);
     tags = parsed.value;
   }
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const tenant = c.get("tenant");
   const row = await withTenant(db, tenant, (tx) =>
     upsertPlaceLabel(tx, tenant, {
@@ -1268,7 +1485,7 @@ app.post("/api/billing/checkout", async (c) => {
   const priceId = priceIdForInterval(c.env, interval);
   if (!priceId) return c.json({ error: "Price is not configured" }, 503);
   const tenant = c.get("tenant");
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const existing = await withTenant(db, tenant, (tx) => getSubscription(tx, tenant));
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
@@ -1295,7 +1512,7 @@ app.post("/api/billing/portal", async (c) => {
   const stripe = stripeClient(c.env);
   if (!stripe) return c.json({ error: "Billing is not configured" }, 503);
   const tenant = c.get("tenant");
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const existing = await withTenant(db, tenant, (tx) => getSubscription(tx, tenant));
   if (!existing?.stripeCustomerId) return c.json({ error: "No billing account" }, 404);
   const portal = await stripe.billingPortal.sessions.create({
@@ -1318,7 +1535,7 @@ app.post("/api/billing/webhook", async (c) => {
   } catch {
     return c.json({ error: "Invalid signature" }, 400);
   }
-  const db = getDb(c.env);
+  const db = requestDb(c);
   const fresh = await recordStripeEvent(db, event.id, event.type);
   if (!fresh) return c.json({ received: true, duplicate: true });
 
@@ -1427,7 +1644,7 @@ async function runImportJob(env: Env, message: ImportQueueMessage): Promise<void
     } catch {
       throw new Error("Invalid JSON file");
     }
-    const parsedCount = Array.isArray(records) ? records.length : 1;
+    const parsedCount = countTimelineRecords(records);
     await withTenant(jobDb, tenant, (tx) =>
       updateImportJob(tx, jobId, { status: "processing", parsedCount }, tenant),
     );
@@ -1498,6 +1715,10 @@ export default {
       await runBrimSync(env, new Date(controller.scheduledTime).toISOString());
       return;
     }
-    await runMonthlyRecaps(env);
+    // Independent jobs: one failing must not skip the other.
+    const results = await Promise.allSettled([runRetention(env), runMonthlyRecaps(env)]);
+    for (const [i, r] of results.entries()) {
+      if (r.status === "rejected") console.error(JSON.stringify({ kind: i === 0 ? "retention" : "monthly_recap", ok: false }));
+    }
   },
 };

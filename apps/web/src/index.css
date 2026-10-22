@@ -18,6 +18,7 @@
   --color-fly: var(--fly);
   --color-visit: var(--visit);
   --color-admin: var(--admin);
+  --color-destructive: var(--destructive);
   --color-background: var(--bg);
   --color-foreground: var(--text);
   --color-primary: var(--accent);
@@ -56,6 +57,7 @@
   --fly: #79c0ff;
   --visit: #bc8cff;
   --admin: var(--visit);
+  --destructive: #f85149;
   --background: var(--bg);
   --foreground: var(--text);
   --primary: var(--accent);
@@ -85,6 +87,7 @@
   --fly: #0969da;
   --visit: #8250df;
   --admin: var(--visit);
+  --destructive: #cf222e;
   --background: var(--bg);
   --foreground: var(--text);
   --primary: var(--accent);

@@ -66,7 +66,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
     <nav className="flex flex-col gap-4">
       {ADMIN_NAV_GROUPS.map((group) => (
         <div key={group}>
-          <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wide text-text-muted">{group}</p>
+          <p className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted">{group}</p>
           <div className="flex flex-col gap-1">
             {ADMIN_NAV.filter((item) => item.group === group).map((item, index) => {
               const active =

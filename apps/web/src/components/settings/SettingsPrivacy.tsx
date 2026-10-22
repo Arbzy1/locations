@@ -3,6 +3,8 @@ import { Download, Loader2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card, CardTitle } from "../ui/card";
 import { Dialog, DialogContent } from "../ui/dialog";
+import ExportFilesCard from "./ExportFilesCard";
+import RetentionCard from "./RetentionCard";
 
 type Props = {
   onMessage: (msg: string) => void;
@@ -145,8 +147,12 @@ export default function SettingsPrivacy({ onMessage, onError }: Props) {
         </div>
       </Card>
 
-      <Card className="border-red-500/30">
-        <CardTitle className="text-base text-red-400">Danger zone</CardTitle>
+      <ExportFilesCard />
+
+      <RetentionCard onMessage={onMessage} onError={onError} />
+
+      <Card className="border-destructive/30">
+        <CardTitle className="text-base text-destructive">Danger zone</CardTitle>
         <p className="mt-1 mb-4 text-sm text-text-muted">
           Delete your account and all Timeline data. To remove one Google export only, use Timeline
           data.

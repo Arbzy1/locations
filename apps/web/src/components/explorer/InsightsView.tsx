@@ -26,6 +26,8 @@ import { formatFunFact, isGridCluster, multiDayTripLabel } from '../../lib/explo
 import { corridorPath, placePath, tripPath } from '../../lib/nav/paths';
 import { downloadElementPng, downloadTextFile, insightsCsv } from '../../lib/explorer/insights-export';
 import { InsightsStory } from './InsightsStory';
+import RangeInsightsCard from './RangeInsightsCard';
+import OnThisDayCard from './OnThisDayCard';
 import { isStreaks } from '../../lib/explorer/year-review';
 import { Link } from 'react-router-dom';
 import type { ActivityGuessCount, BadgeSummary, FlightSummary } from '../../types';
@@ -262,6 +264,9 @@ export default function InsightsView() {
           </div>
         </div>
 
+        <RangeInsightsCard />
+        <OnThisDayCard />
+
         {/* Overview cards */}
         {overview && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -342,7 +347,7 @@ export default function InsightsView() {
               <BarChart data={monthly}>
                 <XAxis
                   dataKey="month"
-                  tick={{ fill: chart.muted, fontSize: 10 }}
+                  tick={{ fill: chart.muted, fontSize: 11 }}
                   tickFormatter={(v: string) => {
                     const [y, m] = v.split('-');
                     return m === '01' ? y : '';

@@ -73,6 +73,7 @@ describe("policy scanners", { timeout: 20_000 }, () => {
         trimmed.includes("visitPopupHtml(") ||
         trimmed.includes("activityPopupHtml(") ||
         trimmed.includes("connectorPopupHtml(") ||
+        trimmed.includes("routeLinePopupHtml(") ||
         trimmed.includes("lookaroundLinksHtml(") ||
         trimmed.includes("el.innerHTML = html") ||
         trimmed.includes(".setHTML(html)") ||

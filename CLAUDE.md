@@ -252,7 +252,7 @@ See [docs/security/README.md](docs/security/README.md).
 
 ### Row Level Security
 
-Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_stats`, `analytics_cache`, `data_sources`, `import_jobs`, `export_jobs`, `subscriptions`, `user_settings`, `place_labels`, `named_trips`, `life_chapters`, and the journey cost `brim_vehicles`, `brim_tariffs`, `brim_calibrations`, `brim_fill_ups`, `brim_journeys`, `brim_settings`, `brim_saved_places`).
+Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_stats`, `analytics_cache`, `data_sources`, `import_jobs`, `export_jobs`, `subscriptions`, `user_settings`, `place_labels`, `named_trips`, `life_chapters`, `timeline_overrides`, and the journey cost `brim_vehicles`, `brim_tariffs`, `brim_calibrations`, `brim_fill_ups`, `brim_journeys`, `brim_settings`, `brim_saved_places`).
 
 - Worker queries go through `withTenant(db, tenant, fn)` which `BEGIN`s, `set_config('app.tenant', tenant, true)`, runs work, then `COMMIT`.
 - `locations_app` has **NOBYPASSRLS**. Never point Wrangler `DATABASE_URL` at a BYPASSRLS role.

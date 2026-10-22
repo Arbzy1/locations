@@ -8,7 +8,7 @@ Product summary: [product/journey-cost.md](../product/journey-cost.md). This fea
 |------|----------|
 | `packages/brim` (`@locations/brim`) | Pure TypeScript. `./engine` (cost calculator), `./routing` (Google, OSRM, fixture providers, route cache keys), `./shared` (types, VCA / Fuel Finder / carbon / DVLA normalisers, zone geometry, tariffs, fixtures). MIT, see `packages/brim/LICENSE`. |
 | `packages/db/src/brim-schema.ts` | Drizzle tables, exported through `@locations/db`. |
-| `packages/db/drizzle/0014_brim.sql`, `0015_brim_rls.sql` | Tables (with PostGIS) and the FORCE RLS / GRANT companion. |
+| `packages/db/drizzle/0020_brim.sql`, `0021_brim_rls.sql` | Tables (with PostGIS) and the FORCE RLS / GRANT companion. |
 | `apps/api/src/brim/` | Hono handlers, `routes.ts` (`registerBrimRoutes`), `db/repo.ts` (tenant-scoped data access), `sync.ts` (cron ingest). |
 | `apps/web/src/components/brim/` | `JourneyCostView` (tab shell), `EstimateView`, `GarageView`, `HistoryView`, `RouteMap`, pickers. |
 | `apps/web/src/lib/brim/` | API client, request composition, map geometry. |

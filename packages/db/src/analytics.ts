@@ -630,19 +630,25 @@ export type HomeWorkGuess = {
   work: { cluster: string; visits: number } | null;
 };
 
-function hourUtc(iso: string): number {
-  const h = new Date(iso).getUTCHours();
-  return Number.isNaN(h) ? 12 : h;
+/** Local hour of a timestamp (UTC when no timezone is set). */
+function localHour(iso: string, timeZone?: string | null): number {
+  if (Number.isNaN(Date.parse(iso))) return 12;
+  return utcWeekdayHour(iso, timeZone).hour;
 }
 
-export function inferHomeWork(store: Store): HomeWorkGuess {
+/** A stay that counts as a night: starts late, or starts in the evening and lasts 6+ hours. */
+function isNightVisit(v: { start: string; durationMinutes: number }, timeZone?: string | null): boolean {
+  const hour = localHour(v.start, timeZone);
+  return hour >= 22 || hour < 6 || (hour >= 18 && v.durationMinutes >= 360);
+}
+
+export function inferHomeWork(store: Store, timeZone?: string | null): HomeWorkGuess {
   const homeCounts = new Map<string, number>();
   const workCounts = new Map<string, number>();
   for (const v of store.visits) {
-    const hour = hourUtc(v.start);
-    const day = new Date(`${v.date}T00:00:00Z`).getUTCDay();
+    const { hour, weekday: day } = utcWeekdayHour(v.start, timeZone);
     const weekday = day >= 1 && day <= 5;
-    if (hour >= 22 || hour < 6) {
+    if (isNightVisit(v, timeZone)) {
       homeCounts.set(v.cluster, (homeCounts.get(v.cluster) ?? 0) + 1);
     }
     if (weekday && hour >= 9 && hour < 17) {
@@ -653,7 +659,16 @@ export function inferHomeWork(store: Store): HomeWorkGuess {
     const [cluster, visits] = [...m.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
     return cluster ? { cluster, visits } : null;
   };
-  return { home: top(homeCounts), work: top(workCounts) };
+  // Google's own Home / Work labels beat a guess from the hour of day.
+  const labelled = (kind: "home" | "work") => {
+    const counts = new Map<string, number>();
+    for (const v of store.visits) {
+      const type = (v.semanticType || "").toLowerCase();
+      if (type === kind || type === `inferred ${kind}`) counts.set(v.cluster, (counts.get(v.cluster) ?? 0) + 1);
+    }
+    return top(counts);
+  };
+  return { home: labelled("home") ?? top(homeCounts), work: labelled("work") ?? top(workCounts) };
 }
 
 export type AreaStat = { cluster: string; visits: number; lat: number; lon: number };
@@ -721,14 +736,13 @@ export function computeYearInReview(store: Store): YearInReview {
 
 export type AwayNight = { date: string; cluster: string };
 
-export function computeAwayNights(store: Store): AwayNight[] {
-  const home = inferHomeWork(store).home?.cluster;
+export function computeAwayNights(store: Store, timeZone?: string | null): AwayNight[] {
+  const home = inferHomeWork(store, timeZone).home?.cluster;
   if (!home) return [];
   const nights: AwayNight[] = [];
   const seen = new Set<string>();
   for (const v of store.visits) {
-    const hour = hourUtc(v.start);
-    if (hour < 22 && hour >= 6) continue;
+    if (!isNightVisit(v, timeZone)) continue;
     if (v.cluster === home) continue;
     const key = `${v.date}|${v.cluster}`;
     if (seen.has(key)) continue;
@@ -746,8 +760,8 @@ export type CommuteStats = {
   departHours: number[];
 } | null;
 
-export function computeCommute(store: Store): CommuteStats {
-  const hw = inferHomeWork(store);
+export function computeCommute(store: Store, timeZone?: string | null): CommuteStats {
+  const hw = inferHomeWork(store, timeZone);
   if (!hw.home || !hw.work || hw.home.cluster === hw.work.cluster) return null;
   const home = hw.home.cluster;
   const work = hw.work.cluster;
@@ -771,7 +785,7 @@ export function computeCommute(store: Store): CommuteStats {
       );
       const mode = act?.mode || "unknown";
       modes[mode] = (modes[mode] || 0) + 1;
-      departHours.push(hourUtc(from.end || from.start));
+      departHours.push(localHour(from.end || from.start, timeZone));
     }
   }
   return { home, work, count, modes, departHours };
@@ -805,11 +819,10 @@ export function computeFirsts(store: Store): Firsts {
 
 export type MovingYear = { year: number; cluster: string; nights: number };
 
-export function computeMovingHistory(store: Store): MovingYear[] {
+export function computeMovingHistory(store: Store, timeZone?: string | null): MovingYear[] {
   const byYear = new Map<number, Map<string, number>>();
   for (const v of store.visits) {
-    const hour = hourUtc(v.start);
-    if (hour < 22 && hour >= 6) continue;
+    if (!isNightVisit(v, timeZone)) continue;
     const year = Number(v.date.slice(0, 4));
     if (!Number.isFinite(year)) continue;
     const m = byYear.get(year) ?? new Map<string, number>();
@@ -1020,6 +1033,9 @@ export function detectLowMovementDays(store: Store): LowMovementDay[] {
   return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30);
 }
 
+/** Building an Intl formatter is slow; analytics asks for thousands of visits. */
+const WEEKDAY_HOUR_FORMATS = new Map<string, Intl.DateTimeFormat>();
+
 function utcWeekdayHour(iso: string, timeZone?: string | null): { weekday: number; hour: number } {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return { weekday: 0, hour: 0 };
@@ -1027,12 +1043,17 @@ function utcWeekdayHour(iso: string, timeZone?: string | null): { weekday: numbe
     return { weekday: date.getUTCDay(), hour: date.getUTCHours() };
   }
   try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      weekday: "short",
-      hour: "numeric",
-      hourCycle: "h23",
-    }).formatToParts(date);
+    let fmt = WEEKDAY_HOUR_FORMATS.get(timeZone);
+    if (!fmt) {
+      fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        weekday: "short",
+        hour: "numeric",
+        hourCycle: "h23",
+      });
+      WEEKDAY_HOUR_FORMATS.set(timeZone, fmt);
+    }
+    const parts = fmt.formatToParts(date);
     const wd = parts.find((p) => p.type === "weekday")?.value ?? "Sun";
     const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
     const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(wd);
@@ -1193,7 +1214,7 @@ export function computeAllAnalytics(store: Store, opts?: { timezone?: string | n
     corridors: computeCorridors(store),
     facts: computeFunFacts(store),
     "multi-day": multiDay,
-    "home-work": inferHomeWork(store),
+    "home-work": inferHomeWork(store, opts?.timezone),
     areas: computeAreas(store),
     "year-in-review": reviews,
     streaks: computeStreaks(store),
@@ -1201,11 +1222,11 @@ export function computeAllAnalytics(store: Store, opts?: { timezone?: string | n
     "lapsed-places": computeLapsedPlaces(store),
     "hour-of-week": computeHourOfWeek(store, opts?.timezone),
     personality: computePersonality(store),
-    "away-nights": computeAwayNights(store),
-    commute: computeCommute(store),
+    "away-nights": computeAwayNights(store, opts?.timezone),
+    commute: computeCommute(store, opts?.timezone),
     firsts: computeFirsts(store),
     "data-health": computeDataHealth(store),
-    moving: computeMovingHistory(store),
+    moving: computeMovingHistory(store, opts?.timezone),
     anomaly: computeAnomalies(store),
     flights: detectFlights(store),
     "train-hops": detectTrainHops(store),

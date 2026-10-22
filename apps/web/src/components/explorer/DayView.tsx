@@ -10,7 +10,8 @@ import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from '../s
 import { formatDate, formatMilesOrKm } from '../../utils/format';
 import { useUnits } from '../../lib/units';
 import { MODE_COLORS, MODE_LABELS } from '../../types';
-import type { Visit, Activity, Connector, MapFocusTarget } from '../../types';
+import type { Visit, Activity, Connector, MapFocusTarget, LineVariant } from '../../types';
+import { withLineVariant } from '../../lib/map/lineVariant';
 import {
   buildPlaybackSegments,
   playbackRange,
@@ -23,6 +24,7 @@ import { sunTimes } from '../../utils/sunTimes';
 import { isTypingTarget } from '../../lib/nav/command-query';
 import { sourceTokenVar } from '../../lib/explorer/hotspots';
 import { Button } from '../ui/button';
+import { ErrorState } from '../ui/states';
 import {
   ChevronDown,
   ChevronLeft,
@@ -30,6 +32,17 @@ import {
   Calendar,
   Loader2,
 } from 'lucide-react';
+
+const LINE_VARIANTS: { id: LineVariant; label: string; title: string }[] = [
+  { id: 'best', label: 'Best', title: 'GPS points snapped onto roads where possible' },
+  { id: 'recorded', label: 'Recorded', title: 'Only what your phone recorded: straight lines between GPS points' },
+  { id: 'predicted', label: 'Predicted', title: "OSRM's fastest route between each journey's start and end" },
+  { id: 'points', label: 'Points', title: 'Only the GPS points your phone recorded, with no lines between them' },
+];
+
+function formatMeters(m: number): string {
+  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
+}
 
 function focusTargetForVisit(v: Visit): MapFocusTarget {
   return { lat: v.lat, lon: v.lon, zoom: 16 };
@@ -63,6 +76,21 @@ interface Props {
   initialDate?: string;
 }
 
+/** Server progress stages in plain words. */
+const DAY_STAGE_COPY: Record<string, string> = {
+  'Loading day records': 'Reading your day',
+  'Building timeline': 'Putting your day in order',
+  'Routing journeys': 'Drawing journeys on real roads',
+  'Connecting places': 'Joining up the gaps between places',
+  'Resolving place names': 'Looking up place names',
+  'Assembling day view': 'Almost there',
+  Ready: 'Ready',
+};
+
+function plainDayStage(stage: string | undefined) {
+  return (stage && DAY_STAGE_COPY[stage]) || 'Opening your day';
+}
+
 export default function DayView({ initialDate }: Props) {
   const navigate = useNavigate();
   const { data: allDays } = useDays();
@@ -86,13 +114,46 @@ export default function DayView({ initialDate }: Props) {
   const [followPlayhead, setFollowPlayhead] = useState(false);
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
   const { data: sources } = useSources();
-  const { data: dayData, isLoading, isFetching, progress } = useDayData(
+  const [lineVariant, setLineVariant] = useState<LineVariant>('best');
+  const {
+    data: dayData,
+    isLoading,
+    isFetching,
+    progress,
+    isError: dayFailed,
+    error: dayError,
+    refetch: refetchDay,
+  } = useDayData(
     selectedDate,
     sourceFilter.length ? sourceFilter : undefined,
+    { compare: lineVariant === 'predicted' },
   );
+  /** Journeys with the line the toggle picked, for the map and playback alike. */
+  const shownActivities = useMemo(
+    () =>
+      dayData && !('error' in dayData)
+        ? lineVariant === 'best'
+          ? dayData.activities
+          : dayData.activities.map((a) => withLineVariant(a, lineVariant))
+        : undefined,
+    [dayData, lineVariant],
+  );
+  const gapSummary = useMemo(() => {
+    const gaps = (dayData && !('error' in dayData) ? dayData.activities : [])
+      .map((a) => a.prediction_gap)
+      .filter((g): g is NonNullable<typeof g> => Boolean(g));
+    if (!gaps.length) return null;
+    return {
+      within: Math.round(gaps.reduce((s, g) => s + g.within100Pct, 0) / gaps.length),
+      maxM: Math.max(...gaps.map((g) => g.maxM)),
+      journeys: gaps.length,
+    };
+  }, [dayData]);
 
   const sourceColors = useMemo(() => {
     const map: Record<string, string> = {};
+    // One source would paint every journey the same colour; keep per-journey colours then.
+    if ((sources?.length ?? 0) < 2) return map;
     for (const s of sources ?? []) map[s.id] = sourceTokenVar(s.color);
     return map;
   }, [sources]);
@@ -101,8 +162,8 @@ export default function DayView({ initialDate }: Props) {
 
   const segments = useMemo(() => {
     if (!selectedDate || !dayData || 'error' in dayData) return [];
-    return buildPlaybackSegments(selectedDate, dayData.visits, dayData.activities, dayData.connectors);
-  }, [dayData, selectedDate]);
+    return buildPlaybackSegments(selectedDate, dayData.visits, shownActivities ?? [], dayData.connectors);
+  }, [dayData, selectedDate, shownActivities]);
 
   const range = useMemo(() => playbackRange(segments), [segments]);
   const rangeKey = range ? `${selectedDate}:${range.startMs}:${range.endMs}` : '';
@@ -295,9 +356,29 @@ export default function DayView({ initialDate }: Props) {
         ? 'left-3 right-3 bottom-[calc(38%+0.5rem)]'
         : 'left-3 right-3 bottom-[calc(55%+0.5rem)]';
 
+  const fixSummary = useMemo(() => {
+    if (!dayData || 'error' in dayData) return null;
+    let points = 0;
+    let withFixes = 0;
+    let maxGapS = 0;
+    for (const a of dayData.activities) {
+      const fixes = a.gps_fixes ?? [];
+      points += fixes.length;
+      if (fixes.length) withFixes += 1;
+      for (let k = 1; k < fixes.length; k++) maxGapS = Math.max(maxGapS, fixes[k][2] - fixes[k - 1][2]);
+    }
+    return {
+      points,
+      withFixes,
+      journeys: dayData.activities.length,
+      maxGapMin: maxGapS ? Math.round(maxGapS / 60) : null,
+    };
+  }, [dayData]);
+
   const mapProps = {
     visits: dayData && !('error' in dayData) ? dayData.visits : undefined,
-    activities: dayData && !('error' in dayData) ? dayData.activities : undefined,
+    activities: shownActivities,
+    lineVariant,
     connectors: dayData && !('error' in dayData) ? dayData.connectors : undefined,
     focusTarget: mapFocus,
     sizeSignal,
@@ -451,6 +532,45 @@ export default function DayView({ initialDate }: Props) {
               {dayData.clusters.join(' / ')}
             </div>
           )}
+
+          <div className="mt-3">
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">Journey lines</div>
+            <div className="grid grid-cols-4 gap-1 rounded-lg bg-bg p-1" role="radiogroup" aria-label="Journey lines">
+              {LINE_VARIANTS.map((v) => (
+                <Button
+                  key={v.id}
+                  role="radio"
+                  aria-checked={lineVariant === v.id}
+                  variant={lineVariant === v.id ? 'default' : 'ghost'}
+                  size="sm"
+                  title={v.title}
+                  onClick={() => setLineVariant(v.id)}
+                >
+                  {v.label}
+                </Button>
+              ))}
+            </div>
+            {lineVariant === 'predicted' && gapSummary && (
+              <p className="mt-2 text-xs text-text-muted">
+                OSRM's predicted routes pass within 100 m of {gapSummary.within}% of your GPS points
+                (worst {formatMeters(gapSummary.maxM)} off, {gapSummary.journeys} journey
+                {gapSummary.journeys === 1 ? '' : 's'} with GPS).
+              </p>
+            )}
+            {lineVariant === 'recorded' && (
+              <p className="mt-2 text-xs text-text-muted">Straight lines between the GPS points your phone recorded.</p>
+            )}
+            {lineVariant === 'points' && fixSummary && (
+              <p className="mt-2 text-xs text-text-muted">
+                {fixSummary.points.toLocaleString()} GPS point{fixSummary.points === 1 ? '' : 's'} across{' '}
+                {fixSummary.withFixes} of {fixSummary.journeys} journeys
+                {fixSummary.maxGapMin !== null && `; longest gap between points ${fixSummary.maxGapMin} min`}.
+                {fixSummary.withFixes < fixSummary.journeys &&
+                  ` ${fixSummary.journeys - fixSummary.withFixes} had none, so they show nothing here.`}{' '}
+                Tap a point for its time.
+              </p>
+            )}
+          </div>
         </div>
       )}
 
@@ -460,21 +580,23 @@ export default function DayView({ initialDate }: Props) {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {isLoading || (isFetching && progress) ? (
-          <div className="flex flex-col gap-4 p-6">
+          <div className="flex flex-col gap-4 p-6" aria-live="polite">
             <div className="flex items-center gap-3">
               <Loader2 size={22} className="shrink-0 animate-spin text-accent" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2">
                   <div className="truncate text-sm font-medium text-text">
-                    {progress?.stage ?? 'Loading day…'}
+                    {plainDayStage(progress?.stage)}
                   </div>
                   <div className="shrink-0 font-mono text-sm text-accent">
                     {Math.round(progress?.percent ?? 0)}%
                   </div>
                 </div>
-                {progress?.detail && (
-                  <div className="mt-0.5 truncate text-xs text-text-muted">{progress.detail}</div>
-                )}
+                {progress?.total ? (
+                  <div className="mt-0.5 truncate text-xs text-text-muted">
+                    {progress.done ?? 0} of {progress.total}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -485,15 +607,10 @@ export default function DayView({ initialDate }: Props) {
               />
             </div>
 
-            <div className="max-h-48 overflow-y-auto rounded-lg border border-border bg-bg/50 px-3 py-2 font-mono text-[11px] leading-relaxed text-text-muted">
-              {(progress?.logs?.length ? progress.logs : ['Waiting for server…']).map(
-                (line, i) => (
-                  <div key={`${i}-${line}`} className="truncate">
-                    <span className="text-accent/70">›</span> {line}
-                  </div>
-                ),
-              )}
-            </div>
+            <p className="text-xs leading-relaxed text-text-muted">
+              The first time you open a day, its journeys are matched to real roads and its places
+              are named. That is saved, so the day opens straight away next time.
+            </p>
           </div>
         ) : dayData && !('error' in dayData) ? (
           <Timeline
@@ -506,6 +623,13 @@ export default function DayView({ initialDate }: Props) {
             onActivityClick={handleActivityOnMap}
             onUnknownClick={handleUnknownOnMap}
             sourceColors={sourceColors}
+          />
+        ) : dayFailed ? (
+          <ErrorState
+            title="This day did not load."
+            message={`${dayError instanceof Error ? dayError.message : 'Something went wrong.'} Your data is safe; routing or the connection may have been slow.`}
+            retryTitle="Load this day again"
+            onRetry={() => void refetchDay()}
           />
         ) : (
           <div className="p-4 text-sm text-text-muted">
@@ -520,7 +644,7 @@ export default function DayView({ initialDate }: Props) {
 
   const mapWithOverlay = (
     <div className="relative min-h-0 flex-1">
-      <MapView {...mapProps} />
+      <MapView {...mapProps} hideMiniMap={Boolean(!barInPanel && playbackBar)} />
       {!barInPanel && playbackBar && (
         <div className={`pointer-events-none absolute z-[1000] ${overlayClass}`}>
           <div className="pointer-events-auto">{playbackBar}</div>

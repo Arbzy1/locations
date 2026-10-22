@@ -12,6 +12,7 @@ export const TENANT_TABLES = [
   "subscriptions",
   "named_trips",
   "life_chapters",
+  "timeline_overrides",
   "brim_vehicles",
   "brim_tariffs",
   "brim_calibrations",

@@ -25,7 +25,7 @@ describe("hide-place is discovery only", () => {
     const catalog = readFileSync(join(root, "apps/api/src/catalog.ts"), "utf8");
     const heatmap = fnBody(services, "getHeatmap");
     const search = fnBody(services, "searchTenant");
-    const day = fnBody(services, "getDay");
+    const day = fnBody(services, "loadDayRows") + fnBody(services, "buildDay");
     const cluster = fnBody(catalog, "getCluster");
     const visits = fnBody(catalog, "listClusterVisits");
     expect(heatmap).toContain("hiddenPlaceKeySet");
@@ -33,7 +33,7 @@ describe("hide-place is discovery only", () => {
     expect(search).toContain("filterHiddenSearchPlaces");
     expect(day).not.toContain("hiddenPlaceKeySet");
     expect(visits).not.toContain("hiddenPlaceKeySet");
-    expect(cluster).toContain("hidden: hidden.has(cluster)");
+    expect(cluster).toContain("hidden: hidden.has(placeKey)");
     expect(cluster).not.toMatch(/\.filter\(\s*\(.*hidden/);
   });
 });

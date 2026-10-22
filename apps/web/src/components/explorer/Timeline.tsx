@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import type { Visit, Activity, Connector } from '../../types';
+import TimelineItemEditor from './TimelineItemEditor';
+import { useSession } from '../../lib/auth';
 import { MODE_LABELS } from '../../types';
 import { formatTime, formatDuration, formatDistance } from '../../utils/format';
 import { useUnits } from '../../lib/units';
@@ -134,13 +136,18 @@ function buildDaySummary(visits: Visit[], activities: Activity[]): string {
     }
   }
 
-  if (uniqueStops.length <= 1) {
-    return `Stayed at ${uniqueStops[0] || 'one location'} all day.`;
-  }
-
   // Find unique modes used
   const modes = [...new Set(activities.map((a) => (MODE_LABELS[a.mode] || a.mode).toLowerCase()))];
   const modeStr = modes.length > 0 ? modes.join(' & ') : 'travelling';
+
+  if (uniqueStops.length <= 1) {
+    const place = uniqueStops[0] || 'one location';
+    // Same stop name either side of journeys (Home, walk, Home) is a round trip, not a quiet day.
+    if (activities.length > 0) {
+      return `Out and back from ${place}: ${activities.length} journey${activities.length === 1 ? '' : 's'} by ${modeStr}.`;
+    }
+    return `Stayed at ${place} all day.`;
+  }
 
   if (uniqueStops.length === 2) {
     return `${uniqueStops[0]} → ${uniqueStops[1]} by ${modeStr}.`;
@@ -269,6 +276,16 @@ function buildTimelineEvents(
   return events;
 }
 
+function accuracyTitle(acc: NonNullable<Activity['accuracy']>): string {
+  if (!acc.fixes) return 'Low confidence: no GPS points were recorded for this journey';
+  const offset = acc.meanOffsetM == null ? '' : `, line sits ${acc.meanOffsetM} m from them on average`;
+  return `${acc.score[0].toUpperCase()}${acc.score.slice(1)} confidence: ${acc.fixes} GPS points, longest gap ${acc.maxGapMin} min${offset}`;
+}
+
+/** Translucent colour for hex values and `var(--token)` alike (`${hex}55` breaks on var()). */
+const tint = (color: string, percent: number) =>
+  `color-mix(in srgb, ${color} ${percent}%, transparent)`;
+
 const rowBtnClass =
   'flex w-full text-left rounded-lg -mx-1 px-1 transition-colors duration-ui-emphasis ease-ui cursor-pointer hover:bg-bg/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40';
 
@@ -284,6 +301,9 @@ export default function Timeline({
   sourceColors,
 }: Props) {
   const { timezone, unit } = useUnits();
+  const { data: session } = useSession();
+  // The shared demo cannot write; everyone else can annotate their own day.
+  const editable = Boolean(session?.user) && (session?.user as { role?: string } | undefined)?.role !== 'demo';
   const sortedActivities = [...activities].sort((a, b) => a.start.localeCompare(b.start));
   const totalJourneys = sortedActivities.length;
   const events = buildTimelineEvents(visits, sortedActivities, connectors);
@@ -330,10 +350,10 @@ export default function Timeline({
                   )}
                 >
                   <div className="w-16 shrink-0 flex flex-col items-center">
-                    <div className="text-[10px] text-text-muted font-mono mb-1 w-full text-center">
+                    <div className="text-[11px] text-text-muted font-mono mb-1 w-full text-center">
                       {formatTime(v.start, timezone)}
                     </div>
-                    <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold text-white z-10"
+                    <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[11px] font-bold text-white z-10"
                       style={{
                         background: (v.source_id && sourceColors?.[v.source_id]) || 'var(--visit)',
                         border: '2.5px solid rgba(255,255,255,0.4)',
@@ -368,12 +388,12 @@ export default function Timeline({
                           {formatDuration(v.duration_minutes)}
                         </span>
                       </div>
-                      <span className="text-[10px] text-text-muted">
+                      <span className="text-[11px] text-text-muted">
                         {formatTime(v.start, timezone)} - {formatTime(v.end, timezone)}
                       </span>
                     </div>
                     {(fromYesterday || overnight) && (
-                      <div className="mt-1 text-[10px] text-accent">
+                      <div className="mt-1 text-[11px] text-accent">
                         {fromYesterday && <span>Started yesterday</span>}
                         {fromYesterday && overnight ? ' · ' : null}
                         {overnight && (
@@ -381,8 +401,9 @@ export default function Timeline({
                         )}
                       </div>
                     )}
+                    {v.note && <p className="mt-1 text-xs text-text whitespace-pre-line">{v.note}</p>}
                     {(v.arrived_by || v.departed_by) && (
-                      <div className="mt-1 text-[10px] text-text-muted">
+                      <div className="mt-1 text-[11px] text-text-muted">
                         {v.arrived_by && (
                           <span>Arrived by {MODE_LABELS[v.arrived_by] || v.arrived_by}</span>
                         )}
@@ -394,6 +415,7 @@ export default function Timeline({
                     )}
                   </div>
                 </button>
+                {editable && <TimelineItemEditor kind="visit" start={v.start} note={v.note} />}
               </div>
             );
           }
@@ -414,7 +436,7 @@ export default function Timeline({
                   )}
                 >
                   <div className="w-16 shrink-0 flex flex-col items-center">
-                    <div className="text-[10px] text-text-muted font-mono w-full text-center">
+                    <div className="text-[11px] text-text-muted font-mono w-full text-center">
                       {formatTime(event.time, timezone)}
                     </div>
                     <div className="flex-1 flex flex-col items-center py-0.5">
@@ -433,7 +455,7 @@ export default function Timeline({
                         {formatDuration(event.gapMinutes)}
                         {c && c.distance_meters > 0 ? ` · ${formatDistance(c.distance_meters, unit)}` : ''}
                       </div>
-                      <div className="mt-1 text-[10px] leading-snug text-text-muted/70">
+                      <div className="mt-1 text-[11px] leading-snug text-text-muted/70">
                         {UNKNOWN_MOVEMENT_HINT}
                       </div>
                     </div>
@@ -451,10 +473,17 @@ export default function Timeline({
 
           return (
             <div key={`a-${i}`} className="relative">
-              <button
-                type="button"
+              {/* Not a <button>: it contains the road-steps toggle button. */}
+              <div
+                role="button"
+                tabIndex={onActivityClick ? 0 : -1}
+                aria-disabled={!onActivityClick}
                 onClick={() => onActivityClick?.(a)}
-                disabled={!onActivityClick}
+                onKeyDown={(e) => {
+                  if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+                  e.preventDefault();
+                  onActivityClick?.(a);
+                }}
                 title={onActivityClick ? 'Show this journey on the map' : 'Journey details'}
                 className={cn(
                   onActivityClick ? rowBtnClass : 'flex w-full text-left',
@@ -462,21 +491,21 @@ export default function Timeline({
                 )}
               >
                 <div className="w-16 shrink-0 flex flex-col items-center">
-                  <div className="text-[10px] font-mono w-full text-center" style={{ color: `${color}99` }}>
+                  <div className="text-[11px] font-mono w-full text-center" style={{ color: tint(color, 60) }}>
                     {formatTime(a.start, timezone)}
                   </div>
                   <div className="flex-1 flex flex-col items-center py-0.5">
                     <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 z-10"
-                      style={{ backgroundColor: `${color}25`, border: `2px solid ${color}66` }}>
+                      style={{ backgroundColor: tint(color, 15), border: `2px solid ${tint(color, 40)}` }}>
                       <span style={{ color }}>{MODE_ICONS[a.mode] || <CircleDot size={10} />}</span>
                     </div>
-                    <div className="w-0.5 flex-1 min-h-3" style={{ backgroundColor: `${color}55` }} />
-                    <ArrowDown size={10} style={{ color: `${color}77` }} className="shrink-0 -mt-1" />
+                    <div className="w-0.5 flex-1 min-h-3" style={{ backgroundColor: tint(color, 33) }} />
+                    <ArrowDown size={10} style={{ color: tint(color, 47) }} className="shrink-0 -mt-1" />
                   </div>
                 </div>
 
                 <div className="flex-1 min-w-0 py-1.5">
-                  <div className="rounded-lg px-2.5 py-1.5" style={{ backgroundColor: `${color}08`, borderLeft: `3px solid ${color}55` }}>
+                  <div className="rounded-lg px-2.5 py-1.5" style={{ backgroundColor: tint(color, 3), borderLeft: `3px solid ${tint(color, 33)}` }}>
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold" style={{ color }}>
                         {a.from_place && a.to_place
@@ -485,23 +514,65 @@ export default function Timeline({
                       </span>
                     </div>
                     <div className="flex items-center gap-1 mt-0.5">
-                      <span className="text-[10px] px-1 rounded font-mono"
-                        style={{ backgroundColor: `${color}20`, color }}>
+                      <span className="text-[11px] px-1 rounded font-mono"
+                        style={{ backgroundColor: tint(color, 13), color }}
+                        title={a.mode_corrected ? `You corrected this from ${MODE_LABELS[a.google_mode ?? ''] || a.google_mode}` : undefined}>
                         {MODE_LABELS[a.mode] || a.mode}
+                        {a.mode_corrected ? ' (yours)' : ''}
                       </span>
                       <span className="text-[11px] text-text-muted">
                         {formatDistance(a.distance_meters, unit)} · {formatDuration(a.duration_minutes)}
                       </span>
+                      {a.route_source && (
+                        <span
+                          className="text-[11px] text-text-muted/70"
+                          title={
+                            a.route_source.startsWith('gps')
+                              ? `Route drawn from ${a.gps_points ?? 0} recorded GPS points`
+                              : 'No GPS points recorded: route is estimated'
+                          }
+                        >
+                          · {a.route_source.startsWith('gps') ? 'GPS' : 'estimated'}
+                        </span>
+                      )}
+                      {a.accuracy && (
+                        <span
+                          className={cn(
+                            'ml-auto rounded px-1 text-[11px] font-semibold uppercase',
+                            a.accuracy.score === 'high' && 'bg-walk/15 text-walk',
+                            a.accuracy.score === 'medium' && 'bg-bus/15 text-bus',
+                            a.accuracy.score === 'low' && 'bg-text-muted/15 text-text-muted',
+                          )}
+                          title={accuracyTitle(a.accuracy)}
+                        >
+                          {a.accuracy.score}
+                        </span>
+                      )}
                     </div>
+                    {a.via_places && a.via_places.length > 0 && (
+                      <div className="mt-0.5 truncate text-[11px] text-text-muted" title="Towns and areas your GPS trace passed through">
+                        through {a.via_places.join(' → ')}
+                      </div>
+                    )}
                     {mainRoads && mainRoads.length > 0 && (
-                      <div className="text-[10px] text-text-muted/50 mt-0.5 truncate">
+                      <div className="text-[11px] text-text-muted/50 mt-0.5 truncate">
                         via {mainRoads.join(' → ')}
                       </div>
                     )}
+                    {a.note && <p className="mt-1 text-xs text-text whitespace-pre-line">{a.note}</p>}
                     <ActivitySteps activity={a} />
                   </div>
                 </div>
-              </button>
+              </div>
+              {editable && (
+                <TimelineItemEditor
+                  kind="activity"
+                  start={a.start}
+                  note={a.note}
+                  mode={a.mode}
+                  googleMode={a.mode_corrected ? a.google_mode : null}
+                />
+              )}
             </div>
           );
         })}
@@ -511,7 +582,7 @@ export default function Timeline({
           <div className="w-16 flex justify-center">
             <div className="w-3 h-3 rounded-full bg-text-muted/30 border-2 border-text-muted/20" />
           </div>
-          <div className="text-[10px] text-text-muted/40 pt-0.5">End of day</div>
+          <div className="text-[11px] text-text-muted/40 pt-0.5">End of day</div>
         </div>
       </div>
     </div>

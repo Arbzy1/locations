@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Compass } from 'lucide-react';
+import { LayoutGrid } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '../ui/button';
 import {
@@ -13,16 +13,16 @@ import { useSession } from '../../lib/auth';
 
 export default function ExploreMenu({ compact, expanded }: { compact?: boolean; expanded?: boolean }) {
   const location = useLocation();
-  const active = isCatalogPath(location.pathname);
+  const active = isCatalogPath(location.pathname) && !location.pathname.startsWith('/places');
   const { data: session } = useSession();
   const role = (session?.user as { role?: string } | undefined)?.role;
-  const isStaff = role === 'admin' || role === 'developer';
   const isDemo = role === 'demo';
   const today = format(new Date(), 'yyyy-MM-dd');
   const month = today.slice(0, 7);
 
   const extra: ExploreLink[] = [
-    { group: 'Time', to: `/month/${month}`, label: 'This month', title: 'Calendar and heatmap for this month' },
+    { group: 'Time', to: `/routes?period=month&ym=${month}`, label: 'This month', title: 'Every journey line this month' },
+    { group: 'Time', to: `/month/${month}`, label: 'Month calendar', title: 'Calendar and heatmap for this month' },
     { group: 'Time', to: `/week/${today}`, label: 'This week', title: 'Seven-day strip for this week' },
   ];
 
@@ -45,7 +45,7 @@ export default function ExploreMenu({ compact, expanded }: { compact?: boolean; 
           aria-current={active ? 'page' : undefined}
           className={
             compact
-              ? `h-11 min-w-0 flex-1 flex-col gap-0.5 px-1 text-[10px] font-normal ${active ? 'bg-accent/20 text-accent' : ''}`
+              ? `h-11 min-w-0 flex-1 flex-col gap-0.5 px-1 text-[11px] font-normal ${active ? 'bg-accent/20 text-accent' : ''}`
               : expanded
                 ? `h-11 w-full justify-start gap-2 px-3 font-normal ${active ? 'bg-accent/20 text-accent' : ''}`
                 : active
@@ -53,14 +53,14 @@ export default function ExploreMenu({ compact, expanded }: { compact?: boolean; 
                   : ''
           }
         >
-          <Compass size={18} />
+          <LayoutGrid size={18} />
           {(compact || expanded) && <span className={expanded ? 'truncate text-sm' : undefined}>Explore</span>}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={compact ? 'end' : 'start'} side={compact ? 'top' : 'right'} className="max-h-[70vh] overflow-y-auto">
         {groups.map((group) => (
           <div key={group} className="mb-1">
-            <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-muted">{group}</p>
+            <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">{group}</p>
             {links
               .filter((l) => l.group === group)
               .map((l) => (
@@ -72,13 +72,6 @@ export default function ExploreMenu({ compact, expanded }: { compact?: boolean; 
               ))}
           </div>
         ))}
-        {isStaff && (
-          <DropdownMenuItem asChild title="Open the Admin panel">
-            <Link to="/admin" className="flex h-11 items-center px-3 text-sm">
-              Admin
-            </Link>
-          </DropdownMenuItem>
-        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
