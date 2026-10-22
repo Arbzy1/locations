@@ -64,14 +64,11 @@ describe("account export pack", () => {
     );
   });
 
-  it("allows demo to export sample data", async () => {
+  it("denies demo export packs", async () => {
     getSession.mockResolvedValue(sessionUser({ id: "demo-1", role: "demo" }));
     const res = await request("/api/account/export-pack", { method: "POST" });
-    expect(res.status).toBe(200);
-    expect(createExportJob).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ tenant: "demo" }),
-    );
+    expect(res.status).toBe(403);
+    expect(createExportJob).not.toHaveBeenCalled();
   });
 
   it("returns 409 when a pack is already running", async () => {

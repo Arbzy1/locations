@@ -134,13 +134,18 @@ function buildDaySummary(visits: Visit[], activities: Activity[]): string {
     }
   }
 
-  if (uniqueStops.length <= 1) {
-    return `Stayed at ${uniqueStops[0] || 'one location'} all day.`;
-  }
-
   // Find unique modes used
   const modes = [...new Set(activities.map((a) => (MODE_LABELS[a.mode] || a.mode).toLowerCase()))];
   const modeStr = modes.length > 0 ? modes.join(' & ') : 'travelling';
+
+  if (uniqueStops.length <= 1) {
+    const place = uniqueStops[0] || 'one location';
+    // Same stop name either side of journeys (Home, walk, Home) is a round trip, not a quiet day.
+    if (activities.length > 0) {
+      return `Out and back from ${place}: ${activities.length} journey${activities.length === 1 ? '' : 's'} by ${modeStr}.`;
+    }
+    return `Stayed at ${place} all day.`;
+  }
 
   if (uniqueStops.length === 2) {
     return `${uniqueStops[0]} → ${uniqueStops[1]} by ${modeStr}.`;

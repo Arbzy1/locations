@@ -7,6 +7,7 @@ import {
   isEntitled,
   isStaffRole,
   quotaForEntitled,
+  countTimelineRecords,
   type TenantId,
   type PlaceColorToken,
 } from "@locations/db";
@@ -347,6 +348,8 @@ app.get("/api/me", async (c) => {
       status: sub?.status ?? "none",
       graceUntil: sub?.graceUntil ?? null,
     },
+    // Same plan quota the import routes enforce, so the UI can check size up front.
+    uploadLimitBytes: quotaForEntitled(Boolean(c.env.STRIPE_SECRET_KEY) ? entitled : true).maxUploadBytes,
     settings,
   });
 });
@@ -1149,6 +1152,10 @@ app.get("/api/account/export", async (c) => {
 
 app.post("/api/account/export-pack", async (c) => {
   const user = c.get("user")!;
+  // The demo tenant is shared sample data; a pack job per visitor is wasted work.
+  if (user.role === "demo") {
+    return c.json({ error: "The demo account cannot build export packs" }, 403);
+  }
   const tenant = c.get("tenant");
   const ip = clientIp(c.req.raw.headers);
   const limited = rateLimit({ key: `export-pack:${tenant}:${ip}`, limit: 3, windowMs: 10 * 60_000 });
@@ -1463,7 +1470,7 @@ async function runImportJob(env: Env, message: ImportQueueMessage): Promise<void
     } catch {
       throw new Error("Invalid JSON file");
     }
-    const parsedCount = Array.isArray(records) ? records.length : 1;
+    const parsedCount = countTimelineRecords(records);
     await withTenant(jobDb, tenant, (tx) =>
       updateImportJob(tx, jobId, { status: "processing", parsedCount }, tenant),
     );

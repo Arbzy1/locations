@@ -20,14 +20,14 @@ const STEPS = [
     body: 'One imported day: stays, journeys, and playback along cached routes.',
   },
   {
-    path: '/insights',
-    title: 'Insights',
-    body: 'Totals and charts for the import. Email never includes coordinates or place names.',
+    path: '/routes',
+    title: 'Routes',
+    body: 'Every journey line for a month, a year, or any range, coloured by how you travelled.',
   },
   {
-    path: '/settings',
-    title: 'Settings',
-    body: 'Import Takeout, units, billing, and account delete. Demo accounts cannot import.',
+    path: '/insights',
+    title: 'Insights',
+    body: 'Totals and charts for the import. With your own account you import Takeout from Settings.',
   },
 ] as const;
 

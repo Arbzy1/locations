@@ -562,6 +562,18 @@ export function detectTimelineFormat(raw: unknown): TimelineFormat {
   );
 }
 
+/** Records in an export, whatever its shape (array, semanticSegments, timelineEdits, Records.json). */
+export function countTimelineRecords(raw: unknown): number {
+  if (Array.isArray(raw)) return raw.length;
+  if (raw && typeof raw === "object") {
+    const obj = raw as Record<string, unknown>;
+    for (const key of ["semanticSegments", "timelineEdits", "locations"]) {
+      if (Array.isArray(obj[key])) return (obj[key] as unknown[]).length;
+    }
+  }
+  return 0;
+}
+
 export function datesFromParsed(parsed: ParsedTimeline): string[] {
   const set = new Set<string>();
   for (const v of parsed.visits) set.add(v.date);

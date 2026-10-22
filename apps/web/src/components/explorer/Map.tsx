@@ -140,6 +140,8 @@ interface MapProps {
   corridorLines?: { from: [number, number]; to: [number, number]; count: number }[];
   homeWorkPins?: { kind: 'home' | 'work'; lat: number; lon: number; label: string }[];
   compact?: boolean;
+  /** Hide the overview minimap when the page puts its own control in the bottom-left corner. */
+  hideMiniMap?: boolean;
   center?: [number, number];
   zoom?: number;
   focusTarget?: MapFocusTarget | null;
@@ -170,6 +172,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     corridorLines = NO_CORRIDORS,
     homeWorkPins = NO_PINS,
     compact = false,
+    hideMiniMap = false,
     center = [20, 0],
     zoom = 2,
     focusTarget = null,
@@ -1127,7 +1130,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   }, [measuring]);
 
   useEffect(() => {
-    if (compact || !isDesktop || !miniRef.current || !mapRef.current) return;
+    if (compact || hideMiniMap || !isDesktop || !miniRef.current || !mapRef.current) return;
     const mini = new maplibregl.Map({
       container: miniRef.current,
       style: styleSpec,
@@ -1148,7 +1151,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       mini.remove();
       miniMapRef.current = null;
     };
-  }, [compact, isDesktop, styleKey, styleSpec]);
+  }, [compact, hideMiniMap, isDesktop, styleKey, styleSpec]);
 
   useImperativeHandle(ref, () => ({
     flyToVisit: (v: Visit) => {
@@ -1278,7 +1281,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           onDeleteBookmark={(id) => void deleteBookmark(id)}
         />
       )}
-      {!compact && isDesktop && (
+      {!compact && !hideMiniMap && isDesktop && (
         <div
           ref={miniRef}
           className="pointer-events-none absolute bottom-10 left-3 z-[400] h-32 w-32 overflow-hidden rounded-lg border border-border shadow-md"

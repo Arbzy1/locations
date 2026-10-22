@@ -124,8 +124,17 @@ describe("Better Auth account routes for the shared demo login", () => {
     expect(authHandler).toHaveBeenCalledTimes(1);
   });
 
-  it("still lets the demo revoke sessions (documented behaviour)", async () => {
+  it("blocks the demo from listing or revoking the shared sessions", async () => {
     getSession.mockResolvedValue(sessionAs("demo"));
+    const revoke = await request("/api/auth/revoke-other-sessions", { method: "POST", body: "{}" });
+    expect(revoke.status).toBe(403);
+    const list = await request("/api/auth/list-sessions");
+    expect(list.status).toBe(403);
+    expect(authHandler).not.toHaveBeenCalled();
+  });
+
+  it("lets a normal user list and revoke sessions", async () => {
+    getSession.mockResolvedValue(sessionAs("user"));
     const res = await request("/api/auth/revoke-other-sessions", { method: "POST", body: "{}" });
     expect(res.status).toBe(200);
     expect(authHandler).toHaveBeenCalledTimes(1);

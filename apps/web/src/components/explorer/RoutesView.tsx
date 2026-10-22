@@ -346,7 +346,13 @@ export default function RoutesView() {
 
   const map = (
     <div className="relative min-h-0 flex-1">
-      <MapView routeLines={data?.lines} hiddenModes={hiddenModes} sizeSignal={sizeSignal} focusTarget={focusTarget} />
+      <MapView
+        routeLines={data?.lines}
+        hiddenModes={hiddenModes}
+        sizeSignal={sizeSignal}
+        focusTarget={focusTarget}
+        hideMiniMap={Boolean(data?.lines.length)}
+      />
       {Boolean(data?.lines.length) && (
         <div className="pointer-events-none absolute bottom-10 left-3 z-[1000]">
           <Button

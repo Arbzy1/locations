@@ -110,7 +110,7 @@ async function main() {
       `?overview=full&geometries=geojson&steps=true&annotations=duration,distance`;
 
     try {
-      const resp = await fetch(osrmUrl);
+      const resp = await fetch(osrmUrl, { signal: AbortSignal.timeout(10_000) });
       await sleep(1100);
       if (!resp.ok) {
         errors++;
