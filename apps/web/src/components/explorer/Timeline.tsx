@@ -345,10 +345,10 @@ export default function Timeline({
                   )}
                 >
                   <div className="w-16 shrink-0 flex flex-col items-center">
-                    <div className="text-[10px] text-text-muted font-mono mb-1 w-full text-center">
+                    <div className="text-[11px] text-text-muted font-mono mb-1 w-full text-center">
                       {formatTime(v.start, timezone)}
                     </div>
-                    <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold text-white z-10"
+                    <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[11px] font-bold text-white z-10"
                       style={{
                         background: (v.source_id && sourceColors?.[v.source_id]) || 'var(--visit)',
                         border: '2.5px solid rgba(255,255,255,0.4)',
@@ -383,12 +383,12 @@ export default function Timeline({
                           {formatDuration(v.duration_minutes)}
                         </span>
                       </div>
-                      <span className="text-[10px] text-text-muted">
+                      <span className="text-[11px] text-text-muted">
                         {formatTime(v.start, timezone)} - {formatTime(v.end, timezone)}
                       </span>
                     </div>
                     {(fromYesterday || overnight) && (
-                      <div className="mt-1 text-[10px] text-accent">
+                      <div className="mt-1 text-[11px] text-accent">
                         {fromYesterday && <span>Started yesterday</span>}
                         {fromYesterday && overnight ? ' · ' : null}
                         {overnight && (
@@ -397,7 +397,7 @@ export default function Timeline({
                       </div>
                     )}
                     {(v.arrived_by || v.departed_by) && (
-                      <div className="mt-1 text-[10px] text-text-muted">
+                      <div className="mt-1 text-[11px] text-text-muted">
                         {v.arrived_by && (
                           <span>Arrived by {MODE_LABELS[v.arrived_by] || v.arrived_by}</span>
                         )}
@@ -429,7 +429,7 @@ export default function Timeline({
                   )}
                 >
                   <div className="w-16 shrink-0 flex flex-col items-center">
-                    <div className="text-[10px] text-text-muted font-mono w-full text-center">
+                    <div className="text-[11px] text-text-muted font-mono w-full text-center">
                       {formatTime(event.time, timezone)}
                     </div>
                     <div className="flex-1 flex flex-col items-center py-0.5">
@@ -448,7 +448,7 @@ export default function Timeline({
                         {formatDuration(event.gapMinutes)}
                         {c && c.distance_meters > 0 ? ` · ${formatDistance(c.distance_meters, unit)}` : ''}
                       </div>
-                      <div className="mt-1 text-[10px] leading-snug text-text-muted/70">
+                      <div className="mt-1 text-[11px] leading-snug text-text-muted/70">
                         {UNKNOWN_MOVEMENT_HINT}
                       </div>
                     </div>
@@ -484,7 +484,7 @@ export default function Timeline({
                 )}
               >
                 <div className="w-16 shrink-0 flex flex-col items-center">
-                  <div className="text-[10px] font-mono w-full text-center" style={{ color: tint(color, 60) }}>
+                  <div className="text-[11px] font-mono w-full text-center" style={{ color: tint(color, 60) }}>
                     {formatTime(a.start, timezone)}
                   </div>
                   <div className="flex-1 flex flex-col items-center py-0.5">
@@ -507,7 +507,7 @@ export default function Timeline({
                       </span>
                     </div>
                     <div className="flex items-center gap-1 mt-0.5">
-                      <span className="text-[10px] px-1 rounded font-mono"
+                      <span className="text-[11px] px-1 rounded font-mono"
                         style={{ backgroundColor: tint(color, 13), color }}>
                         {MODE_LABELS[a.mode] || a.mode}
                       </span>
@@ -516,7 +516,7 @@ export default function Timeline({
                       </span>
                       {a.route_source && (
                         <span
-                          className="text-[10px] text-text-muted/70"
+                          className="text-[11px] text-text-muted/70"
                           title={
                             a.route_source.startsWith('gps')
                               ? `Route drawn from ${a.gps_points ?? 0} recorded GPS points`
@@ -529,7 +529,7 @@ export default function Timeline({
                       {a.accuracy && (
                         <span
                           className={cn(
-                            'ml-auto rounded px-1 text-[9px] font-semibold uppercase',
+                            'ml-auto rounded px-1 text-[11px] font-semibold uppercase',
                             a.accuracy.score === 'high' && 'bg-walk/15 text-walk',
                             a.accuracy.score === 'medium' && 'bg-bus/15 text-bus',
                             a.accuracy.score === 'low' && 'bg-text-muted/15 text-text-muted',
@@ -541,12 +541,12 @@ export default function Timeline({
                       )}
                     </div>
                     {a.via_places && a.via_places.length > 0 && (
-                      <div className="mt-0.5 truncate text-[10px] text-text-muted" title="Towns and areas your GPS trace passed through">
+                      <div className="mt-0.5 truncate text-[11px] text-text-muted" title="Towns and areas your GPS trace passed through">
                         through {a.via_places.join(' → ')}
                       </div>
                     )}
                     {mainRoads && mainRoads.length > 0 && (
-                      <div className="text-[10px] text-text-muted/50 mt-0.5 truncate">
+                      <div className="text-[11px] text-text-muted/50 mt-0.5 truncate">
                         via {mainRoads.join(' → ')}
                       </div>
                     )}
@@ -563,7 +563,7 @@ export default function Timeline({
           <div className="w-16 flex justify-center">
             <div className="w-3 h-3 rounded-full bg-text-muted/30 border-2 border-text-muted/20" />
           </div>
-          <div className="text-[10px] text-text-muted/40 pt-0.5">End of day</div>
+          <div className="text-[11px] text-text-muted/40 pt-0.5">End of day</div>
         </div>
       </div>
     </div>

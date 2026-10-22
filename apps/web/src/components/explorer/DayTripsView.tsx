@@ -242,7 +242,7 @@ export default function DayTripsView({ onSelectDate }: Props) {
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-1">
-        <span className="mr-1 text-[10px] text-text-muted">Sort:</span>
+        <span className="mr-1 text-[11px] text-text-muted">Sort:</span>
         <SortBtn field="date" label="Date" sortField={sortField} sortDir={sortDir} onToggle={toggleSort} />
         <SortBtn field="distance" label="Distance" sortField={sortField} sortDir={sortDir} onToggle={toggleSort} />
         <SortBtn field="range" label="Range" sortField={sortField} sortDir={sortDir} onToggle={toggleSort} />

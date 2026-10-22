@@ -24,6 +24,7 @@ import { sunTimes } from '../../utils/sunTimes';
 import { isTypingTarget } from '../../lib/nav/command-query';
 import { sourceTokenVar } from '../../lib/explorer/hotspots';
 import { Button } from '../ui/button';
+import { ErrorState } from '../ui/states';
 import {
   ChevronDown,
   ChevronLeft,
@@ -72,6 +73,21 @@ function focusTargetForConnector(c: Connector): MapFocusTarget {
 
 interface Props {
   initialDate?: string;
+}
+
+/** Server progress stages in plain words. */
+const DAY_STAGE_COPY: Record<string, string> = {
+  'Loading day records': 'Reading your day',
+  'Building timeline': 'Putting your day in order',
+  'Routing journeys': 'Drawing journeys on real roads',
+  'Connecting places': 'Joining up the gaps between places',
+  'Resolving place names': 'Looking up place names',
+  'Assembling day view': 'Almost there',
+  Ready: 'Ready',
+};
+
+function plainDayStage(stage: string | undefined) {
+  return (stage && DAY_STAGE_COPY[stage]) || 'Opening your day';
 }
 
 export default function DayView({ initialDate }: Props) {
@@ -534,21 +550,23 @@ export default function DayView({ initialDate }: Props) {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {isLoading || (isFetching && progress) ? (
-          <div className="flex flex-col gap-4 p-6">
+          <div className="flex flex-col gap-4 p-6" aria-live="polite">
             <div className="flex items-center gap-3">
               <Loader2 size={22} className="shrink-0 animate-spin text-accent" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2">
                   <div className="truncate text-sm font-medium text-text">
-                    {progress?.stage ?? 'Loading day…'}
+                    {plainDayStage(progress?.stage)}
                   </div>
                   <div className="shrink-0 font-mono text-sm text-accent">
                     {Math.round(progress?.percent ?? 0)}%
                   </div>
                 </div>
-                {progress?.detail && (
-                  <div className="mt-0.5 truncate text-xs text-text-muted">{progress.detail}</div>
-                )}
+                {progress?.total ? (
+                  <div className="mt-0.5 truncate text-xs text-text-muted">
+                    {progress.done ?? 0} of {progress.total}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -559,15 +577,10 @@ export default function DayView({ initialDate }: Props) {
               />
             </div>
 
-            <div className="max-h-48 overflow-y-auto rounded-lg border border-border bg-bg/50 px-3 py-2 font-mono text-[11px] leading-relaxed text-text-muted">
-              {(progress?.logs?.length ? progress.logs : ['Waiting for server…']).map(
-                (line, i) => (
-                  <div key={`${i}-${line}`} className="truncate">
-                    <span className="text-accent/70">›</span> {line}
-                  </div>
-                ),
-              )}
-            </div>
+            <p className="text-xs leading-relaxed text-text-muted">
+              The first time you open a day, its journeys are matched to real roads and its places
+              are named. That is saved, so the day opens straight away next time.
+            </p>
           </div>
         ) : dayData && !('error' in dayData) ? (
           <Timeline
@@ -582,22 +595,12 @@ export default function DayView({ initialDate }: Props) {
             sourceColors={sourceColors}
           />
         ) : dayFailed ? (
-          <div className="p-4 text-sm" role="alert">
-            <p className="font-medium text-text">This day did not load.</p>
-            <p className="mt-1 text-text-muted">
-              {dayError instanceof Error ? dayError.message : 'Something went wrong.'} Your data is
-              safe; routing or the connection may have been slow.
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              className="mt-3"
-              title="Load this day again"
-              onClick={() => void refetchDay()}
-            >
-              Try again
-            </Button>
-          </div>
+          <ErrorState
+            title="This day did not load."
+            message={`${dayError instanceof Error ? dayError.message : 'Something went wrong.'} Your data is safe; routing or the connection may have been slow.`}
+            retryTitle="Load this day again"
+            onRetry={() => void refetchDay()}
+          />
         ) : (
           <div className="p-4 text-sm text-text-muted">
             {selectedDate

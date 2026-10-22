@@ -197,7 +197,7 @@ export default function RoutesView() {
                 onClick={() => update({ ym: m.ym })}
               >
                 <span className="text-xs font-semibold">{format(parseISO(`${m.ym}-01`), 'MMM yy')}</span>
-                <span className="text-[10px] opacity-75">{formatMilesOrKm(m.miles, unit)}</span>
+                <span className="text-[11px] opacity-75">{formatMilesOrKm(m.miles, unit)}</span>
               </Button>
             ))}
           </div>

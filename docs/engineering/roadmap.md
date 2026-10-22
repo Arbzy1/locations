@@ -35,12 +35,12 @@ Three read-only audits (UX/layout, product, performance/reliability) fed this pl
 
 ## Phase 4 - Layout
 
-- [ ] Five primary tabs: Map (Heat / Lines), Days, Trips, Places, Insights; account items at the bottom of the rail; Admin once, staff only.
-- [ ] One page template: `w-96` panel with sticky header and "Filters (n)" toggle; `CatalogPage` with breadcrumb; shared Skeleton / EmptyState / ErrorState with `destructive` tokens.
-- [ ] Map overlay corners fixed (top-right Layers, bottom-right zoom/legend, bottom-left playback/actions); desktop map tools collapsed into "Layers".
-- [ ] One onboarding/no-data screen with the drop zone.
-- [ ] Plain-language copy: Pricing, changelog, Day View loading, catalog captions; billing badge words.
-- [ ] Theme fixes (hardcoded reds/hex), minimum text size, `inert` on closed drawers, mobile "More" as a Sheet.
+- [x] Five primary tabs: Map (Heat / Lines), Days, Trips, Places, Insights; account items at the bottom of the rail; Admin once, staff only.
+- [x] One page template: `w-96` panel with sticky header and "Filters (n)" toggle; `CatalogPage` with breadcrumb; shared Skeleton / EmptyState / ErrorState with `destructive` tokens.
+- [x] Map overlay corners fixed (top-right Layers, bottom-right zoom/legend, bottom-left playback/actions); desktop map tools collapsed into "Layers".
+- [x] One onboarding/no-data screen with the drop zone.
+- [x] Plain-language copy: Pricing, changelog, Day View loading, catalog captions; billing badge words.
+- [x] Theme fixes (hardcoded reds/hex), minimum text size, `inert` on closed drawers, mobile "More" as a Sheet.
 
 ## Phase 5 - Features
 

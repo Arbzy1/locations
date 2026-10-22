@@ -162,7 +162,7 @@ export default function ImportDropZone({
               const next = e.target.files?.[0];
               if (next) void runPreview(next);
             }}
-            className="w-full max-w-md text-sm text-text-muted file:mr-3 file:h-11 file:rounded-md file:border-0 file:bg-accent/20 file:px-3 file:text-sm file:text-accent"
+            className="sr-only"
           />
           <Button
             type="button"

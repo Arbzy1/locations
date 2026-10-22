@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Layers, Bookmark, Ruler, Box } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
@@ -210,9 +211,42 @@ export default function MapChrome(props: MapChromeProps) {
     );
   }
 
+  return <DesktopLayers {...props} />;
+}
+
+/** Desktop: one "Layers" button in the top-right corner that opens the tools card. */
+function DesktopLayers(props: MapChromeProps) {
+  const [open, setOpen] = useState(false);
+  const reduce = useReducedMotion();
+  // Measuring shows its distance in the card, so keep it open while measuring.
+  const shown = open || props.measuring;
   return (
-    <div className="pointer-events-auto absolute top-3 right-3 z-[500] w-[min(100%-1.5rem,18rem)] rounded-lg border border-border bg-surface/95 p-3 text-left shadow-lg backdrop-blur-sm">
-      <ChromeFields {...props} />
+    <div className="pointer-events-auto absolute top-3 right-3 z-[500] flex flex-col items-end gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        className="h-11 bg-surface/95 shadow-md backdrop-blur-sm"
+        title={shown ? 'Hide map layers and tools' : 'Show map layers and tools'}
+        aria-expanded={shown}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Layers size={16} />
+        Layers
+      </Button>
+      <AnimatePresence>
+        {shown && (
+          <motion.div
+            key="layers-card"
+            initial={reduce ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
+            animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.98 }}
+            transition={reduce ? { duration: 0.08 } : { type: 'spring', stiffness: 400, damping: 30 }}
+            className="w-[min(100vw-3rem,18rem)] rounded-lg border border-border bg-surface/95 p-3 text-left shadow-lg backdrop-blur-sm"
+          >
+            <ChromeFields {...props} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

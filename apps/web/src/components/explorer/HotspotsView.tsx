@@ -13,7 +13,8 @@ import { useSession } from '../../lib/auth';
 import MapView from './Map';
 import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from '../shell/MobilePanel';
 import HotspotDays from './HotspotDays';
-import { Flame, EyeOff, Eye, Star } from 'lucide-react';
+import { Flame, EyeOff, Eye, Star, SlidersHorizontal } from 'lucide-react';
+import { cn } from '../../lib/utils';
 import { Link, useSearchParams } from 'react-router-dom';
 import { placePath } from '../../lib/nav/paths';
 import { formatDuration } from '../../utils/format';
@@ -143,7 +144,7 @@ function AreaDetails({
           {area.topTypes.map((t) => (
             <span
               key={t}
-              className="rounded border border-border bg-bg px-1.5 py-0.5 text-[10px] text-text-muted"
+              className="rounded border border-border bg-bg px-1.5 py-0.5 text-[11px] text-text-muted"
             >
               {t}
             </span>
@@ -185,7 +186,7 @@ function AreaDetails({
             {favourite ? 'Favourited' : 'Favourite'}
           </Button>
           <div className="mt-3">
-            <p className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Colour</p>
+            <p className="mb-1 text-[11px] uppercase tracking-wide text-text-muted">Colour</p>
             <div className="flex flex-wrap gap-1.5">
               <Button
                 type="button"
@@ -216,7 +217,7 @@ function AreaDetails({
             </div>
           </div>
           <div className="mt-3">
-            <p className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Tags</p>
+            <p className="mb-1 text-[11px] uppercase tracking-wide text-text-muted">Tags</p>
             <div className="mb-2 flex flex-wrap gap-1">
               {tags.map((tag) => (
                 <Button
@@ -267,7 +268,7 @@ function AreaDetails({
           </Button>
         </>
       )}
-      <p className="mt-2 text-[10px] text-text-muted">Selected: map zooms to this spot</p>
+      <p className="mt-2 text-[11px] text-text-muted">Selected: map zooms to this spot</p>
     </div>
   );
 }
@@ -289,6 +290,14 @@ export default function HotspotsView() {
   const selectedTags = filters.tags;
   const favouritesOnly = filters.fav;
   const rankBy = filters.rank;
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilterCount =
+    (from ? 1 : 0) +
+    (to ? 1 : 0) +
+    (favouritesOnly ? 1 : 0) +
+    selectedTypes.length +
+    selectedTags.length +
+    (sourceIds.length ? 1 : 0);
   const spotRaw = params.get('spot');
   const spot = useMemo(() => {
     const [lat, lon] = (spotRaw ?? '').split(',').map(Number);
@@ -441,7 +450,13 @@ export default function HotspotsView() {
   };
 
   const listHeader = (
-    <div className="border-b border-border p-4">
+    <div
+      className={cn(
+        'border-b border-border bg-surface p-4',
+        // Sticky only while compact, so an open filter block can still scroll away.
+        !filtersOpen && 'sticky top-0 z-10',
+      )}
+    >
       <h2 className="flex items-center gap-2 text-lg font-semibold">
         <Flame size={20} className="text-train" />
         Hotspots
@@ -452,6 +467,42 @@ export default function HotspotsView() {
       <p className="mt-2 text-xs leading-relaxed text-text-muted">
         Tap a row for details and to zoom the map. Tags mark top spots on the map.
       </p>
+      <div className="mt-3 flex gap-2">
+        <Button
+          type="button"
+          variant={rankBy === 'visits' ? 'default' : 'outline'}
+          size="sm"
+          className="flex-1"
+          title="Rank places by visit count"
+          onClick={() => patchFilters({ rank: 'visits' })}
+        >
+          Visits
+        </Button>
+        <Button
+          type="button"
+          variant={rankBy === 'dwell' ? 'default' : 'outline'}
+          size="sm"
+          className="flex-1"
+          title="Rank places by time spent"
+          onClick={() => patchFilters({ rank: 'dwell' })}
+        >
+          Time there
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn((filtersOpen || activeFilterCount > 0) && 'border-accent text-accent')}
+          title={filtersOpen ? 'Hide filters' : 'Show date, type, tag and source filters'}
+          aria-expanded={filtersOpen}
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
+          <SlidersHorizontal size={14} />
+          Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
+        </Button>
+      </div>
+      {filtersOpen && (
+      <div className="ui-enter">
       <div className="mt-3 grid grid-cols-2 gap-2">
         <EjectField label="From" htmlFor="hotspot-from">
           <input
@@ -475,28 +526,6 @@ export default function HotspotsView() {
         </EjectField>
       </div>
       <FilterPresets />
-      <div className="mt-3 flex gap-2">
-        <Button
-          type="button"
-          variant={rankBy === 'visits' ? 'default' : 'outline'}
-          size="sm"
-          className="flex-1"
-          title="Rank places by visit count"
-          onClick={() => patchFilters({ rank: 'visits' })}
-        >
-          Visits
-        </Button>
-        <Button
-          type="button"
-          variant={rankBy === 'dwell' ? 'default' : 'outline'}
-          size="sm"
-          className="flex-1"
-          title="Rank places by time spent"
-          onClick={() => patchFilters({ rank: 'dwell' })}
-        >
-          Time there
-        </Button>
-      </div>
       <Button
         type="button"
         variant={favouritesOnly ? 'default' : 'outline'}
@@ -580,12 +609,12 @@ export default function HotspotsView() {
       )}
       {hiddenLabels.length > 0 && (
         <div className="mt-4 rounded-lg border border-border bg-bg/40 p-2">
-          <p className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Hidden places</p>
+          <p className="mb-1 text-[11px] uppercase tracking-wide text-text-muted">Hidden places</p>
           {hiddenLabels.map((row) => (
             <div key={row.placeKey} className="flex items-center gap-2 py-1">
               <span className="min-w-0 flex-1 truncate text-xs text-text">{row.label}</span>
               {isDemo ? (
-                <span className="text-[10px] text-text-muted">Hidden</span>
+                <span className="text-[11px] text-text-muted">Hidden</span>
               ) : (
                 <Button
                   type="button"
@@ -603,6 +632,8 @@ export default function HotspotsView() {
             </div>
           ))}
         </div>
+      )}
+      </div>
       )}
     </div>
   );
@@ -724,7 +755,7 @@ export default function HotspotsView() {
   if (isDesktop) {
     return (
       <div className="flex h-full">
-        <div className="w-80 shrink-0 overflow-y-auto border-r border-border bg-surface">
+        <div className="w-96 shrink-0 overflow-y-auto border-r border-border bg-surface">
           {listHeader}
           {spot ? <HotspotDays point={spot} label={spotLabel} onBack={() => setSpot(null)} /> : listBody}
         </div>

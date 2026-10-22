@@ -3,37 +3,12 @@ import CatalogPage from './CatalogPage';
 import { Button } from '../ui/button';
 import { useCachedAnalytics, useImportJobs, useImportStatus } from '../../hooks/useApi';
 import { TIMEZONE_SKEW_COPY } from '../explorer/ImportDropZone';
-import { useSession } from '../../lib/auth';
 import ChangelogList from '../marketing/ChangelogList';
+import GetStarted from '../shell/GetStarted';
 
+/** `/onboarding` is the same first-run screen new accounts land on. */
 export function OnboardingPage() {
-  const { data: session } = useSession();
-  const verified = Boolean((session?.user as { emailVerified?: boolean } | undefined)?.emailVerified);
-  const { data: importStatus } = useImportStatus();
-  const hasData = (importStatus?.visitCount ?? 0) > 0;
-  return (
-    <CatalogPage title="Get started" description="Verify email, export Takeout, then import. No live tracking.">
-      <ol className="list-decimal space-y-3 pl-5 text-sm">
-        <li>
-          {verified ? 'Email is verified.' : 'Verify your email from the link or 6-digit code, then return here.'}
-        </li>
-        <li>
-          On your phone, export Google Timeline / Takeout (JSON or a zip with Timeline.json).
-        </li>
-        <li>
-          <Button variant="outline" asChild title="Open Settings to import">
-            <Link to="/settings">Upload in Settings</Link>
-          </Button>
-        </li>
-        <li>{hasData ? 'Import is in. Open Hotspots.' : 'Wait for import status (counts only).'}</li>
-      </ol>
-      {hasData && (
-        <Button asChild title="Open Hotspots">
-          <Link to="/hotspots">Open Hotspots</Link>
-        </Button>
-      )}
-    </CatalogPage>
-  );
+  return <GetStarted />;
 }
 
 export function ImportsPage() {

@@ -152,7 +152,7 @@ export default function SettingsView() {
         </div>
         {message && <p className="mt-3 text-sm text-walk">{message}</p>}
         {error && (
-          <div className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+          <div className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
           </div>
         )}
@@ -161,7 +161,7 @@ export default function SettingsView() {
       <div className="flex min-h-0 flex-1">
         {isDesktop && (
           <aside className="flex w-52 shrink-0 flex-col overflow-y-auto border-r border-border p-3">
-            <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+            <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
               Workspace
             </p>
             <SettingsNav section={section} onSelect={setSection} orientation="rail" />

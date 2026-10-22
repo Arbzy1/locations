@@ -6,6 +6,25 @@ type Props = {
   onError: (msg: string) => void;
 };
 
+/** Stripe subscription status in plain words. */
+function planStatusCopy(status: string, entitled: boolean): string {
+  switch (status) {
+    case "active":
+      return "Your plan is active.";
+    case "trialing":
+      return "You are on a free trial.";
+    case "past_due":
+    case "unpaid":
+      return "Your last payment did not go through.";
+    case "paused":
+      return "Your plan is paused.";
+    case "canceled":
+      return "Your plan has ended.";
+    default:
+      return entitled ? "You can import without a plan on this account." : "You do not have a plan yet.";
+  }
+}
+
 export default function SettingsBilling({ onError }: Props) {
   const { entitlements } = useUnits();
   const status = entitlements?.status ?? "none";
@@ -57,18 +76,15 @@ export default function SettingsBilling({ onError }: Props) {
     <div className="grid gap-4 md:grid-cols-2">
       <Card>
         <CardTitle className="text-base">Plan</CardTitle>
-        <p className="mt-2 text-sm text-text">
-          Status: {status}
-          {entitlements?.entitled ? " (entitled)" : ""}
-        </p>
+        <p className="mt-2 text-sm text-text">{planStatusCopy(status, Boolean(entitlements?.entitled))}</p>
         {graceActive && (
           <p className="mt-2 text-sm text-text">
             Payment failed. Import is paused. You still have read-only access until {graceUntilLabel}.
           </p>
         )}
         <p className="mt-3 text-sm text-text-muted">
-          Invoices, payment method, pause, and cancel are in Manage billing. Pause keeps the
-          subscription (access follows Stripe pause rules). Cancel ends access at period end.
+          Receipts, card details, pausing and cancelling are all in Manage billing. If you cancel,
+          you keep access until the end of the period you paid for.
         </p>
       </Card>
       <Card>

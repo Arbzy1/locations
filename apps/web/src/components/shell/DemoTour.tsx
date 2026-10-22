@@ -91,7 +91,7 @@ export default function DemoTour() {
           role="dialog"
           aria-labelledby="demo-tour-title"
         >
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
             Demo tour {step + 1} of {STEPS.length}
           </p>
           <h2 id="demo-tour-title" className="mt-1 font-display text-lg font-semibold text-text">

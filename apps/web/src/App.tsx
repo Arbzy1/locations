@@ -35,28 +35,30 @@ import ThemeToggle from './components/shell/ThemeToggle';
 import CommandPalette from './components/shell/CommandPalette';
 import { AppVersion } from './components/shell/AppVersion';
 import { Button } from './components/ui/button';
-import ImportDropZone from './components/explorer/ImportDropZone';
+import { Sheet, SheetContent } from './components/ui/sheet';
+import GetStarted from './components/shell/GetStarted';
 import { Toaster } from './components/ui/sonner';
 import ExploreMenu from './components/shell/ExploreMenu';
+import MapModeSwitch from './components/shell/MapModeSwitch';
+import { loadMapMode, mapModePath, saveMapMode, type MapMode } from './lib/nav/map-mode';
 import CatalogRouter from './components/catalog/CatalogRouter';
 import ImportCutIn from './components/ImportCutIn';
 import { isCatalogPath, catalogTitle } from './lib/nav/paths';
 import { shouldFireImportCutIn, type ImportCutInJob } from './lib/explorer/import-cut-in';
 import { adminPageLabel } from './components/admin/adminNav';
 import {
-  Flame,
+  Map as MapIcon,
+  MapPin,
   Calendar,
   Compass,
   TrendingUp,
   Loader2,
   LogOut,
   Settings,
-  Upload,
   MoreHorizontal,
   PanelLeft,
   PanelLeftClose,
   Shield,
-  Route as RouteIcon,
 } from 'lucide-react';
 
 const queryClient = new QueryClient({
@@ -79,22 +81,15 @@ const TAB_LABELS: Record<TabId, string> = {
   settings: 'Settings',
 };
 
-/** Bottom-nav labels; the first word alone would show "Day" twice. */
-const TAB_SHORT_LABELS: Record<TabId, string> = {
-  hotspots: 'Hotspots',
-  day: 'Day',
-  routes: 'Routes',
-  trips: 'Trips',
-  insights: 'Insights',
-  settings: 'Settings',
-};
+type NavId = 'map' | 'day' | 'trips' | 'places' | 'insights';
 
-const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: 'hotspots', label: TAB_LABELS.hotspots, icon: <Flame size={18} /> },
-  { id: 'day', label: TAB_LABELS.day, icon: <Calendar size={18} /> },
-  { id: 'routes', label: TAB_LABELS.routes, icon: <RouteIcon size={18} /> },
-  { id: 'trips', label: TAB_LABELS.trips, icon: <Compass size={18} /> },
-  { id: 'insights', label: TAB_LABELS.insights, icon: <TrendingUp size={18} /> },
+/** The five primary destinations. Map opens the heatmap or the journey lines. */
+const NAV: { id: NavId; label: string; short: string; icon: React.ReactNode }[] = [
+  { id: 'map', label: 'Map', short: 'Map', icon: <MapIcon size={18} /> },
+  { id: 'day', label: 'Days', short: 'Days', icon: <Calendar size={18} /> },
+  { id: 'trips', label: 'Trips', short: 'Trips', icon: <Compass size={18} /> },
+  { id: 'places', label: 'Places', short: 'Places', icon: <MapPin size={18} /> },
+  { id: 'insights', label: 'Insights', short: 'Insights', icon: <TrendingUp size={18} /> },
 ];
 
 function tabFromPath(pathname: string): TabId {
@@ -115,41 +110,6 @@ function useDocumentTitle(title: string) {
   useEffect(() => {
     document.title = title;
   }, [title]);
-}
-
-function EmptyDataState({
-  onOpenSettings,
-  isDemo,
-}: {
-  onOpenSettings: () => void;
-  isDemo: boolean;
-}) {
-  return (
-    <div className="flex h-full min-h-0 flex-col items-center justify-center gap-4 bg-bg px-6 text-center">
-      <div className="rounded-full bg-accent/15 p-4 text-accent">
-        <Upload size={28} />
-      </div>
-      <div className="max-w-sm">
-        <h2 className="font-display text-lg font-semibold text-text">Import your Timeline</h2>
-        <p className="mt-2 text-sm text-text-muted">
-          Drop a Google Timeline JSON or Takeout zip here. You can replace it anytime with a newer
-          export.
-        </p>
-      </div>
-      <div className="w-full max-w-md text-left">
-        <ImportDropZone
-          disabled={isDemo}
-          disabledReason={isDemo ? 'Demo accounts cannot import Timeline data.' : undefined}
-        />
-      </div>
-      <Button type="button" title="Open Settings to upload Timeline data" onClick={onOpenSettings}>
-        Open Settings
-      </Button>
-      <Button type="button" variant="outline" title="Open onboarding steps" asChild>
-        <Link to="/onboarding">Onboarding</Link>
-      </Button>
-    </div>
-  );
 }
 
 const RAIL_COLLAPSED = 56;
@@ -181,7 +141,7 @@ function NavTabButton({
   compact,
   expanded,
 }: {
-  tab: { id: TabId; label: string; icon: React.ReactNode };
+  tab: { label: string; short: string; icon: React.ReactNode };
   active: boolean;
   onSelect: () => void;
   compact?: boolean;
@@ -196,7 +156,7 @@ function NavTabButton({
       className={cn(
         'flex items-center rounded-lg transition-colors duration-300 ease-ui',
         compact
-          ? 'h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 px-1 text-[10px]'
+          ? 'h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 px-1 text-[11px]'
           : expanded
             ? 'h-11 w-full justify-start gap-2 px-3'
             : 'h-11 w-11 justify-center',
@@ -208,7 +168,7 @@ function NavTabButton({
       {...motionProps}
     >
       {tab.icon}
-      {compact && <span className="truncate">{TAB_SHORT_LABELS[tab.id]}</span>}
+      {compact && <span className="truncate">{tab.short}</span>}
       <RailLabel show={!!expanded}>{tab.label}</RailLabel>
     </motion.button>
   );
@@ -252,6 +212,24 @@ function AppContent() {
   const selectTab = (id: TabId, date?: string) => {
     setMoreOpen(false);
     void navigate(pathForTab(id, date ?? dayViewDate));
+  };
+
+  const onMapTab = !exploring && (activeTab === 'hotspots' || activeTab === 'routes');
+  const mapMode: MapMode = activeTab === 'routes' ? 'lines' : 'heat';
+  useEffect(() => {
+    if (onMapTab) saveMapMode(mapMode);
+  }, [onMapTab, mapMode]);
+
+  const navActive = (id: NavId) => {
+    if (id === 'places') return location.pathname.startsWith('/places');
+    if (id === 'map') return onMapTab;
+    return !exploring && activeTab === id;
+  };
+  const selectNav = (id: NavId) => {
+    setMoreOpen(false);
+    if (id === 'map') void navigate(mapModePath(loadMapMode()));
+    else if (id === 'places') void navigate('/places');
+    else selectTab(id);
   };
 
   const importing =
@@ -401,12 +379,12 @@ function AppContent() {
             {navExpanded ? 'Locations' : 'L'}
           </Link>
 
-          {TABS.map((tab) => (
+          {NAV.map((tab) => (
             <NavTabButton
               key={tab.id}
               tab={tab}
-              active={!exploring && activeTab === tab.id}
-              onSelect={() => selectTab(tab.id)}
+              active={navActive(tab.id)}
+              onSelect={() => selectNav(tab.id)}
               expanded={navExpanded}
             />
           ))}
@@ -515,11 +493,18 @@ function AppContent() {
                 </div>
               ) : (
                 <div key="empty" className="ui-enter h-full">
-                  <EmptyDataState isDemo={isDemo} onOpenSettings={() => selectTab('settings')} />
+                  <GetStarted isDemo={isDemo} />
                 </div>
               )
             ) : (
-              <div key={activeTab} className="ui-enter h-full overflow-hidden">
+              <div key={activeTab} className="ui-enter relative h-full overflow-hidden">
+                {onMapTab && (
+                  <MapModeSwitch
+                    mode={mapMode}
+                    onChange={(m) => void navigate(mapModePath(m))}
+                    className="absolute top-3 left-1/2 z-[1100] -translate-x-1/2 lg:left-[calc(50%+12rem)]"
+                  />
+                )}
                 {activeTab === 'hotspots' && <HotspotsView />}
                 {activeTab === 'day' && <DayView initialDate={dayViewDate} />}
                 {activeTab === 'routes' && <RoutesView />}
@@ -533,12 +518,12 @@ function AppContent() {
             className="absolute inset-x-0 bottom-0 z-[1200] flex items-stretch gap-0.5 border-t border-border bg-surface/95 px-1 pt-1 backdrop-blur-sm safe-pb lg:hidden"
             aria-label="Main"
           >
-            {TABS.map((tab) => (
+            {NAV.map((tab) => (
               <NavTabButton
                 key={tab.id}
                 tab={tab}
-                active={!exploring && activeTab === tab.id}
-                onSelect={() => selectTab(tab.id)}
+                active={navActive(tab.id)}
+                onSelect={() => selectNav(tab.id)}
                 compact
               />
             ))}
@@ -549,8 +534,8 @@ function AppContent() {
                 aria-label="More options"
                 aria-expanded={moreOpen}
                 onClick={() => setMoreOpen((v) => !v)}
-                className={`flex h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[10px] transition-colors duration-300 ease-ui ${
-                  moreOpen || activeTab === 'settings' || exploring
+                className={`flex h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 text-[11px] transition-colors duration-300 ease-ui ${
+                  moreOpen || activeTab === 'settings' || (exploring && !navActive('places'))
                     ? 'bg-accent/20 text-accent'
                     : 'text-text-muted hover:bg-bg/50 hover:text-text'
                 }`}
@@ -558,8 +543,10 @@ function AppContent() {
                 <MoreHorizontal size={18} />
                 <span>More</span>
               </button>
-              {moreOpen && (
-                <div className="absolute bottom-full right-0 mb-2 flex min-w-[10rem] flex-col gap-1 rounded-lg border border-border bg-surface p-2 shadow-lg ui-enter">
+              <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+                <SheetContent side="bottom" title="More" className="safe-pb">
+                  <h2 className="mb-2 text-sm font-semibold text-text">More</h2>
+                  <div className="flex flex-col gap-1">
                   <div className="flex items-center justify-between gap-2 px-1">
                     <span className="text-xs text-text-muted">Theme</span>
                     <ThemeToggle className="h-11 w-11" />
@@ -576,6 +563,14 @@ function AppContent() {
                   <div className="max-h-48 overflow-y-auto">
                     <ExploreMenu compact />
                   </div>
+                  {isStaff && (
+                    <Button asChild variant="ghost" className="h-11 justify-start" title="Open Admin panel">
+                      <Link to="/admin" onClick={() => setMoreOpen(false)}>
+                        <Shield size={16} />
+                        Admin
+                      </Link>
+                    </Button>
+                  )}
                   {!isDemo && (
                     <Button
                       type="button"
@@ -607,7 +602,8 @@ function AppContent() {
                     Sign out
                   </Button>
                 </div>
-              )}
+                </SheetContent>
+              </Sheet>
             </div>
           </nav>
         </div>
