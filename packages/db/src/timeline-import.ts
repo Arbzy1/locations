@@ -10,6 +10,7 @@ import {
   dayStats,
   userSettings,
   visits,
+  type PathPoint,
   type TenantId,
 } from "./schema.js";
 import {
@@ -38,6 +39,12 @@ export type RawTimelineRecord = {
     distanceMeters?: number | string;
     topCandidate?: { type?: string };
   };
+  /** GPS breadcrumbs. Classic exports use minute offsets; semanticSegments use `time`. */
+  timelinePath?: Array<{
+    point?: string;
+    durationMinutesOffsetFromStartTime?: string | number;
+    time?: string;
+  }>;
 };
 
 type VisitDraft = {
@@ -63,6 +70,7 @@ type ActivityDraft = {
   mode: string;
   distanceMeters: number;
   durationMinutes: number;
+  path: PathPoint[] | null;
 };
 
 export type ParsedTimeline = {
@@ -157,7 +165,7 @@ type FlatSemanticSegment = {
   endTime?: string;
   visit?: SemanticVisit;
   activity?: SemanticActivity;
-  timelinePath?: unknown;
+  timelinePath?: Array<{ point?: string; time?: string }>;
 };
 
 function pushVisitActivity(
@@ -208,6 +216,9 @@ function fromSemanticSegments(segments: FlatSemanticSegment[]): RawTimelineRecor
     const startTime = seg.startTime ?? "";
     const endTime = seg.endTime ?? "";
     if (!startTime || !endTime) continue;
+    if (Array.isArray(seg.timelinePath) && seg.timelinePath.length) {
+      records.push({ startTime, endTime, timelinePath: seg.timelinePath });
+    }
     if (!seg.visit && !seg.activity) continue;
     pushVisitActivity(records, startTime, endTime, seg.visit, seg.activity);
   }
@@ -326,14 +337,91 @@ function fromRecordsJson(locations: Array<Record<string, unknown>>): RawTimeline
   return records;
 }
 
+/** Seconds of slack around a journey window; classic path offsets are whole minutes. */
+const PATH_TOLERANCE_S = 30;
+/** Upper bound per journey so one long flight or drive cannot bloat a row. */
+export const MAX_PATH_POINTS = 300;
+
+const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
+
+/** Read GPS fixes from one `timelinePath` record (classic minute offsets or ISO `time`). */
+export function pathPointsFromRecord(record: RawTimelineRecord): PathPoint[] {
+  if (!Array.isArray(record.timelinePath)) return [];
+  const baseMs = Date.parse(record.startTime ?? "");
+  const out: PathPoint[] = [];
+  for (const p of record.timelinePath) {
+    const coords = coordsFromLocation(p?.point);
+    if (!coords) continue;
+    let ms = p.time ? Date.parse(p.time) : NaN;
+    if (!Number.isFinite(ms) && p.durationMinutesOffsetFromStartTime != null) {
+      const offset = Number(p.durationMinutesOffsetFromStartTime);
+      if (Number.isFinite(offset) && Number.isFinite(baseMs)) ms = baseMs + offset * 60_000;
+    }
+    if (!Number.isFinite(ms)) continue;
+    out.push([round6(coords[0]), round6(coords[1]), Math.round(ms / 1000)]);
+  }
+  return out;
+}
+
+function capPath(points: PathPoint[], max: number): PathPoint[] {
+  if (points.length <= max) return points;
+  const step = (points.length - 1) / (max - 1);
+  const out: PathPoint[] = [];
+  for (let k = 0; k < max; k++) out.push(points[Math.round(k * step)]);
+  return out;
+}
+
+/**
+ * Give each journey the GPS fixes recorded during its time window.
+ * Fixes inside visits are dropped: they only describe where you stood still.
+ * Returns how many points were attached.
+ */
+export function attachPathPoints(
+  rows: Array<{ start: string; end: string; path: PathPoint[] | null }>,
+  points: PathPoint[],
+): number {
+  if (!points.length || !rows.length) return 0;
+  // Stable sort keeps the in-record order of fixes that share a minute.
+  const sorted = [...points].sort((a, b) => a[2] - b[2]);
+  let attached = 0;
+  for (const row of rows) {
+    const startS = Date.parse(row.start) / 1000 - PATH_TOLERANCE_S;
+    const endS = Date.parse(row.end) / 1000 + PATH_TOLERANCE_S;
+    if (!Number.isFinite(startS) || !Number.isFinite(endS)) continue;
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid][2] < startS) lo = mid + 1;
+      else hi = mid;
+    }
+    const picked: PathPoint[] = [];
+    for (let i = lo; i < sorted.length && sorted[i][2] <= endS; i++) {
+      const p = sorted[i];
+      const prev = picked[picked.length - 1];
+      if (prev && prev[0] === p[0] && prev[1] === p[1]) continue;
+      picked.push(p);
+    }
+    if (!picked.length) continue;
+    row.path = capPath(picked, MAX_PATH_POINTS);
+    attached += row.path.length;
+  }
+  return attached;
+}
+
 function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
   const visitRows: VisitDraft[] = [];
   const activityRows: ActivityDraft[] = [];
+  const pathPoints: PathPoint[] = [];
 
   for (const record of raw) {
     const startTime = record.startTime ?? "";
     const endTime = record.endTime ?? "";
     if (!startTime || !endTime) continue;
+
+    if (record.timelinePath) {
+      for (const p of pathPointsFromRecord(record)) pathPoints.push(p);
+    }
 
     if (record.visit) {
       const top = record.visit.topCandidate ?? {};
@@ -373,9 +461,12 @@ function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
         mode: mapTransportMode(top.type ?? "unknown"),
         distanceMeters: Number(act.distanceMeters ?? 0),
         durationMinutes: Math.round(duration * 10) / 10,
+        path: null,
       });
     }
   }
+
+  attachPathPoints(activityRows, pathPoints);
 
   return { visits: visitRows, activities: activityRows };
 }

@@ -22,7 +22,11 @@ import {
   makeRouteCacheKey,
   makeCoordPlaceKey,
   makeRailArc,
+  makeTraceCacheKey,
   snapGeometry,
+  journeyTrace,
+  thinTrace,
+  polylineLengthM,
   haversineM,
   METERS_TO_MILES,
   deleteSourceData,
@@ -47,6 +51,7 @@ import {
   lte,
   lt,
   type RouteStep,
+  type PathPoint,
   type ActivityRow,
   type VisitRow,
   type TenantId,
@@ -193,6 +198,253 @@ export async function fetchRoute(
   } catch {
     return fallback;
   }
+}
+
+/** Public OSRM rejects map-matching radii above ~30m. */
+const OSRM_MATCH_RADIUS_M = 30;
+/** Public OSRM rejects map matching with more than 10 coordinates, so long traces go in chunks. */
+const OSRM_MATCH_CHUNK = 10;
+const TRACE_MIN_SPACING_M = 40;
+/** At most four chunked match requests per journey. */
+const TRACE_MAX_MATCH_POINTS = 37;
+const TRACE_MAX_VIA_POINTS = 25;
+/** Modes OSRM has no network for: draw the recorded fixes as-is. */
+const RAW_TRACE_MODES = new Set(["flying", "train", "subway"]);
+/** Journeys join an adjacent stop with a straight hop only when it is this close. */
+const SNAP_MAX_M = 500;
+
+/**
+ * How a journey line was drawn, from most to least trustworthy:
+ * - `gps-road`: recorded GPS fixes snapped onto roads (OSRM map matching / via points)
+ * - `gps`: straight lines between recorded GPS fixes
+ * - `road-estimate`: no fixes; fastest road route between start and end
+ * - `rail-arc`: no fixes; drawn curve between stations
+ * - `straight`: no fixes and no road route
+ */
+export type RouteSource = "gps-road" | "gps" | "road-estimate" | "rail-arc" | "straight";
+
+type RoutedLine = { geometry: [number, number][]; steps: RouteStep[] };
+type RouteAttempt = RoutedLine | "rejected" | "error";
+type OsrmLeg = { steps?: unknown[] };
+
+function osrmMatchBase(): string {
+  return OSRM_BASE.replace(/\/route\/v1\/?$/, "/match/v1");
+}
+
+async function osrmJson<T>(url: string): Promise<T | "error"> {
+  try {
+    const resp = await fetch(url);
+    // OSRM answers 400 with a JSON code (NoMatch, NoRoute...) for definite failures.
+    if (resp.status === 429 || resp.status >= 500) return "error";
+    return (await resp.json()) as T;
+  } catch {
+    return "error";
+  }
+}
+
+/** OSRM maneuver types; parseSteps uses one as the name of an unnamed road. */
+const MANEUVER_TYPES = new Set([
+  "depart", "arrive", "turn", "new name", "continue", "merge", "on ramp", "off ramp",
+  "fork", "end of road", "use lane", "roundabout", "rotary", "roundabout turn",
+  "exit roundabout", "exit rotary", "notification", "road",
+]);
+
+/**
+ * Matched and via-point routes have one leg per GPS fix, so every fix adds an
+ * Arrive + Depart pair. Keep the first Depart and last Arrive only, and blank
+ * names that are really maneuver types so "via" lists show roads.
+ */
+export function joinLegSteps(steps: RouteStep[]): RouteStep[] {
+  const out: RouteStep[] = [];
+  steps.forEach((s, i) => {
+    const isArrive = s.direction.startsWith("Arrive");
+    const isDepart = s.direction.startsWith("Depart");
+    if (isArrive && i < steps.length - 1) return;
+    out.push({
+      ...s,
+      direction: isDepart && i > 0 ? "Continue" : s.direction,
+      name: MANEUVER_TYPES.has(s.name) ? "" : s.name,
+    });
+  });
+  return out;
+}
+
+/** A road line is believable when its length is close to what was recorded. */
+export function plausibleRouteLength(routeM: number, referenceM: number): boolean {
+  if (!(routeM > 0) || !(referenceM > 0)) return false;
+  return routeM <= Math.max(referenceM * 1.5, referenceM + 1000) && routeM >= referenceM * 0.6;
+}
+
+function tracePointsForMatch(trace: PathPoint[]): PathPoint[] {
+  return thinTrace(trace, { minSpacingM: TRACE_MIN_SPACING_M, maxPoints: TRACE_MAX_MATCH_POINTS });
+}
+
+/** route_cache key used for a journey trace (same thinning as fetchTraceRoute). */
+export function traceRouteCacheKey(trace: PathPoint[], mode: string): string {
+  return makeTraceCacheKey(tracePointsForMatch(trace), MODE_TO_PROFILE[mode] ?? "driving");
+}
+
+async function matchChunk(
+  pts: PathPoint[],
+  times: number[],
+  profile: string,
+): Promise<(RoutedLine & { distance: number }) | "rejected" | "error"> {
+  const coords = pts.map((p) => `${p[1]},${p[0]}`).join(";");
+  const radiuses = pts.map(() => OSRM_MATCH_RADIUS_M).join(";");
+  const url =
+    `${osrmMatchBase()}/${profile}/${coords}` +
+    `?geometries=geojson&overview=full&steps=true&gaps=ignore` +
+    `&timestamps=${times.join(";")}&radiuses=${radiuses}`;
+  const data = await osrmJson<{
+    code?: string;
+    matchings?: Array<{ geometry: { coordinates: number[][] }; legs: OsrmLeg[]; distance: number }>;
+    tracepoints?: Array<unknown | null>;
+  }>(url);
+  if (data === "error") return "error";
+  if (data.code !== "Ok" || !data.matchings?.length) return "rejected";
+  const matchedPoints = (data.tracepoints ?? []).filter(Boolean).length;
+  if (matchedPoints < Math.max(2, Math.ceil(pts.length * 0.6))) return "rejected";
+  return {
+    distance: data.matchings.reduce((s, m) => s + m.distance, 0),
+    geometry: data.matchings.flatMap((m) =>
+      m.geometry.coordinates.map((c) => [c[1], c[0]] as [number, number]),
+    ),
+    steps: data.matchings.flatMap((m) => parseSteps(m.legs ?? [])),
+  };
+}
+
+async function matchTrace(pts: PathPoint[], profile: string, referenceM: number): Promise<RouteAttempt> {
+  // OSRM needs strictly increasing timestamps; minute-offset fixes can tie.
+  const times: number[] = [];
+  for (const p of pts) times.push(times.length ? Math.max(p[2], times[times.length - 1] + 1) : p[2]);
+  const geometry: [number, number][] = [];
+  const steps: RouteStep[] = [];
+  let distance = 0;
+  // Consecutive chunks share their boundary fix so the matched pieces join up.
+  for (let from = 0; from < pts.length - 1; from += OSRM_MATCH_CHUNK - 1) {
+    const to = from + OSRM_MATCH_CHUNK;
+    const piece = await matchChunk(pts.slice(from, to), times.slice(from, to), profile);
+    if (piece === "rejected" || piece === "error") return piece;
+    geometry.push(...piece.geometry);
+    steps.push(...piece.steps);
+    distance += piece.distance;
+  }
+  if (!plausibleRouteLength(distance, referenceM)) return "rejected";
+  return { geometry, steps };
+}
+
+async function routeViaTrace(pts: PathPoint[], profile: string, referenceM: number): Promise<RouteAttempt> {
+  const via = thinTrace(pts, { minSpacingM: TRACE_MIN_SPACING_M, maxPoints: TRACE_MAX_VIA_POINTS });
+  const coords = via.map((p) => `${p[1]},${p[0]}`).join(";");
+  const url =
+    `${OSRM_BASE}/${profile}/${coords}` +
+    `?overview=full&geometries=geojson&steps=true&continue_straight=false`;
+  const data = await osrmJson<{
+    code?: string;
+    routes?: Array<{ geometry: { coordinates: number[][] }; legs: OsrmLeg[]; distance: number }>;
+  }>(url);
+  if (data === "error") return "error";
+  const route = data.routes?.[0];
+  if (data.code !== "Ok" || !route) return "rejected";
+  if (!plausibleRouteLength(route.distance, referenceM)) return "rejected";
+  return {
+    geometry: route.geometry.coordinates.map((c) => [c[1], c[0]] as [number, number]),
+    steps: parseSteps(route.legs ?? []),
+  };
+}
+
+/**
+ * Road route that follows a journey's recorded GPS fixes: OSRM map matching first,
+ * then a route through the fixes as via points. Either is dropped when it strays
+ * far from the recorded distance (the public OSRM server routes walks as a car).
+ * Definite answers, including "no believable road route", are cached by trace hash.
+ */
+export async function fetchTraceRoute(
+  db: ReturnType<typeof createDb>,
+  trace: PathPoint[],
+  mode: string,
+  recordedDistanceM = 0,
+): Promise<RoutedLine | null> {
+  const profile = MODE_TO_PROFILE[mode] ?? "driving";
+  const pts = tracePointsForMatch(trace);
+  if (pts.length < 2) return null;
+  const key = makeTraceCacheKey(pts, profile);
+  const cached = await db.select().from(routeCache).where(eq(routeCache.key, key)).limit(1);
+  if (cached[0]) {
+    return cached[0].geometry.length ? { geometry: cached[0].geometry, steps: cached[0].steps } : null;
+  }
+
+  const referenceM = Math.max(polylineLengthM(pts), recordedDistanceM || 0);
+  let attempt = await matchTrace(pts, profile, referenceM);
+  if (attempt === "rejected") attempt = await routeViaTrace(pts, profile, referenceM);
+  if (attempt === "error") return null;
+
+  const line =
+    attempt === "rejected"
+      ? { geometry: [], steps: [] }
+      : { geometry: attempt.geometry, steps: joinLegSteps(attempt.steps) };
+  await db
+    .insert(routeCache)
+    .values({ key, geometry: line.geometry, steps: line.steps })
+    .onConflictDoUpdate({ target: routeCache.key, set: { geometry: line.geometry, steps: line.steps } });
+  return line.geometry.length ? line : null;
+}
+
+type LatLon = [number, number];
+
+/**
+ * Where a journey really started (or ended). Timeline's recorded endpoint is
+ * sometimes kilometres off; when the adjacent stop sits closer to the first (or
+ * last) GPS fix, trust the stop instead.
+ */
+export function journeyAnchor(recorded: LatLon, stop: LatLon | null, fix: PathPoint | undefined): LatLon {
+  if (!stop || !fix) return recorded;
+  if (haversineM(recorded[0], recorded[1], stop[0], stop[1]) <= SNAP_MAX_M) return recorded;
+  return haversineM(stop[0], stop[1], fix[0], fix[1]) < haversineM(recorded[0], recorded[1], fix[0], fix[1])
+    ? stop
+    : recorded;
+}
+
+/** Best available line for one journey, before snapping to neighbouring stops. */
+export async function routeActivity(
+  db: ReturnType<typeof createDb>,
+  a: ActivityRow,
+  anchors?: { start: LatLon; end: LatLon },
+): Promise<RoutedLine & { source: RouteSource; gpsPoints: number }> {
+  const gpsPoints = a.path?.length ?? 0;
+  const trace = journeyTrace(
+    anchors
+      ? { ...a, startLat: anchors.start[0], startLon: anchors.start[1], endLat: anchors.end[0], endLon: anchors.end[1] }
+      : a,
+  );
+  if (trace && trace.length >= 3) {
+    if (!RAW_TRACE_MODES.has(a.mode)) {
+      const road = await fetchTraceRoute(db, trace, a.mode, a.distanceMeters);
+      if (road) return { ...road, source: "gps-road", gpsPoints };
+    }
+    return {
+      geometry: trace.map((p) => [p[0], p[1]] as [number, number]),
+      steps: [],
+      source: "gps",
+      gpsPoints,
+    };
+  }
+  if (a.mode === "train" || a.mode === "subway") {
+    return { geometry: [], steps: [], source: "rail-arc", gpsPoints };
+  }
+  const estimate = await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode);
+  return {
+    ...estimate,
+    source: estimate.steps.length ? "road-estimate" : "straight",
+    gpsPoints,
+  };
+}
+
+/** Routing mode for a gap with no recorded journey, guessed from implied speed. */
+export function connectorMode(gapM: number, fromIso: string, toIso: string): string {
+  const hours = (Date.parse(toIso) - Date.parse(fromIso)) / 3_600_000;
+  if (gapM <= 5000 && hours > 0 && gapM / 1000 / hours <= 7) return "walking";
+  return "car";
 }
 
 const NOMINATIM_UA = "LocationExplorer/1.0 (portfolio; contact via aden.website)";
@@ -779,6 +1031,17 @@ export async function getDay(
   const activityTotal = dayActivities.length;
   let activityDone = 0;
 
+  const adjacentStop = (neighbour: Event | undefined): LatLon | null =>
+    neighbour?.type === "visit" ? [neighbour.lat, neighbour.lon] : null;
+  // A journey line hops to a stop only when that stop is the very next/previous
+  // event and close by. Otherwise the jump stays visible as unknown movement.
+  const snapTo = (stop: LatLon | null, at: LatLon): LatLon | null =>
+    stop && haversineM(stop[0], stop[1], at[0], at[1]) <= SNAP_MAX_M ? stop : null;
+  const snappedStart = new Set<ActivityRow>();
+  const snappedEnd = new Set<ActivityRow>();
+  /** Where each journey line is actually drawn from and to, for gap lines. */
+  const drawnEnds = new Map<ActivityRow, { start: LatLon; end: LatLon }>();
+
   const enrichedActivities = [];
   for (let idx = 0; idx < events.length; idx++) {
     const ev = events[idx];
@@ -791,53 +1054,38 @@ export async function getDay(
         : 8 + Math.round((activityDone / activityTotal) * 42);
     await report({
       stage: "Routing journeys",
-      detail: `${a.mode} (${activityDone}/${activityTotal})`,
+      detail: `${a.mode}${a.path?.length ? " via GPS" : ""} (${activityDone}/${activityTotal})`,
       percent: pct,
       done: activityDone,
       total: activityTotal,
     });
 
-    const routeData = await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode);
+    const prevStop = adjacentStop(events[idx - 1]);
+    const nextStop = adjacentStop(events[idx + 1]);
+    const anchors = {
+      start: journeyAnchor([a.startLat, a.startLon], prevStop, a.path?.[0]),
+      end: journeyAnchor([a.endLat, a.endLon], nextStop, a.path?.at(-1)),
+    };
+    const route = await routeActivity(db, a, anchors);
     const d = activityToApi(a) as Record<string, unknown>;
 
-    let snapStartLat = a.startLat;
-    let snapStartLon = a.startLon;
-    for (let j = idx - 1; j >= 0; j--) {
-      const prev = events[j];
-      if (prev.type === "visit") {
-        snapStartLat = prev.lat;
-        snapStartLon = prev.lon;
-        break;
-      }
-    }
-    let snapEndLat = a.endLat;
-    let snapEndLon = a.endLon;
-    for (let j = idx + 1; j < events.length; j++) {
-      const next = events[j];
-      if (next.type === "visit") {
-        snapEndLat = next.lat;
-        snapEndLon = next.lon;
-        break;
-      }
-    }
+    const snapStart = snapTo(prevStop, anchors.start);
+    const snapEnd = snapTo(nextStop, anchors.end);
+    if (snapStart) snappedStart.add(a);
+    if (snapEnd) snappedEnd.add(a);
+    const [snapStartLat, snapStartLon] = snapStart ?? anchors.start;
+    const [snapEndLat, snapEndLon] = snapEnd ?? anchors.end;
+    drawnEnds.set(a, { start: [snapStartLat, snapStartLon], end: [snapEndLat, snapEndLon] });
 
-    if (a.mode === "train" || a.mode === "subway") {
-      d.route_geometry = makeRailArc(snapStartLat, snapStartLon, snapEndLat, snapEndLon);
-      d.steps = [];
-      d.has_osrm_route = false;
-      d.is_rail = true;
-    } else {
-      d.route_geometry = snapGeometry(
-        routeData.geometry,
-        snapStartLat,
-        snapStartLon,
-        snapEndLat,
-        snapEndLon,
-      );
-      d.steps = routeData.steps;
-      d.has_osrm_route = routeData.steps.length > 0;
-      d.is_rail = false;
-    }
+    d.route_geometry =
+      route.source === "rail-arc"
+        ? makeRailArc(snapStartLat, snapStartLon, snapEndLat, snapEndLon)
+        : snapGeometry(route.geometry, snapStartLat, snapStartLon, snapEndLat, snapEndLon);
+    d.steps = route.steps;
+    d.has_osrm_route = route.steps.length > 0;
+    d.is_rail = a.mode === "train" || a.mode === "subway";
+    d.route_source = route.source;
+    d.gps_points = route.gpsPoints;
 
     let fromPlace: string | null = null;
     for (let j = idx - 1; j >= 0; j--) {
@@ -874,10 +1122,19 @@ export async function getDay(
   for (let i = 0; i < events.length - 1; i++) {
     const prevEv = events[i];
     const nextEv = events[i + 1];
-    const fromLat = prevEv.type === "visit" ? prevEv.lat : prevEv.end_lat;
-    const fromLon = prevEv.type === "visit" ? prevEv.lon : prevEv.end_lon;
-    const toLat = nextEv.type === "visit" ? nextEv.lat : nextEv.start_lat;
-    const toLon = nextEv.type === "visit" ? nextEv.lon : nextEv.start_lon;
+    // Already joined by the journey line itself.
+    if (prevEv.type === "activity" && nextEv.type === "visit" && snappedEnd.has(prevEv.data)) continue;
+    if (prevEv.type === "visit" && nextEv.type === "activity" && snappedStart.has(nextEv.data)) continue;
+    // Overlapping events (Timeline nests stays inside longer ones): nothing moved in between.
+    if (Date.parse(nextEv.time) < Date.parse(prevEv.end_time) - 60_000) continue;
+    const [fromLat, fromLon] =
+      prevEv.type === "visit"
+        ? [prevEv.lat, prevEv.lon]
+        : (drawnEnds.get(prevEv.data)?.end ?? [prevEv.end_lat, prevEv.end_lon]);
+    const [toLat, toLon] =
+      nextEv.type === "visit"
+        ? [nextEv.lat, nextEv.lon]
+        : (drawnEnds.get(nextEv.data)?.start ?? [nextEv.start_lat, nextEv.start_lon]);
     const gapM = haversineM(fromLat, fromLon, toLat, toLon);
     if (gapM < 15) continue;
     connectorCandidates.push({
@@ -937,7 +1194,7 @@ export async function getDay(
         c.fromLon,
         c.toLat,
         c.toLon,
-        "car",
+        connectorMode(c.gapM, c.from_time, c.to_time),
       );
       connectors.push({
         from_time: c.from_time,
@@ -1789,28 +2046,35 @@ export async function rewarmRoutes(
 ) {
   const rows = await db
     .select({
+      start: activities.start,
+      end: activities.end,
       startLat: activities.startLat,
       startLon: activities.startLon,
       endLat: activities.endLat,
       endLon: activities.endLon,
       mode: activities.mode,
+      distanceMeters: activities.distanceMeters,
+      path: activities.path,
     })
     .from(activities)
     .where(eq(activities.tenant, tenant));
 
-  const candidates: Array<{
-    startLat: number;
-    startLon: number;
-    endLat: number;
-    endLon: number;
-    mode: string;
-    key: string;
-  }> = [];
+  // Mirror routeActivity: GPS-backed journeys use trace routes, the rest endpoint routes.
+  // Without neighbouring stops this cannot apply journeyAnchor, so the few journeys
+  // whose recorded endpoint gets replaced in Day View are routed on first view instead.
+  const candidates: Array<(typeof rows)[number] & { key: string; trace: PathPoint[] | null }> = [];
   for (const a of rows) {
+    const trace = journeyTrace(a);
+    if (trace && trace.length >= 3) {
+      if (RAW_TRACE_MODES.has(a.mode)) continue;
+      candidates.push({ ...a, trace, key: traceRouteCacheKey(trace, a.mode) });
+      continue;
+    }
     if (SKIP.has(a.mode)) continue;
     const profile = MODE_TO_PROFILE[a.mode] ?? "driving";
     candidates.push({
       ...a,
+      trace: null,
       key: makeRouteCacheKey(a.startLat, a.startLon, a.endLat, a.endLon, profile),
     });
   }
@@ -1830,7 +2094,8 @@ export async function rewarmRoutes(
   const uncached = candidates.filter((c) => !cachedKeys.has(c.key));
   const batch = uncached.slice(0, REWARM_CAP);
   for (const a of batch) {
-    await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode);
+    if (a.trace) await fetchTraceRoute(db, a.trace, a.mode, a.distanceMeters);
+    else await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode);
   }
   return {
     warmed: batch.length,

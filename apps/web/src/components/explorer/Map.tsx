@@ -440,6 +440,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           properties: {
             dash: dashClass(a.mode),
             color,
+            // Lines not backed by recorded GPS points are guesses: draw them fainter.
+            estimated: Boolean(a.route_source && !a.route_source.startsWith('gps')),
             html: activityPopupHtml(a, i, totalJourneys, color, unit),
           },
           geometry: { type: 'LineString' as const, coordinates: lineCoords(positions) },
@@ -465,7 +467,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           paint: {
             'line-color': ['get', 'color'],
             'line-width': spec.dash === 'solid' ? 4 : 3,
-            'line-opacity': 0.85,
+            'line-opacity': ['case', ['get', 'estimated'], 0.5, 0.85],
             ...(spec.dasharray ? { 'line-dasharray': spec.dasharray } : {}),
           },
         });

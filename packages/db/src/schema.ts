@@ -17,6 +17,9 @@ export type TenantId = string;
 
 export type ImportJobStatus = "pending" | "processing" | "ready" | "error";
 
+/** Recorded GPS fix along a journey: `[lat, lon, unixSeconds]` from Timeline `timelinePath`. */
+export type PathPoint = [number, number, number];
+
 export type ExportJobStatus = ImportJobStatus;
 
 export type SubscriptionStatus =
@@ -208,6 +211,7 @@ export const activities = pgTable(
     mode: text("mode").notNull(),
     distanceMeters: real("distance_meters").notNull(),
     durationMinutes: real("duration_minutes").notNull(),
+    path: jsonb("path").$type<PathPoint[]>(),
   },
   (t) => [
     index("activities_tenant_date_idx").on(t.tenant, t.date),

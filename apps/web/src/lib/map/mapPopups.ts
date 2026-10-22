@@ -66,13 +66,19 @@ export function activityPopupHtml(
     .join(' \u2192 ');
   const hasOsrm = a.has_osrm_route !== false && (a.steps?.length || 0) > 0;
   const mode = MODE_LABELS[a.mode] || a.mode;
+  const fixes = a.gps_points ?? 0;
+  const fixText = `${fixes} recorded GPS point${fixes === 1 ? '' : 's'}`;
   let routeNote: string;
-  if (a.is_rail) {
+  if (a.route_source === 'gps-road') {
+    routeNote = `<strong>GPS route</strong>: Follows your ${fixText}, snapped onto roads.`;
+  } else if (a.route_source === 'gps') {
+    routeNote = `<strong>GPS trace</strong>: Straight lines between your ${fixText}.`;
+  } else if (a.is_rail) {
     routeNote = `<strong>Rail journey</strong>: Google detected you were on a ${escapeHtml(mode.toLowerCase())}. The arc shows the approximate path between stations. Exact rail route not available.`;
   } else if (a.mode === 'flying') {
     routeNote = '<strong>Straight line</strong>: Flight path shown as direct line.';
   } else if (hasOsrm) {
-    routeNote = '<strong>Predicted route</strong>: Road-level route predicted via OSRM. Actual route may differ.';
+    routeNote = '<strong>Predicted route</strong>: No GPS points for this journey, so this is the fastest road route between start and end. Actual route may differ.';
   } else {
     routeNote = '<strong>Straight line</strong>: Route could not be determined from road data.';
   }

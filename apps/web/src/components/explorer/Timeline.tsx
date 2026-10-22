@@ -492,6 +492,18 @@ export default function Timeline({
                       <span className="text-[11px] text-text-muted">
                         {formatDistance(a.distance_meters, unit)} · {formatDuration(a.duration_minutes)}
                       </span>
+                      {a.route_source && (
+                        <span
+                          className="text-[10px] text-text-muted/70"
+                          title={
+                            a.route_source.startsWith('gps')
+                              ? `Route drawn from ${a.gps_points ?? 0} recorded GPS points`
+                              : 'No GPS points recorded: route is estimated'
+                          }
+                        >
+                          · {a.route_source.startsWith('gps') ? 'GPS' : 'estimated'}
+                        </span>
+                      )}
                     </div>
                     {mainRoads && mainRoads.length > 0 && (
                       <div className="text-[10px] text-text-muted/50 mt-0.5 truncate">

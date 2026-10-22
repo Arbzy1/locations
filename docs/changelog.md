@@ -4,6 +4,8 @@
 
 Day View no longer crashes when a day loads. The playback marker was added to the map before it had a position, which threw inside MapLibre and blanked the page. The map also stops redrawing every line and marker on each playback frame.
 
+Day View journeys follow your recorded GPS points. Import keeps Timeline `timelinePath` fixes on each journey (new `activities.path` column, migration `0014_activity_path`), and Day View snaps them onto roads with OSRM map matching (chunked to the public server's 10-point limit), falling back to a via-point route and then the raw trace when a road route strays from the recorded distance. Trains and flights draw the raw trace instead of an arc. Journey endpoints that Timeline recorded kilometres away are anchored to the adjacent stop when GPS agrees with it, overlapping stays no longer show negative "unknown movement" gaps, and gaps are routed on foot or by car from the implied speed. Journeys are tagged GPS or estimated in the timeline and popups; estimated lines draw fainter. Existing tenants need a re-import to pick up the GPS points.
+
 ## 0.0.1
 
 Colour moods in Settings, Display: 30 named palettes (light and dark each) on top of the existing theme toggle. Stored in `locations-mood`. Map tiles still follow light and dark.

@@ -39,6 +39,10 @@ export interface Activity {
   duration_minutes: number;
   has_osrm_route?: boolean;
   is_rail?: boolean;
+  /** How the line was drawn; see `RouteSource` in apps/api/src/services.ts. */
+  route_source?: 'gps-road' | 'gps' | 'road-estimate' | 'rail-arc' | 'straight';
+  /** Recorded GPS fixes behind this journey (Timeline `timelinePath`). */
+  gps_points?: number;
   from_place?: string;
   to_place?: string;
   source_id?: string | null;
