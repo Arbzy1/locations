@@ -14,7 +14,7 @@ import { APP_VERSION } from "./version";
 import { googleAuthEnabled, type Env, type ImportQueueMessage } from "./env";
 import { createAuth } from "./auth";
 import { corsOriginFor } from "./cors";
-import { blockDemo } from "./guards";
+import { blockDemo, isDemoBlockedAuthPath } from "./guards";
 import { clientIp, rateLimit } from "./rate-limit";
 import { applySecurityHeaders, isProductionHttps } from "./security-headers";
 import { registerAdminRoutes } from "./admin";
@@ -22,6 +22,7 @@ import { resolveOpsFlags } from "./ops-flags";
 import {
   cspSourcesForHosts,
   extraCspHostsFromEnv,
+  mapStyleUrls,
   parseCustomTileHosts,
   sanitizeBookmarks,
   validateTileTemplate,
@@ -73,6 +74,8 @@ import {
   listClusterVisits,
   getCorridorDetail,
   getTripRange,
+  getRouteLines,
+  getHotspotDays,
   listNamedTrips,
   upsertNamedTrip,
   deleteNamedTrip,
@@ -153,6 +156,12 @@ app.all("/api/auth/*", async (c) => {
   }
   const flags = await resolveOpsFlags(c.env);
   const auth = createAuth(c.env, { disableSignUp: flags.signupDisabled });
+  if (isDemoBlockedAuthPath(c.req.method, c.req.path)) {
+    const current = await auth.api.getSession({ headers: c.req.raw.headers });
+    if ((current?.user as { role?: string } | undefined)?.role === "demo") {
+      return c.json({ error: "The shared demo account cannot change account settings" }, 403);
+    }
+  }
   const res = await auth.handler(c.req.raw);
   if (res.ok && c.req.method === "POST" && c.req.path.endsWith("/change-password")) {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
@@ -303,8 +312,8 @@ app.get("/api/config", async (c) => {
       c.env.MAP_TILE_LIGHT_URL ||
       "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     mapAttr: c.env.MAP_TILE_ATTR || "&copy; OSM &copy; CARTO",
-    mapStyleDark: c.env.MAP_STYLE_DARK_URL || null,
-    mapStyleLight: c.env.MAP_STYLE_LIGHT_URL || null,
+    mapStyleDark: mapStyleUrls(c.env).dark,
+    mapStyleLight: mapStyleUrls(c.env).light,
     customTiles: customTileHosts.length > 0,
     customTileHosts,
     signupDisabled: flags.signupDisabled,
@@ -359,6 +368,8 @@ app.get("/api/day/:date", async (c) => {
   const date = c.req.param("date");
   const tenant = c.get("tenant");
   const sourceIds = parseSourceIds(c.req.query("sources"));
+  // compare=1 also fetches the OSRM-predicted route for each journey.
+  const dayOpts = { compare: c.req.query("compare") === "1" };
 
   if (c.req.query("stream") === "1") {
     c.header("Content-Type", "application/x-ndjson; charset=utf-8");
@@ -371,7 +382,7 @@ app.get("/api/day/:date", async (c) => {
         const result = await withTenant(db, tenant, (tx) =>
           getDay(tx, tenant, date, async (progress) => {
             await write({ type: "progress", ...progress });
-          }, sourceIds),
+          }, sourceIds, dayOpts),
         );
         if ("error" in result) {
           await write({ type: "error", error: result.error });
@@ -385,7 +396,7 @@ app.get("/api/day/:date", async (c) => {
     });
   }
 
-  const result = await withTenant(db, tenant, (tx) => getDay(tx, tenant, date, undefined, sourceIds));
+  const result = await withTenant(db, tenant, (tx) => getDay(tx, tenant, date, undefined, sourceIds, dayOpts));
   if ("error" in result) return c.json(result, 404);
   return c.json(result);
 });
@@ -885,6 +896,34 @@ app.get("/api/corridors/:a/:b", async (c) => {
   const row = await withTenant(db, tenant, (tx) => getCorridorDetail(tx, tenant, a, b));
   if (!row) return c.json({ error: "Not found" }, 404);
   return c.json(row);
+});
+
+app.get("/api/routes", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    getRouteLines(tx, tenant, {
+      from: (c.req.query("from") ?? "").trim(),
+      to: (c.req.query("to") ?? "").trim(),
+      sourceIds: parseSourceIds(c.req.query("sources")),
+    }),
+  );
+  if (isErrorResult(result)) return c.json(result, 400);
+  return c.json(result);
+});
+
+app.get("/api/hotspots/days", async (c) => {
+  const db = getDb(c.env);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    getHotspotDays(tx, tenant, {
+      lat: Number(c.req.query("lat")),
+      lon: Number(c.req.query("lon")),
+      radiusM: c.req.query("radius_m") ? Number(c.req.query("radius_m")) : undefined,
+    }),
+  );
+  if (isErrorResult(result)) return c.json(result, 400);
+  return c.json(result);
 });
 
 app.get("/api/trip-range/:start/:end", async (c) => {

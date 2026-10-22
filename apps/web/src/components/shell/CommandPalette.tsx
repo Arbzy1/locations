@@ -39,6 +39,7 @@ type Row = {
 const TAB_PAGES = [
   { to: '/hotspots', label: 'Hotspots', title: 'Open Hotspots' },
   { to: '/day', label: 'Day View', title: 'Open Day View' },
+  { to: '/routes', label: 'Routes', title: 'Open Routes: every journey line for a month, year, or day' },
   { to: '/trips', label: 'Day Trips', title: 'Open Day Trips' },
   { to: '/insights', label: 'Insights', title: 'Open Insights' },
   { to: '/settings', label: 'Settings', title: 'Open Settings' },
@@ -55,7 +56,7 @@ const HINT_ROWS: Row[] = [
   {
     id: 'hint-g',
     group: 'Hints',
-    label: 'g then h, d, t, i, e, or s jumps pages',
+    label: 'g then h, d, r, t, i, e, or s jumps pages',
     title: 'Keyboard chords for main pages',
     to: '',
   },

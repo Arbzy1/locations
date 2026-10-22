@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, lte, ne, or, sql } from "drizzle-orm";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 import * as schema from "./schema.js";
@@ -10,10 +10,12 @@ import {
   dayStats,
   userSettings,
   visits,
+  type PathPoint,
   type TenantId,
 } from "./schema.js";
 import {
   classifyLocation,
+  haversineM,
   mapTransportMode,
   METERS_TO_MILES,
   parseGeo,
@@ -38,6 +40,12 @@ export type RawTimelineRecord = {
     distanceMeters?: number | string;
     topCandidate?: { type?: string };
   };
+  /** GPS breadcrumbs. Classic exports use minute offsets; semanticSegments use `time`. */
+  timelinePath?: Array<{
+    point?: string;
+    durationMinutesOffsetFromStartTime?: string | number;
+    time?: string;
+  }>;
 };
 
 type VisitDraft = {
@@ -50,6 +58,9 @@ type VisitDraft = {
   semanticType: string;
   placeId: string | null;
   durationMinutes: number;
+  fixLat: number | null;
+  fixLon: number | null;
+  fixCount: number | null;
 };
 
 type ActivityDraft = {
@@ -63,6 +74,7 @@ type ActivityDraft = {
   mode: string;
   distanceMeters: number;
   durationMinutes: number;
+  path: PathPoint[] | null;
 };
 
 export type ParsedTimeline = {
@@ -157,7 +169,7 @@ type FlatSemanticSegment = {
   endTime?: string;
   visit?: SemanticVisit;
   activity?: SemanticActivity;
-  timelinePath?: unknown;
+  timelinePath?: Array<{ point?: string; time?: string }>;
 };
 
 function pushVisitActivity(
@@ -208,6 +220,9 @@ function fromSemanticSegments(segments: FlatSemanticSegment[]): RawTimelineRecor
     const startTime = seg.startTime ?? "";
     const endTime = seg.endTime ?? "";
     if (!startTime || !endTime) continue;
+    if (Array.isArray(seg.timelinePath) && seg.timelinePath.length) {
+      records.push({ startTime, endTime, timelinePath: seg.timelinePath });
+    }
     if (!seg.visit && !seg.activity) continue;
     pushVisitActivity(records, startTime, endTime, seg.visit, seg.activity);
   }
@@ -326,14 +341,144 @@ function fromRecordsJson(locations: Array<Record<string, unknown>>): RawTimeline
   return records;
 }
 
+/** Seconds of slack around a journey window; classic path offsets are whole minutes. */
+const PATH_TOLERANCE_S = 30;
+/** Upper bound per journey so one long flight or drive cannot bloat a row. */
+export const MAX_PATH_POINTS = 300;
+
+const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
+
+/** Read GPS fixes from one `timelinePath` record (classic minute offsets or ISO `time`). */
+export function pathPointsFromRecord(record: RawTimelineRecord): PathPoint[] {
+  if (!Array.isArray(record.timelinePath)) return [];
+  const baseMs = Date.parse(record.startTime ?? "");
+  const out: PathPoint[] = [];
+  for (const p of record.timelinePath) {
+    const coords = coordsFromLocation(p?.point);
+    if (!coords) continue;
+    let ms = p.time ? Date.parse(p.time) : NaN;
+    if (!Number.isFinite(ms) && p.durationMinutesOffsetFromStartTime != null) {
+      const offset = Number(p.durationMinutesOffsetFromStartTime);
+      if (Number.isFinite(offset) && Number.isFinite(baseMs)) ms = baseMs + offset * 60_000;
+    }
+    if (!Number.isFinite(ms)) continue;
+    out.push([round6(coords[0]), round6(coords[1]), Math.round(ms / 1000)]);
+  }
+  return out;
+}
+
+function capPath(points: PathPoint[], max: number): PathPoint[] {
+  if (points.length <= max) return points;
+  const step = (points.length - 1) / (max - 1);
+  const out: PathPoint[] = [];
+  for (let k = 0; k < max; k++) out.push(points[Math.round(k * step)]);
+  return out;
+}
+
+/**
+ * Give each journey the GPS fixes recorded during its time window.
+ * Fixes inside visits are dropped: they only describe where you stood still.
+ * Returns how many points were attached.
+ */
+export function attachPathPoints(
+  rows: Array<{ start: string; end: string; path: PathPoint[] | null }>,
+  points: PathPoint[],
+): number {
+  if (!points.length || !rows.length) return 0;
+  // Stable sort keeps the in-record order of fixes that share a minute.
+  const sorted = [...points].sort((a, b) => a[2] - b[2]);
+  let attached = 0;
+  for (const row of rows) {
+    const startS = Date.parse(row.start) / 1000 - PATH_TOLERANCE_S;
+    const endS = Date.parse(row.end) / 1000 + PATH_TOLERANCE_S;
+    if (!Number.isFinite(startS) || !Number.isFinite(endS)) continue;
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid][2] < startS) lo = mid + 1;
+      else hi = mid;
+    }
+    const picked: PathPoint[] = [];
+    for (let i = lo; i < sorted.length && sorted[i][2] <= endS; i++) {
+      const p = sorted[i];
+      const prev = picked[picked.length - 1];
+      if (prev && prev[0] === p[0] && prev[1] === p[1]) continue;
+      picked.push(p);
+    }
+    if (!picked.length) continue;
+    row.path = capPath(picked, MAX_PATH_POINTS);
+    attached += row.path.length;
+  }
+  return attached;
+}
+
+/** Fixes further than this from Google's place are treated as a different spot. */
+const VISIT_FIX_MAX_M = 1500;
+
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+};
+
+/**
+ * Pin each stay to where the phone actually was: the median of GPS fixes
+ * recorded during the visit, when at least two sit near Google's place.
+ * Returns how many visits got a position.
+ */
+export function attachVisitFixes(
+  rows: Array<{
+    start: string;
+    end: string;
+    lat: number;
+    lon: number;
+    fixLat: number | null;
+    fixLon: number | null;
+    fixCount: number | null;
+  }>,
+  points: PathPoint[],
+): number {
+  if (!points.length || !rows.length) return 0;
+  const sorted = [...points].sort((a, b) => a[2] - b[2]);
+  let fixed = 0;
+  for (const row of rows) {
+    const startS = Date.parse(row.start) / 1000 - PATH_TOLERANCE_S;
+    const endS = Date.parse(row.end) / 1000 + PATH_TOLERANCE_S;
+    if (!Number.isFinite(startS) || !Number.isFinite(endS)) continue;
+    let lo = 0;
+    let hi = sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (sorted[mid][2] < startS) lo = mid + 1;
+      else hi = mid;
+    }
+    const near: PathPoint[] = [];
+    for (let i = lo; i < sorted.length && sorted[i][2] <= endS; i++) {
+      if (haversineM(row.lat, row.lon, sorted[i][0], sorted[i][1]) <= VISIT_FIX_MAX_M) near.push(sorted[i]);
+    }
+    if (near.length < 2) continue;
+    row.fixLat = round6(median(near.map((p) => p[0])));
+    row.fixLon = round6(median(near.map((p) => p[1])));
+    row.fixCount = near.length;
+    fixed += 1;
+  }
+  return fixed;
+}
+
 function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
   const visitRows: VisitDraft[] = [];
   const activityRows: ActivityDraft[] = [];
+  const pathPoints: PathPoint[] = [];
 
   for (const record of raw) {
     const startTime = record.startTime ?? "";
     const endTime = record.endTime ?? "";
     if (!startTime || !endTime) continue;
+
+    if (record.timelinePath) {
+      for (const p of pathPointsFromRecord(record)) pathPoints.push(p);
+    }
 
     if (record.visit) {
       const top = record.visit.topCandidate ?? {};
@@ -352,6 +497,9 @@ function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
         semanticType: top.semanticType ?? "Unknown",
         placeId: top.placeID ?? null,
         durationMinutes: Math.round(duration * 10) / 10,
+        fixLat: null,
+        fixLon: null,
+        fixCount: null,
       });
     } else if (record.activity) {
       const act = record.activity;
@@ -373,9 +521,13 @@ function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
         mode: mapTransportMode(top.type ?? "unknown"),
         distanceMeters: Number(act.distanceMeters ?? 0),
         durationMinutes: Math.round(duration * 10) / 10,
+        path: null,
       });
     }
   }
+
+  attachPathPoints(activityRows, pathPoints);
+  attachVisitFixes(visitRows, pathPoints);
 
   return { visits: visitRows, activities: activityRows };
 }
@@ -663,6 +815,30 @@ export async function importSourceData(
     activityCount: activityRows.length,
     days,
   };
+}
+
+/**
+ * Keep only one source in a tenant: delete rows from every other source (and
+ * rows with no source), drop the other data_sources, then rebuild aggregates.
+ * Used for the demo tenant so a re-import cannot leave duplicate journeys.
+ */
+export async function pruneTenantToSource(
+  db: Db,
+  opts: { tenant: TenantId; sourceId: string },
+): Promise<{ days: number }> {
+  const { tenant, sourceId } = opts;
+  await db
+    .delete(visits)
+    .where(and(eq(visits.tenant, tenant), or(isNull(visits.sourceId), ne(visits.sourceId, sourceId))));
+  await db
+    .delete(activities)
+    .where(
+      and(eq(activities.tenant, tenant), or(isNull(activities.sourceId), ne(activities.sourceId, sourceId))),
+    );
+  await db
+    .delete(dataSources)
+    .where(and(eq(dataSources.tenant, tenant), ne(dataSources.id, sourceId)));
+  return rebuildTenantAggregates(db, tenant);
 }
 
 /** Delete a source and its rows, then rebuild tenant aggregates. */

@@ -12,6 +12,7 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useSession } from '../../lib/auth';
 import MapView from './Map';
 import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from '../shell/MobilePanel';
+import HotspotDays from './HotspotDays';
 import { Flame, EyeOff, Eye, Star } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { placePath } from '../../lib/nav/paths';
@@ -288,8 +289,23 @@ export default function HotspotsView() {
   const selectedTags = filters.tags;
   const favouritesOnly = filters.fav;
   const rankBy = filters.rank;
+  const spotRaw = params.get('spot');
+  const spot = useMemo(() => {
+    const [lat, lon] = (spotRaw ?? '').split(',').map(Number);
+    return Number.isFinite(lat) && Number.isFinite(lon) && spotRaw ? { lat, lon } : null;
+  }, [spotRaw]);
   const patchFilters = (next: Partial<HotspotsQuery>) => {
-    setParams(serializeHotspotsQuery({ ...filters, ...next }), { replace: true });
+    const out = serializeHotspotsQuery({ ...filters, ...next });
+    if (spotRaw) out.set('spot', spotRaw);
+    setParams(out, { replace: true });
+  };
+  /** Selected hotspot lives in the URL so reloads and back navigation keep it. */
+  const setSpot = (point: { lat: number; lon: number } | null) => {
+    const out = new URLSearchParams(params);
+    if (point) out.set('spot', `${point.lat.toFixed(5)},${point.lon.toFixed(5)}`);
+    else out.delete('spot');
+    setParams(out);
+    if (point) setPanelOpen(true);
   };
   const { data: heatmapPoints, isLoading } = useHeatmap({
     from: from || undefined,
@@ -321,6 +337,12 @@ export default function HotspotsView() {
     () => (heatmapPoints ?? []).map((p) => toArea(p)),
     [heatmapPoints],
   );
+
+  const spotLabel = useMemo(() => {
+    if (!spot) return '';
+    const near = allAreas.find((a) => Math.abs(a.lat - spot.lat) < 2e-4 && Math.abs(a.lon - spot.lon) < 2e-4);
+    return near ? (near.settlement && !near.label.includes(near.settlement) ? `${near.label} (${near.settlement})` : near.label) : `Near ${spot.lat.toFixed(4)}, ${spot.lon.toFixed(4)}`;
+  }, [spot, allAreas]);
 
   const typeOptions = useMemo(() => uniqueTopTypes(allAreas), [allAreas]);
   const tagOptions = useMemo(() => uniqueLabelTags(labelRows), [labelRows]);
@@ -643,6 +665,15 @@ export default function HotspotsView() {
                 </button>
                 {selected && (
                   <div className="ui-enter px-2 pb-2 pt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="mb-2 w-full"
+                      title="List the days you were here, each one tap from Day View"
+                      onClick={() => setSpot({ lat: area.lat, lon: area.lon })}
+                    >
+                      Days I was here
+                    </Button>
                     <AreaDetails
                       area={area}
                       meta={meta}
@@ -668,6 +699,8 @@ export default function HotspotsView() {
         homeWorkPins={homeWorkPins}
         focusTarget={focusTarget}
         sizeSignal={sizeSignal}
+        onHotspotSelect={(p) => setSpot({ lat: p.lat, lon: p.lon })}
+        selectedHotspot={spot}
       />
       <MobilePanelOpenButton
         label="Show hotspots"
@@ -683,7 +716,7 @@ export default function HotspotsView() {
         onLayoutChange={bumpSize}
       >
         {listHeader}
-        {listBody}
+        {spot ? <HotspotDays point={spot} label={spotLabel} onBack={() => setSpot(null)} /> : listBody}
       </MobilePanel>
     </div>
   );
@@ -693,7 +726,7 @@ export default function HotspotsView() {
       <div className="flex h-full">
         <div className="w-80 shrink-0 overflow-y-auto border-r border-border bg-surface">
           {listHeader}
-          {listBody}
+          {spot ? <HotspotDays point={spot} label={spotLabel} onBack={() => setSpot(null)} /> : listBody}
         </div>
         <div className="relative min-h-0 flex-1">
           <MapView
@@ -703,6 +736,8 @@ export default function HotspotsView() {
             homeWorkPins={homeWorkPins}
             focusTarget={focusTarget}
             sizeSignal={sizeSignal}
+            onHotspotSelect={(p) => setSpot({ lat: p.lat, lon: p.lon })}
+            selectedHotspot={spot}
           />
         </div>
       </div>

@@ -7,11 +7,12 @@ import {
   useRef,
   useState,
 } from 'react';
-import * as maplibregl from 'maplibre-gl';
+import { maplibregl } from '../../lib/map/maplibre';
 import type { GeoJSONSource, Map as MLMap, Marker, PositionAnchor, StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type { Visit, Activity, HeatmapPoint, Connector, MapFocusTarget, HotspotLabel } from '../../types';
-import { MODE_LABELS } from '../../types';
+import type { Visit, Activity, HeatmapPoint, Connector, MapFocusTarget, HotspotLabel, LineVariant, RouteLine } from '../../types';
+import { MODE_COLORS, MODE_LABELS } from '../../types';
+import { withLineVariant } from '../../lib/map/lineVariant';
 import { formatTime, formatDistance, formatDuration } from '../../utils/format';
 import { useTheme } from '../../lib/theme';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -32,7 +33,7 @@ import {
   type BasemapId,
 } from '../../lib/map/mapStyle';
 import { dashClass, extendBounds, getArrowPoints, lineCoords, toLngLat } from '../../lib/map/mapGeometry';
-import { activityPopupHtml, connectorPopupHtml, getJourneyColor, visitPopupHtml } from '../../lib/map/mapPopups';
+import { activityPopupHtml, connectorPopupHtml, getJourneyColor, routeLinePopupHtml, visitPopupHtml } from '../../lib/map/mapPopups';
 import { pathLengthMeters } from '../../lib/map/mapMeasure';
 import { spiderfyOffsets } from '../../lib/map/mapSpiderfy';
 import { lookaroundLinksHtml } from '../../lib/map/mapLinks';
@@ -53,6 +54,20 @@ type FC = {
 };
 
 const emptyFc = (): FC => ({ type: 'FeatureCollection', features: [] });
+
+// Stable defaults: a fresh `[]` per render would rebuild syncOverlays every
+// render and redraw every source and marker (every frame during playback).
+const NO_VISITS: Visit[] = [];
+const NO_ACTIVITIES: Activity[] = [];
+const NO_CONNECTORS: Connector[] = [];
+const NO_HOTSPOT_LABELS: HotspotLabel[] = [];
+const NO_AREA_MARKERS: { lat: number; lon: number; label: string; visits: number }[] = [];
+const NO_CORRIDORS: { from: [number, number]; to: [number, number]; count: number }[] = [];
+const NO_PINS: { kind: 'home' | 'work'; lat: number; lon: number; label: string }[] = [];
+const NO_ROUTE_LINES: RouteLine[] = [];
+const NO_MODES: string[] = [];
+
+
 
 export type HeatmapLayerSpec = {
   id: string;
@@ -82,6 +97,12 @@ type PublicMapConfig = {
 function cssToken(name: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
+/** MapLibre paint (and `${hex}22` suffixes) need a literal colour, not `var(--token)`. */
+function literalColor(value: string): string {
+  const token = /^var\((--[\w-]+)\)$/.exec(value.trim());
+  return token ? cssToken(token[1], cssToken('--accent', '#58a6ff')) : value;
 }
 
 function heatColorStops(token?: string | null): (number | string)[] {
@@ -126,20 +147,28 @@ interface MapProps {
   playhead?: { lat: number; lon: number } | null;
   followPlayhead?: boolean;
   dayDate?: string;
+  /** Which line to draw per journey: best (GPS road route), recorded GPS, or OSRM predicted. */
+  lineVariant?: LineVariant;
+  /** Period view: many journeys as recorded, coloured by mode. */
+  routeLines?: RouteLine[];
+  hiddenModes?: string[];
+  /** Hotspots: called when a hotspot cell is tapped (zoomed in). */
+  onHotspotSelect?: (point: HeatmapPoint) => void;
+  selectedHotspot?: { lat: number; lon: number } | null;
 }
 
 const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   {
-    visits = [],
-    activities = [],
-    connectors = [],
+    visits = NO_VISITS,
+    activities: rawActivities = NO_ACTIVITIES,
+    connectors = NO_CONNECTORS,
     heatmapPoints,
     heatmapLayers,
     sourceColors,
-    hotspotLabels = [],
-    areaMarkers = [],
-    corridorLines = [],
-    homeWorkPins = [],
+    hotspotLabels = NO_HOTSPOT_LABELS,
+    areaMarkers = NO_AREA_MARKERS,
+    corridorLines = NO_CORRIDORS,
+    homeWorkPins = NO_PINS,
     compact = false,
     center = [20, 0],
     zoom = 2,
@@ -148,9 +177,53 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     playhead = null,
     followPlayhead = false,
     dayDate,
+    lineVariant = 'best',
+    routeLines = NO_ROUTE_LINES,
+    hiddenModes = NO_MODES,
+    onHotspotSelect,
+    selectedHotspot = null,
   },
   ref,
 ) {
+  const activities = useMemo(
+    () => (lineVariant === 'best' ? rawActivities : rawActivities.map((a) => withLineVariant(a, lineVariant))),
+    [rawActivities, lineVariant],
+  );
+  const onHotspotSelectRef = useRef(onHotspotSelect);
+  onHotspotSelectRef.current = onHotspotSelect;
+  const hitPointsRef = useRef<HeatmapPoint[]>([]);
+  hitPointsRef.current = heatmapPoints ?? heatmapLayers?.flatMap((l) => l.points) ?? [];
+  // Fit to the busiest region (1-degree cell with most points and its neighbours):
+  // trips abroad and flights stay drawn without shrinking everyday journeys to a dot.
+  const routeLineCorners = useMemo((): [number, number][] => {
+    const grounded = routeLines.filter((l) => l.mode !== 'flying');
+    const fitLines = grounded.length ? grounded : routeLines;
+    const counts = new Map<string, number>();
+    const cellOf = (lat: number, lon: number) => `${Math.floor(lat)},${Math.floor(lon)}`;
+    for (const l of fitLines) for (const [lat, lon] of l.coords) counts.set(cellOf(lat, lon), (counts.get(cellOf(lat, lon)) ?? 0) + 1);
+    let best = '';
+    let bestN = 0;
+    for (const [cell, n] of counts) if (n > bestN) [best, bestN] = [cell, n];
+    if (!best) return [];
+    const [bl, bo] = best.split(',').map(Number);
+    let s = 90;
+    let w = 180;
+    let n = -90;
+    let e = -180;
+    for (const l of fitLines) {
+      for (const [lat, lon] of l.coords) {
+        if (Math.abs(Math.floor(lat) - bl) > 1 || Math.abs(Math.floor(lon) - bo) > 1) continue;
+        if (lat < s) s = lat;
+        if (lat > n) n = lat;
+        if (lon < w) w = lon;
+        if (lon > e) e = lon;
+      }
+    }
+    return [
+      [s, w],
+      [n, e],
+    ];
+  }, [routeLines]);
   const hostRef = useRef<HTMLDivElement>(null);
   const miniRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
@@ -198,7 +271,10 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   const mapAttr = mapConfig?.mapAttr || '&copy; OSM &copy; CARTO';
   const styleDark = mapConfig?.mapStyleDark || null;
   const styleLight = mapConfig?.mapStyleLight || null;
-  const vectorUrl = basemap === 'auto' ? (theme === 'dark' ? styleDark : styleLight) : null;
+  // Raster tiles a user saved in Settings beat the (default) vector style.
+  const userTiles = theme === 'dark' ? mapTileDarkUrl : mapTileLightUrl;
+  const vectorUrl =
+    basemap === 'auto' && !userTiles ? (theme === 'dark' ? styleDark : styleLight) : null;
   const hasVectorStyle = Boolean(vectorUrl);
 
   const styleSpec = useMemo((): string | StyleSpecification => {
@@ -244,8 +320,9 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       coords.push(c.to);
     });
     homeWorkPins.forEach((p) => coords.push([p.lat, p.lon]));
+    routeLineCorners.forEach((c) => coords.push(c));
     return coords;
-  }, [visits, activities, connectors, heatmapPoints, heatmapLayers, areaMarkers, corridorLines, homeWorkPins]);
+  }, [visits, activities, connectors, heatmapPoints, heatmapLayers, areaMarkers, corridorLines, homeWorkPins, routeLineCorners]);
 
   const clearMarkers = (list: Marker[]) => {
     list.forEach((m) => m.remove());
@@ -295,9 +372,9 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       const drive = cssToken('--drive', '#f778ba');
       const muted = cssToken('--text-muted', '#8b949e');
       const colorForActivity = (a: Activity, i: number) =>
-        (a.source_id && sourceColors?.[a.source_id]) || getJourneyColor(i, totalJourneys);
+        literalColor((a.source_id && sourceColors?.[a.source_id]) || getJourneyColor(i, totalJourneys));
       const colorForVisit = (v: Visit) =>
-        (v.source_id && sourceColors?.[v.source_id]) || visitColor;
+        literalColor((v.source_id && sourceColors?.[v.source_id]) || visitColor);
 
       const heatSpecs: Array<{ id: string; points: HeatmapPoint[]; token?: string | null }> =
         heatmapOn && heatmapLayers && heatmapLayers.length > 1
@@ -430,6 +507,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           properties: {
             dash: dashClass(a.mode),
             color,
+            // Lines not backed by recorded GPS points are guesses: draw them fainter.
+            estimated: Boolean(a.route_source && !a.route_source.startsWith('gps')),
             html: activityPopupHtml(a, i, totalJourneys, color, unit),
           },
           geometry: { type: 'LineString' as const, coordinates: lineCoords(positions) },
@@ -455,11 +534,93 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           paint: {
             'line-color': ['get', 'color'],
             'line-width': spec.dash === 'solid' ? 4 : 3,
-            'line-opacity': 0.85,
+            'line-opacity': ['case', ['get', 'estimated'], 0.5, 0.85],
             ...(spec.dasharray ? { 'line-dasharray': spec.dasharray } : {}),
           },
         });
       }
+
+      const modeColor: unknown[] = ['match', ['get', 'mode']];
+      for (const [mode, hex] of Object.entries(MODE_COLORS)) modeColor.push(mode, literalColor(hex));
+      modeColor.push(literalColor(MODE_COLORS.unknown ?? muted));
+      upsertSource(map, 'loc-period', {
+        type: 'FeatureCollection',
+        features: routeLines.map((l, i) => ({
+          type: 'Feature' as const,
+          id: i,
+          properties: { mode: l.mode, recorded: l.recorded, html: routeLinePopupHtml(l, unit) },
+          geometry: { type: 'LineString' as const, coordinates: lineCoords(l.coords) },
+        })),
+      });
+      const visibleModes = ['!', ['in', ['get', 'mode'], ['literal', hiddenModes]]];
+      for (const spec of [
+        { id: 'loc-period', recorded: true },
+        { id: 'loc-period-guess', recorded: false },
+      ]) {
+        ensureLayer(map, {
+          id: spec.id,
+          type: 'line',
+          source: 'loc-period',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: {
+            'line-color': modeColor,
+            'line-width': ['interpolate', ['linear'], ['zoom'], 3, 1, 10, 2, 15, 3.5],
+            'line-opacity': spec.recorded ? 0.6 : 0.4,
+            ...(spec.recorded ? {} : { 'line-dasharray': [2, 2] }),
+          },
+        });
+        map.setFilter(spec.id, ['all', ['==', ['get', 'recorded'], spec.recorded], visibleModes] as never);
+      }
+
+      // Tappable hotspot cells once zoomed in (the heatmap itself is not clickable).
+      upsertSource(map, 'loc-heat-hit', {
+        type: 'FeatureCollection',
+        features: onHotspotSelectRef.current
+          ? hitPointsRef.current.map((p, i) => ({
+              type: 'Feature' as const,
+              id: i,
+              properties: { i, count: p.count },
+              geometry: { type: 'Point' as const, coordinates: toLngLat(p.lat, p.lon) },
+            }))
+          : [],
+      });
+      ensureLayer(map, {
+        id: 'loc-heat-hit',
+        type: 'circle',
+        source: 'loc-heat-hit',
+        minzoom: 11,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 5, 16, 12],
+          'circle-color': accent,
+          'circle-opacity': 0.25,
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': accent,
+          'circle-stroke-opacity': 0.8,
+        },
+      });
+      upsertSource(map, 'loc-heat-selected', {
+        type: 'FeatureCollection',
+        features: selectedHotspot
+          ? [
+              {
+                type: 'Feature' as const,
+                properties: {},
+                geometry: { type: 'Point' as const, coordinates: toLngLat(selectedHotspot.lat, selectedHotspot.lon) },
+              },
+            ]
+          : [],
+      });
+      ensureLayer(map, {
+        id: 'loc-heat-selected',
+        type: 'circle',
+        source: 'loc-heat-selected',
+        paint: {
+          'circle-radius': 14,
+          'circle-color': 'rgba(0,0,0,0)',
+          'circle-stroke-width': 3,
+          'circle-stroke-color': onAccent,
+        },
+      });
 
       visitPopupById.current.clear();
       const visitFeatures = visits.map((v, i) => {
@@ -495,6 +656,9 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         filter: ['has', 'point_count'],
         layout: {
           'text-field': ['get', 'point_count_abbreviated'],
+          // MapLibre's default Open Sans / Arial Unicode stack 404s on OpenFreeMap
+          // (and most OpenMapTiles glyph servers); Noto Sans ships with them.
+          'text-font': ['Noto Sans Regular'],
           'text-size': 11,
         },
         paint: { 'text-color': onAccent },
@@ -665,6 +829,9 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       corridorLines,
       connectors,
       dayDate,
+      routeLines,
+      hiddenModes,
+      selectedHotspot,
       heatmapOn,
       heatmapPoints,
       heatmapLayers,
@@ -713,6 +880,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         'loc-act-rail',
         'loc-act-fly',
         'loc-act-unknown',
+        'loc-period',
+        'loc-period-guess',
       ];
       for (const id of layers) {
         map.on('click', id, openFrom);
@@ -723,6 +892,18 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           map.getCanvas().style.cursor = '';
         });
       }
+      map.on('click', 'loc-heat-hit', (e) => {
+        if (measureRef.current) return;
+        const i = e.features?.[0]?.properties?.i as number | undefined;
+        const pts = hitPointsRef.current;
+        if (i != null && pts[i]) onHotspotSelectRef.current?.(pts[i]);
+      });
+      map.on('mouseenter', 'loc-heat-hit', () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', 'loc-heat-hit', () => {
+        map.getCanvas().style.cursor = '';
+      });
       map.on('click', 'loc-visits-unclustered', (e) => {
         if (measureRef.current) return;
         const id = e.features?.[0]?.properties?.id as string | undefined;
@@ -916,17 +1097,20 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       playheadMarkerRef.current = null;
       return;
     }
+    const lngLat = toLngLat(playhead.lat, playhead.lon);
     if (!playheadMarkerRef.current) {
+      // MapLibre reads the marker position inside addTo(), so set it first.
       playheadMarkerRef.current = htmlMarker(
         `<div style="width:16px;height:16px;border-radius:50%;background:var(--accent);border:2px solid var(--on-accent);box-shadow:0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent)"></div>`,
-      );
+      ).setLngLat(lngLat);
       playheadMarkerRef.current.addTo(map);
+    } else {
+      playheadMarkerRef.current.setLngLat(lngLat);
     }
-    playheadMarkerRef.current.setLngLat(toLngLat(playhead.lat, playhead.lon));
     if (followPlayhead) {
       const reduce = reducedMotion();
-      if (reduce) map.jumpTo({ center: toLngLat(playhead.lat, playhead.lon) });
-      else map.easeTo({ center: toLngLat(playhead.lat, playhead.lon), duration: 200 });
+      if (reduce) map.jumpTo({ center: lngLat });
+      else map.easeTo({ center: lngLat, duration: 200 });
     }
   }, [playhead, followPlayhead]);
 

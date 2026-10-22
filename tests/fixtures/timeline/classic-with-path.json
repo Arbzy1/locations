@@ -1,0 +1,40 @@
+[
+  {
+    "startTime": "2024-06-01T08:00:00.000Z",
+    "endTime": "2024-06-01T09:00:00.000Z",
+    "visit": {
+      "topCandidate": { "placeLocation": "geo:40.712800,-74.006000", "semanticType": "Home" }
+    }
+  },
+  {
+    "startTime": "2024-06-01T09:00:00.000Z",
+    "endTime": "2024-06-01T09:30:00.000Z",
+    "activity": {
+      "start": "geo:40.712800,-74.006000",
+      "end": "geo:40.758000,-73.985500",
+      "distanceMeters": "5600.000000",
+      "topCandidate": { "type": "in passenger vehicle" }
+    }
+  },
+  {
+    "startTime": "2024-06-01T09:30:00.000Z",
+    "endTime": "2024-06-01T11:00:00.000Z",
+    "visit": {
+      "topCandidate": { "placeLocation": "geo:40.758000,-73.985500", "semanticType": "Work" }
+    }
+  },
+  {
+    "startTime": "2024-06-01T08:00:00.000Z",
+    "endTime": "2024-06-01T10:00:00.000Z",
+    "timelinePath": [
+      { "point": "geo:40.712800,-74.006000", "durationMinutesOffsetFromStartTime": "30" },
+      { "point": "geo:40.720000,-74.001000", "durationMinutesOffsetFromStartTime": "60" },
+      { "point": "geo:40.730000,-73.995000", "durationMinutesOffsetFromStartTime": "70" },
+      { "point": "geo:40.730000,-73.995000", "durationMinutesOffsetFromStartTime": "70" },
+      { "point": "geo:40.740000,-73.992000", "durationMinutesOffsetFromStartTime": "80" },
+      { "point": "geo:40.745000,-73.990000", "durationMinutesOffsetFromStartTime": "80" },
+      { "point": "geo:40.757000,-73.986000", "durationMinutesOffsetFromStartTime": "90" },
+      { "point": "geo:40.758000,-73.985500", "durationMinutesOffsetFromStartTime": "100" }
+    ]
+  }
+]

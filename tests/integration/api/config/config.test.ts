@@ -28,7 +28,28 @@ describe("GET /api/config", () => {
     expect(body.flags).toEqual({ globe: true, demoTour: true, landing: true });
     expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(typeof body.mapTileDark).toBe("string");
-    expect(body.mapStyleDark).toBeNull();
+    expect(body.mapStyleDark).toBe("https://tiles.openfreemap.org/styles/dark");
+    expect(body.mapStyleLight).toBe("https://tiles.openfreemap.org/styles/positron");
+  });
+
+  it("lets env styles or env raster tiles replace the default vector style", async () => {
+    const styled = await requestApp(
+      app,
+      "/api/config",
+      {},
+      testEnv({ MAP_STYLE_DARK_URL: "https://styles.example.com/dark.json" }),
+    );
+    const styledBody = (await styled.json()) as { mapStyleDark: string | null };
+    expect(styledBody.mapStyleDark).toBe("https://styles.example.com/dark.json");
+
+    const raster = await requestApp(
+      app,
+      "/api/config",
+      {},
+      testEnv({ MAP_TILE_LIGHT_URL: "https://tiles.example.com/{z}/{x}/{y}.png" }),
+    );
+    const rasterBody = (await raster.json()) as { mapStyleLight: string | null };
+    expect(rasterBody.mapStyleLight).toBeNull();
   });
 
   it("exposes custom tile hosts when configured", async () => {

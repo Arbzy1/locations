@@ -17,6 +17,9 @@ export type TenantId = string;
 
 export type ImportJobStatus = "pending" | "processing" | "ready" | "error";
 
+/** Recorded GPS fix along a journey: `[lat, lon, unixSeconds]` from Timeline `timelinePath`. */
+export type PathPoint = [number, number, number];
+
 export type ExportJobStatus = ImportJobStatus;
 
 export type SubscriptionStatus =
@@ -183,6 +186,10 @@ export const visits = pgTable(
     semanticType: text("semantic_type").notNull(),
     placeId: text("place_id"),
     durationMinutes: real("duration_minutes").notNull(),
+    /** Median of the GPS fixes recorded during the stay (Timeline timelinePath). */
+    fixLat: real("fix_lat"),
+    fixLon: real("fix_lon"),
+    fixCount: integer("fix_count"),
   },
   (t) => [
     index("visits_tenant_date_idx").on(t.tenant, t.date),
@@ -208,6 +215,7 @@ export const activities = pgTable(
     mode: text("mode").notNull(),
     distanceMeters: real("distance_meters").notNull(),
     durationMinutes: real("duration_minutes").notNull(),
+    path: jsonb("path").$type<PathPoint[]>(),
   },
   (t) => [
     index("activities_tenant_date_idx").on(t.tenant, t.date),
