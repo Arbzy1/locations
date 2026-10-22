@@ -25,14 +25,22 @@ jobs:
 
   rls:
     runs-on: ubuntu-latest
-    if: ${{ secrets.DATABASE_URL != '' }}
+    # The secrets context is not allowed in a job-level `if` (GitHub rejects the whole
+    # file), so read it into env and gate the steps instead.
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
+      - name: Skip without a test database
+        if: ${{ env.DATABASE_URL == '' }}
+        run: echo "DATABASE_URL secret is not set; skipping live RLS tests."
       - uses: actions/checkout@v4
+        if: ${{ env.DATABASE_URL != '' }}
       - uses: actions/setup-node@v4
+        if: ${{ env.DATABASE_URL != '' }}
         with:
           node-version: "22"
           cache: npm
       - run: npm ci
+        if: ${{ env.DATABASE_URL != '' }}
       - run: npm run test:rls
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        if: ${{ env.DATABASE_URL != '' }}
