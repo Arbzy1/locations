@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, gte, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, gte, isNull, lte, ne, or, sql } from "drizzle-orm";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 import * as schema from "./schema.js";
@@ -700,10 +700,11 @@ export async function rebuildTenantAggregates(
     .select()
     .from(visits)
     .where(eq(visits.tenant, tenant));
-  const activitySelect = await db
-    .select()
-    .from(activities)
-    .where(eq(activities.tenant, tenant));
+  // GPS paths are most of the table's bytes and no aggregate reads them.
+  const { path: _path, ...activityColumns } = getTableColumns(activities);
+  const activitySelect = (
+    await db.select(activityColumns).from(activities).where(eq(activities.tenant, tenant))
+  ).map((row) => ({ ...row, path: null }));
 
   const dayStatRows = buildDayStatRows(tenant, visitSelect, activitySelect);
 

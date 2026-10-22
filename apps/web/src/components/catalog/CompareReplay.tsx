@@ -6,8 +6,11 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { EjectField } from '../ui/eject-field';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
-import { useDayData, useDays } from '../../hooks/useApi';
-import type { Visit } from '../../types';
+import { useDayData, useDays, type DayMissing } from '../../hooks/useApi';
+import type { DayData, Visit } from '../../types';
+
+/** The loaded day, or undefined while loading or when the date has no data. */
+const loadedDay = (d: DayData | DayMissing | undefined) => (d && 'visits' in d ? d : undefined);
 
 export function ComparePage() {
   const { data: days = [] } = useDays();
@@ -30,7 +33,7 @@ export function ComparePage() {
   };
   const pane = (which: 'a' | 'b') => {
     const date = which === 'a' ? a : b;
-    const data = which === 'a' ? dayA.data : dayB.data;
+    const data = loadedDay(which === 'a' ? dayA.data : dayB.data);
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-2">
         <EjectField label={which === 'a' ? 'First date' : 'Second date'} htmlFor={`compare-${which}`}>
@@ -73,7 +76,7 @@ export function ReplayPage() {
   const { data: days = [] } = useDays();
   const [params, setParams] = useSearchParams();
   const date = params.get('date') || days[days.length - 1]?.date || '';
-  const { data } = useDayData(date);
+  const data = loadedDay(useDayData(date).data);
   const visits = data?.visits ?? [];
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
