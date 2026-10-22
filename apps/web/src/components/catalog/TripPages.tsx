@@ -165,9 +165,11 @@ export function CommutePage() {
     return (
       <CatalogPage title="Commute" description="Weekday home to work loops from overnight and weekday guesses.">
         <p className="text-sm text-text-muted">
-          {hw?.home && hw?.work
-            ? 'Commute stats appear after the next import.'
-            : 'Home or work could not be guessed yet.'}
+          {hw?.home && hw?.work && hw.home.cluster === hw.work.cluster
+            ? 'Home and work are in the same area, so there is no commute between areas to show.'
+            : hw?.home && hw?.work
+              ? 'Commute stats appear after the next import.'
+              : 'Home or work could not be guessed yet.'}
         </p>
       </CatalogPage>
     );
