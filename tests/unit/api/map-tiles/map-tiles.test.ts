@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   cspSourcesForHosts,
   extraCspHostsFromEnv,
+  mapStyleUrls,
   parseCustomTileHosts,
   sanitizeBookmarks,
   validateTileTemplate,
@@ -42,6 +43,20 @@ describe("map tiles allowlist", () => {
     expect(hosts).toContain("tiles.example.com");
     expect(hosts).toContain("api.maptiler.com");
     expect(cspSourcesForHosts(hosts)).toContain("https://tiles.example.com");
+  });
+
+  it("allows the default OpenFreeMap host only while its style is in use", () => {
+    expect(extraCspHostsFromEnv({})).toEqual(["tiles.openfreemap.org"]);
+    expect(
+      extraCspHostsFromEnv({
+        MAP_STYLE_DARK_URL: "https://styles.example.com/dark.json",
+        MAP_STYLE_LIGHT_URL: "https://styles.example.com/light.json",
+      }),
+    ).toEqual(["styles.example.com"]);
+    expect(mapStyleUrls({ MAP_TILE_DARK_URL: "https://tiles.example.com/{z}/{x}/{y}.png" })).toEqual({
+      dark: null,
+      light: "https://tiles.openfreemap.org/styles/positron",
+    });
   });
 
   it("caps bookmarks and rejects invalid cameras", () => {

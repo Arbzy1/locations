@@ -94,6 +94,12 @@ function cssToken(name: string, fallback: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 }
 
+/** MapLibre paint (and `${hex}22` suffixes) need a literal colour, not `var(--token)`. */
+function literalColor(value: string): string {
+  const token = /^var\((--[\w-]+)\)$/.exec(value.trim());
+  return token ? cssToken(token[1], cssToken('--accent', '#58a6ff')) : value;
+}
+
 function heatColorStops(token?: string | null): (number | string)[] {
   if (!token) return HEAT_COLORS.flat();
   const color = cssToken(`--${token}`, cssToken('--accent', '#58a6ff'));
@@ -208,7 +214,10 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   const mapAttr = mapConfig?.mapAttr || '&copy; OSM &copy; CARTO';
   const styleDark = mapConfig?.mapStyleDark || null;
   const styleLight = mapConfig?.mapStyleLight || null;
-  const vectorUrl = basemap === 'auto' ? (theme === 'dark' ? styleDark : styleLight) : null;
+  // Raster tiles a user saved in Settings beat the (default) vector style.
+  const userTiles = theme === 'dark' ? mapTileDarkUrl : mapTileLightUrl;
+  const vectorUrl =
+    basemap === 'auto' && !userTiles ? (theme === 'dark' ? styleDark : styleLight) : null;
   const hasVectorStyle = Boolean(vectorUrl);
 
   const styleSpec = useMemo((): string | StyleSpecification => {
@@ -305,9 +314,9 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       const drive = cssToken('--drive', '#f778ba');
       const muted = cssToken('--text-muted', '#8b949e');
       const colorForActivity = (a: Activity, i: number) =>
-        (a.source_id && sourceColors?.[a.source_id]) || getJourneyColor(i, totalJourneys);
+        literalColor((a.source_id && sourceColors?.[a.source_id]) || getJourneyColor(i, totalJourneys));
       const colorForVisit = (v: Visit) =>
-        (v.source_id && sourceColors?.[v.source_id]) || visitColor;
+        literalColor((v.source_id && sourceColors?.[v.source_id]) || visitColor);
 
       const heatSpecs: Array<{ id: string; points: HeatmapPoint[]; token?: string | null }> =
         heatmapOn && heatmapLayers && heatmapLayers.length > 1
