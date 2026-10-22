@@ -1,4 +1,5 @@
 import { ADMIN_ROUTE_CATALOG } from "./admin-route-catalog";
+import { BRIM_ROUTE_CATALOG } from "./brim-route-catalog";
 
 export type RouteAuth = "public" | "session" | "webhook" | "authHandler";
 export type DemoPolicy = "allow" | "denyWrite";
@@ -91,6 +92,7 @@ export const API_ROUTE_CATALOG: ApiRoute[] = [
   { method: "DELETE", path: "/api/chapters/:id", samplePath: "/api/chapters/other-tenant-id", auth: "session", demo: "denyWrite", idScope: "tenantRow", rateLimited: false },
   { method: "GET", path: "/api/import/jobs", samplePath: "/api/import/jobs", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
   ...ADMIN_ROUTE_CATALOG,
+  ...BRIM_ROUTE_CATALOG,
   ...ANALYTICS_LOOP_KEYS.map((key) => analytics(`/api/analytics/${key}`)),
   { method: "PATCH", path: "/api/account/settings", samplePath: "/api/account/settings", auth: "session", demo: "denyWrite", idScope: "none", rateLimited: false },
   { method: "GET", path: "/api/account/export", samplePath: "/api/account/export", auth: "session", demo: "allow", idScope: "none", rateLimited: false },

@@ -1,0 +1,52 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "bradford-caz",
+    "name": "Bradford Clean Air Zone",
+    "authority": "City of Bradford Metropolitan District Council",
+    "kind": "caz",
+    "caz_class": "C",
+    "charge_pence": 900,
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true,
+      "exemptDates": [
+        "12-25"
+      ]
+    },
+    "source_url": "https://www.bradford.gov.uk/breathe-better-bradford/clean-air-zone/",
+    "verified_on": "2026-08-16",
+    "operator_url": "https://www.bradford.gov.uk/breathe-better-bradford/clean-air-zone/",
+    "dataset_version": "2026-08-16"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -1.77,
+            53.785
+          ],
+          [
+            -1.735,
+            53.785
+          ],
+          [
+            -1.735,
+            53.805
+          ],
+          [
+            -1.77,
+            53.805
+          ],
+          [
+            -1.77,
+            53.785
+          ]
+        ]
+      ]
+    ]
+  }
+}

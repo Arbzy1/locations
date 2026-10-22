@@ -1,4 +1,4 @@
-/** Tenant tables that must FORCE RLS. Keep in sync with packages/db/src/schema.ts. */
+/** Tenant tables that must FORCE RLS. Keep in sync with packages/db/src/schema.ts and brim-schema.ts. */
 export const TENANT_TABLES = [
   "visits",
   "activities",
@@ -12,6 +12,13 @@ export const TENANT_TABLES = [
   "subscriptions",
   "named_trips",
   "life_chapters",
+  "brim_vehicles",
+  "brim_tariffs",
+  "brim_calibrations",
+  "brim_fill_ups",
+  "brim_journeys",
+  "brim_settings",
+  "brim_saved_places",
 ] as const;
 
 export type TenantTable = (typeof TENANT_TABLES)[number];

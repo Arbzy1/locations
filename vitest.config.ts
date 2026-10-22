@@ -8,6 +8,7 @@ const alias = {
   "@locations/db": path.resolve(root, "packages/db/src/index.ts"),
   "@locations/api": path.resolve(root, "apps/api/src"),
   "@locations/web": path.resolve(root, "apps/web/src"),
+  "@locations/brim": path.resolve(root, "packages/brim/src"),
   "@tests": path.resolve(root, "tests"),
 };
 

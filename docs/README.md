@@ -10,6 +10,7 @@ Index of product, architecture, security, legal, and engineering docs. Agent con
 - [Onboarding](product/onboarding.md)
 - [Takeout import](product/takeout-import.md)
 - [Transactional email](product/email.md)
+- [Journey cost](product/journey-cost.md)
 
 ## Architecture
 
@@ -18,6 +19,7 @@ Index of product, architecture, security, legal, and engineering docs. Agent con
 - [Import pipeline](architecture/import-pipeline.md)
 - [Maps and routing](architecture/maps-and-routing.md)
 - [Auth and billing](architecture/auth-and-billing.md)
+- [Journey cost](architecture/journey-cost.md)
 
 ## Security
 

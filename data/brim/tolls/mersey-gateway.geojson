@@ -1,0 +1,55 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "mersey-gateway",
+    "name": "Mersey Gateway",
+    "authority": "Merseyflow",
+    "kind": "toll",
+    "charge_pence_by_class": {
+      "car": 200,
+      "van": 400,
+      "motorcycle": 100
+    },
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true,
+      "exemptDates": [
+        "12-25"
+      ]
+    },
+    "source_url": "https://www.merseyflow.co.uk/",
+    "verified_on": "2026-08-16",
+    "operator_url": "https://www.merseyflow.co.uk/",
+    "dataset_version": "2026-08-16"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -2.745,
+            53.335
+          ],
+          [
+            -2.715,
+            53.335
+          ],
+          [
+            -2.715,
+            53.355
+          ],
+          [
+            -2.745,
+            53.355
+          ],
+          [
+            -2.745,
+            53.335
+          ]
+        ]
+      ]
+    ]
+  }
+}

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Journey cost (formerly the standalone Brim app) is now a Locations tab at `/journey-cost`: UK trip cost for petrol, diesel, hybrid, and EV cars, with tolls, clean-air zones, the cheapest forecourt along the route, a garage with brim-to-brim calibration, saved journeys, and the HMRC mileage tally. It uses your Locations account, works before any Timeline import, and adds a Journey cost section to Settings. Data is tenant-scoped under FORCE RLS and wiped with the account. Demo can estimate but not save.
+
 ## 0.0.1
 
 Colour moods in Settings, Display: 30 named palettes (light and dark each) on top of the existing theme toggle. Stored in `locations-mood`. Map tiles still follow light and dark.

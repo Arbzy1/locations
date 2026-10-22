@@ -1,0 +1,78 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "bristol-caz",
+    "name": "Bristol Clean Air Zone",
+    "authority": "Bristol City Council",
+    "kind": "caz",
+    "caz_class": "D",
+    "charge_pence": 900,
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "windows": [
+        {
+          "days": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "start": "07:00",
+          "end": "15:00"
+        }
+      ],
+      "exemptDates": [
+        "12-25",
+        "2026-01-01",
+        "2026-04-03",
+        "2026-04-06",
+        "2026-05-04",
+        "2026-05-25",
+        "2026-08-31",
+        "2026-12-28",
+        "2027-01-01"
+      ],
+      "exemptRanges": [
+        {
+          "start": "12-24",
+          "end": "01-01"
+        }
+      ]
+    },
+    "source_url": "https://www.bristol.gov.uk/residents/streets-travel/bristol-clean-air-zone",
+    "verified_on": "2026-08-16",
+    "operator_url": "https://www.bristol.gov.uk/residents/streets-travel/bristol-clean-air-zone",
+    "dataset_version": "2026-08-16"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -2.605,
+            51.442
+          ],
+          [
+            -2.56,
+            51.442
+          ],
+          [
+            -2.56,
+            51.465
+          ],
+          [
+            -2.605,
+            51.465
+          ],
+          [
+            -2.605,
+            51.442
+          ]
+        ]
+      ]
+    ]
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "dart-charge",
+    "name": "Dart Charge",
+    "authority": "National Highways",
+    "kind": "toll",
+    "charge_pence_by_class": {
+      "car": 250,
+      "van": 300,
+      "motorcycle": 250
+    },
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "windows": [
+        {
+          "days": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "start": "06:00",
+          "end": "22:00"
+        }
+      ]
+    },
+    "source_url": "https://www.gov.uk/dart-charge",
+    "verified_on": "2026-08-16",
+    "operator_url": "https://www.gov.uk/dart-charge",
+    "dataset_version": "2026-08-16"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            0.23,
+            51.455
+          ],
+          [
+            0.29,
+            51.455
+          ],
+          [
+            0.29,
+            51.478
+          ],
+          [
+            0.23,
+            51.478
+          ],
+          [
+            0.23,
+            51.455
+          ]
+        ]
+      ]
+    ]
+  }
+}

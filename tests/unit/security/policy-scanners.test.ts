@@ -122,7 +122,9 @@ describe("policy scanners", { timeout: 20_000 }, () => {
 
 describe("tenant table catalog", () => {
   it("lists every schema table with a tenant column", () => {
-    const schema = readFileSync(join(root, "packages/db/src/schema.ts"), "utf8");
+    const schema = ["schema.ts", "brim-schema.ts"]
+      .map((file) => readFileSync(join(root, "packages/db/src", file), "utf8"))
+      .join("\n");
     const fromSchema = tenantTablesFromSchema(schema);
     expect(fromSchema).toEqual([...TENANT_TABLES].sort());
   });

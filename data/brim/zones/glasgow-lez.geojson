@@ -1,0 +1,50 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "glasgow-lez",
+    "name": "Glasgow Low Emission Zone",
+    "authority": "Glasgow City Council",
+    "kind": "lez",
+    "is_restriction": true,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true,
+      "exemptDates": [
+        "12-25"
+      ]
+    },
+    "source_url": "https://www.glasgow.gov.uk/lez",
+    "verified_on": "2026-08-16",
+    "operator_url": "https://www.lowemissionzones.scot/",
+    "dataset_version": "2026-08-16"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -4.275,
+            55.854
+          ],
+          [
+            -4.235,
+            55.854
+          ],
+          [
+            -4.235,
+            55.87
+          ],
+          [
+            -4.275,
+            55.87
+          ],
+          [
+            -4.275,
+            55.854
+          ]
+        ]
+      ]
+    ]
+  }
+}

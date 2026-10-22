@@ -1,0 +1,52 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "birmingham-caz",
+    "name": "Birmingham Clean Air Zone",
+    "authority": "Birmingham City Council",
+    "kind": "caz",
+    "caz_class": "D",
+    "charge_pence": 800,
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true,
+      "exemptDates": [
+        "12-25"
+      ]
+    },
+    "source_url": "https://www.birmingham.gov.uk/caz",
+    "verified_on": "2026-08-16",
+    "operator_url": "https://www.birmingham.gov.uk/caz",
+    "dataset_version": "2026-08-16"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -1.915,
+            52.472
+          ],
+          [
+            -1.87,
+            52.472
+          ],
+          [
+            -1.87,
+            52.495
+          ],
+          [
+            -1.915,
+            52.495
+          ],
+          [
+            -1.915,
+            52.472
+          ]
+        ]
+      ]
+    ]
+  }
+}

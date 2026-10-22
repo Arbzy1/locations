@@ -70,3 +70,39 @@ All other `/api/*` require a session.
 | PATCH | `/api/places/labels` | `{ placeKey, label?, hidden?, favourite?, color?, tags? }`; `color` is an allowlisted token; demo 403 |
 
 Cross-tenant ids return 404. Demo writes return 403.
+
+## Journey cost
+
+Session required. Registered by `registerBrimRoutes` in `apps/api/src/brim/routes.ts`. Rate-limited per tenant: estimate (60/min), places (120/min), vehicle lookup (20/min). "Not demo" routes return 403 for the demo role. See [architecture](../architecture/journey-cost.md).
+
+| Method | Path | Notes |
+|--------|------|--------|
+| GET | `/api/brim/status` | `{ status, fixtureMode, provider, cache }` |
+| GET | `/api/brim/places` | address autocomplete; `q`, `session`, optional `lat`/`lng` bias |
+| POST | `/api/brim/places/resolve` | `{ placeId, session? }` to a point |
+| POST | `/api/brim/places/reverse` | `{ lat, lng }`, road-snapped, named |
+| POST | `/api/brim/estimate` | route, energy, charges, CO2, cheapest fill, HMRC allowance |
+| POST | `/api/brim/estimate/from-maps-url` | estimate from a shared Google Maps URL |
+| GET | `/api/brim/stations/near` | forecourts near a point for a grade |
+| GET/POST | `/api/brim/stations/near-route` | forecourts along a polyline |
+| GET | `/api/brim/meta/prices` | national median pump prices |
+| GET | `/api/brim/meta/ev-tariffs` | public network tariffs |
+| GET | `/api/brim/zones` | clean-air zones and tolls with `verifiedOn` |
+| GET/POST | `/api/brim/charges/for-route` | zone and toll hits for a route and vehicle |
+| GET | `/api/brim/vehicles/catalogue` | VCA search; also `/makes`, `/models`, `/:id` |
+| POST | `/api/brim/vehicles/resolve` | `{ vrm }` DVLA lookup joined to VCA; plate never echoed or cached |
+| GET/POST | `/api/brim/vehicles` | tenant cars; POST not demo |
+| PATCH/DELETE | `/api/brim/vehicles/:id` | not demo; missing 404 |
+| GET | `/api/brim/vehicles/:id/compliance` | per-zone compliance |
+| GET/POST | `/api/brim/vehicles/:id/tariffs` | EV tariffs; POST not demo; missing car 404 |
+| GET | `/api/brim/vehicles/:id/fill-ups` | fill-up log |
+| GET | `/api/brim/vehicles/:id/calibration` | brim-to-brim calibration |
+| GET/PATCH | `/api/brim/settings` | default car; PATCH not demo |
+| GET/POST | `/api/brim/saved-places` | home, work, favourites; POST not demo |
+| PATCH/DELETE | `/api/brim/saved-places/:id` | not demo |
+| POST | `/api/brim/fill-ups` | not demo; rejects odometer rollback and unit mismatch |
+| DELETE | `/api/brim/fill-ups/:id` | not demo |
+| GET/POST | `/api/brim/journeys` | snapshots; POST not demo |
+| GET | `/api/brim/journeys/export` | CSV |
+| GET | `/api/brim/journeys/summary` | tax-year miles and HMRC allowance |
+| GET/DELETE | `/api/brim/journeys/:id` | DELETE not demo |

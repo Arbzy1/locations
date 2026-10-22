@@ -41,6 +41,7 @@ const TAB_PAGES = [
   { to: '/day', label: 'Day View', title: 'Open Day View' },
   { to: '/trips', label: 'Day Trips', title: 'Open Day Trips' },
   { to: '/insights', label: 'Insights', title: 'Open Insights' },
+  { to: '/journey-cost', label: 'Journey Cost', title: 'Price a trip: fuel, tolls, clean-air zones' },
   { to: '/settings', label: 'Settings', title: 'Open Settings' },
 ];
 
@@ -55,7 +56,7 @@ const HINT_ROWS: Row[] = [
   {
     id: 'hint-g',
     group: 'Hints',
-    label: 'g then h, d, t, i, e, or s jumps pages',
+    label: 'g then h, d, t, i, j, e, or s jumps pages',
     title: 'Keyboard chords for main pages',
     to: '',
   },
@@ -397,7 +398,7 @@ export default function CommandPalette() {
             </Button>
           ))}
           <p className="w-full text-[10px] text-text-muted">
-            Type ? for shortcuts. Ctrl/Cmd+K search. g then h/d/t/i/e/s jumps.
+            Type ? for shortcuts. Ctrl/Cmd+K search. g then h/d/t/i/j/e/s jumps.
           </p>
         </div>
       )}

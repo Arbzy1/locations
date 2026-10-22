@@ -1,0 +1,55 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "m6-toll",
+    "name": "M6 Toll",
+    "authority": "Midland Expressway Limited",
+    "kind": "toll",
+    "charge_pence_by_class": {
+      "car": 880,
+      "van": 1760,
+      "motorcycle": 500
+    },
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true,
+      "exemptDates": [
+        "12-25"
+      ]
+    },
+    "source_url": "https://www.m6toll.co.uk/pricing/",
+    "verified_on": "2026-08-16",
+    "operator_url": "https://www.m6toll.co.uk/pricing/",
+    "dataset_version": "2026-08-16"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -2.05,
+            52.49
+          ],
+          [
+            -1.68,
+            52.49
+          ],
+          [
+            -1.68,
+            52.705
+          ],
+          [
+            -2.05,
+            52.705
+          ],
+          [
+            -2.05,
+            52.49
+          ]
+        ]
+      ]
+    ]
+  }
+}

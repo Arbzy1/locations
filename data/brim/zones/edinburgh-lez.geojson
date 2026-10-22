@@ -1,0 +1,50 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "edinburgh-lez",
+    "name": "Edinburgh Low Emission Zone",
+    "authority": "City of Edinburgh Council",
+    "kind": "lez",
+    "is_restriction": true,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true,
+      "exemptDates": [
+        "12-25"
+      ]
+    },
+    "source_url": "https://www.edinburgh.gov.uk/lez",
+    "verified_on": "2026-08-16",
+    "operator_url": "https://www.lowemissionzones.scot/",
+    "dataset_version": "2026-08-16"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -3.215,
+            55.946
+          ],
+          [
+            -3.175,
+            55.946
+          ],
+          [
+            -3.175,
+            55.958
+          ],
+          [
+            -3.215,
+            55.958
+          ],
+          [
+            -3.215,
+            55.946
+          ]
+        ]
+      ]
+    ]
+  }
+}

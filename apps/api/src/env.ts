@@ -29,6 +29,18 @@ export type Env = {
   GLOBE_ENABLED?: string;
   DEMO_TOUR?: string;
   LANDING_ENABLED?: string;
+  /** Journey cost: "1" serves recorded routing, price, and DVLA fixtures (local dev). */
+  BRIM_FIXTURES?: string;
+  GOOGLE_MAPS_API_KEY?: string;
+  DVLA_VES_API_KEY?: string;
+  /** Journey cost: AES key for stored registration plates (base64, 32 bytes). */
+  VRM_ENCRYPTION_KEY?: string;
+  /** Journey cost: monthly Google Routes spend tracking before OSRM failover. */
+  ROUTING_SPENT_USD?: string;
+  ROUTING_CEILING_USD?: string;
+  /** Journey cost: GOV.UK Fuel Finder API credentials for the forecourt price sync. */
+  FUEL_FINDER_CLIENT_ID?: string;
+  FUEL_FINDER_CLIENT_SECRET?: string;
 };
 
 export function googleAuthEnabled(env: Pick<Env, "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET">): boolean {

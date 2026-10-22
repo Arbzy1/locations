@@ -1,0 +1,52 @@
+{
+  "distanceMeters": 160934,
+  "durationSeconds": 0,
+  "energy": {
+    "kind": "electric",
+    "kwh": {
+      "battery": 31.231254375,
+      "grid": 35.490061789772724,
+      "low": 30.87635375710227,
+      "high": 40.10376982244318
+    },
+    "arrivalStateOfCharge": {
+      "percent": 17.537491250000002,
+      "verdict": "tight"
+    }
+  },
+  "cost": {
+    "energyPence": {
+      "point": 270,
+      "low": 230,
+      "high": 300
+    },
+    "chargesPence": 0,
+    "totalPence": {
+      "point": 270,
+      "low": 230,
+      "high": 300
+    }
+  },
+  "charges": [],
+  "co2Kg": 3.747750525,
+  "consumption": {
+    "value": 17.25,
+    "unit": "kWh/100km",
+    "display": "17.3 kWh/100km",
+    "tier": 2,
+    "label": "Official figure, adjusted"
+  },
+  "price": {
+    "pence": 7.5,
+    "unit": "p/kWh",
+    "source": "user-tariff",
+    "observedAt": "2026-01-15T12:00:00Z"
+  },
+  "reasons": [
+    "Adjusted the official figure up 15% - official tests run optimistic.",
+    "No road mix available, so we left consumption unadjusted and widened the range.",
+    "Forecast was 2°C, so we increased energy use by 12.5%. Heat pump halved the extra use.",
+    "Cost is billed on energy drawn from the grid, not energy in the battery."
+  ],
+  "warnings": []
+}

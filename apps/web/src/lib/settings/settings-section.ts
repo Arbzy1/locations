@@ -4,6 +4,7 @@ export const SETTINGS_SECTIONS = [
   "billing",
   "display",
   "data",
+  "journey-cost",
   "privacy",
 ] as const;
 

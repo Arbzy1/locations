@@ -1,0 +1,52 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "sheffield-caz",
+    "name": "Sheffield Clean Air Zone",
+    "authority": "Sheffield City Council",
+    "kind": "caz",
+    "caz_class": "C",
+    "charge_pence": 900,
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true,
+      "exemptDates": [
+        "12-25"
+      ]
+    },
+    "source_url": "https://www.sheffield.gov.uk/campaigns/clean-air-zone",
+    "verified_on": "2026-08-16",
+    "operator_url": "https://www.sheffield.gov.uk/campaigns/clean-air-zone",
+    "dataset_version": "2026-08-16"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -1.49,
+            53.37
+          ],
+          [
+            -1.45,
+            53.37
+          ],
+          [
+            -1.45,
+            53.39
+          ],
+          [
+            -1.49,
+            53.39
+          ],
+          [
+            -1.49,
+            53.37
+          ]
+        ]
+      ]
+    ]
+  }
+}

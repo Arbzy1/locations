@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -44,6 +44,7 @@ import { shouldFireImportCutIn, type ImportCutInJob } from './lib/explorer/impor
 import { adminPageLabel } from './components/admin/adminNav';
 import {
   Flame,
+  Fuel,
   Calendar,
   Compass,
   TrendingUp,
@@ -73,6 +74,7 @@ const TAB_LABELS: Record<TabId, string> = {
   day: 'Day View',
   trips: 'Day Trips',
   insights: 'Insights',
+  'journey-cost': 'Journey Cost',
   settings: 'Settings',
 };
 
@@ -81,13 +83,17 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'day', label: TAB_LABELS.day, icon: <Calendar size={18} /> },
   { id: 'trips', label: TAB_LABELS.trips, icon: <Compass size={18} /> },
   { id: 'insights', label: TAB_LABELS.insights, icon: <TrendingUp size={18} /> },
+  { id: 'journey-cost', label: TAB_LABELS['journey-cost'], icon: <Fuel size={18} /> },
 ];
+
+const JourneyCostView = lazy(() => import('./components/brim/JourneyCostView'));
 
 function tabFromPath(pathname: string): TabId {
   if (pathname.startsWith('/day')) return 'day';
   if (pathname === '/trips' || pathname === '/trips/') return 'trips';
   if (pathname.startsWith('/insights') || pathname.startsWith('/review')) return 'insights';
   if (pathname.startsWith('/settings')) return 'settings';
+  if (pathname.startsWith('/journey-cost')) return 'journey-cost';
   return 'hotspots';
 }
 
@@ -482,6 +488,18 @@ function AppContent() {
               <div key={location.pathname} className="ui-enter h-full overflow-hidden">
                 <CatalogRouter />
               </div>
+            ) : activeTab === 'journey-cost' ? (
+              <div key="journey-cost" className="ui-enter h-full overflow-hidden">
+                <Suspense
+                  fallback={
+                    <div className="flex h-full items-center justify-center text-text-muted">
+                      <Loader2 className="animate-spin text-accent" size={24} />
+                    </div>
+                  }
+                >
+                  <JourneyCostView />
+                </Suspense>
+              </div>
             ) : activeTab === 'settings' && !isDemo ? (
               <div key="settings" className="ui-enter h-full">
                 <SettingsView />
@@ -624,6 +642,8 @@ function AuthedShell() {
         <Route path="/trips/new" element={<AppContent />} />
         <Route path="/trips/:start/:end" element={<AppContent />} />
         <Route path="/insights" element={<AppContent />} />
+        <Route path="/journey-cost" element={<AppContent />} />
+        <Route path="/journey-cost/:section" element={<AppContent />} />
         <Route path="/settings" element={<AppContent />} />
         <Route path="/places" element={<AppContent />} />
         <Route path="/places/:key" element={<AppContent />} />

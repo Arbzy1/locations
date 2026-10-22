@@ -89,3 +89,17 @@ export function catalogTitle(pathname: string): string {
   const hit = EXPLORE_LINKS.find((l) => l.to === pathname);
   return hit?.label ?? "Explore";
 }
+
+export type JourneyCostSection = "estimate" | "garage" | "history";
+
+/** Journey cost (Brim) lives under one top-level tab with its own sub-nav. */
+export function journeyCostPath(section: JourneyCostSection = "estimate", journeyId?: string) {
+  const base = section === "estimate" ? "/journey-cost" : `/journey-cost/${section}`;
+  return journeyId ? `${base}?journey=${encodeURIComponent(journeyId)}` : base;
+}
+
+export function journeyCostSectionFromPath(pathname: string): JourneyCostSection {
+  if (pathname.startsWith("/journey-cost/garage")) return "garage";
+  if (pathname.startsWith("/journey-cost/history")) return "history";
+  return "estimate";
+}

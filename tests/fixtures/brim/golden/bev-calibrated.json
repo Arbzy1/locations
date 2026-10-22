@@ -1,0 +1,52 @@
+{
+  "distanceMeters": 160934,
+  "durationSeconds": 0,
+  "energy": {
+    "kind": "electric",
+    "kwh": {
+      "battery": 28.324384000000002,
+      "grid": 32.186800000000005,
+      "low": 29.933724,
+      "high": 34.439876000000005
+    },
+    "arrivalStateOfCharge": {
+      "percent": 45.74315,
+      "verdict": "comfortable"
+    }
+  },
+  "cost": {
+    "energyPence": {
+      "point": 240,
+      "low": 220,
+      "high": 260
+    },
+    "chargesPence": 0,
+    "totalPence": {
+      "point": 240,
+      "low": 220,
+      "high": 260
+    }
+  },
+  "charges": [],
+  "co2Kg": 3.3989260800000003,
+  "consumption": {
+    "value": 16,
+    "unit": "kWh/100km",
+    "display": "16.0 kWh/100km",
+    "tier": 0,
+    "label": "Based on your fill-ups"
+  },
+  "price": {
+    "pence": 7.5,
+    "unit": "p/kWh",
+    "source": "user-tariff",
+    "observedAt": "2026-01-15T12:00:00Z"
+  },
+  "reasons": [
+    "Used your last 5 brim-to-brim intervals rather than the brochure figure.",
+    "No road mix available, so we left consumption unadjusted and widened the range.",
+    "Forecast was 12°C, so we increased energy use by 10%.",
+    "Cost is billed on energy drawn from the grid, not energy in the battery."
+  ],
+  "warnings": []
+}

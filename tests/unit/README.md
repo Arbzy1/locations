@@ -10,5 +10,6 @@ Pure helpers. No network, no live Postgres, no `app.request()`.
 | DB | `db/{domain}/` | `packages/db/src` |
 | Web | `web/{domain}/` | `apps/web/src` |
 | Scripts | `scripts/{domain}/` | `scripts/` |
+| Journey cost libs | `brim/{engine,routing,shared}/` | `packages/brim/src` |
 
 Mocked Drizzle chains belong here (not integration). HTTP against the Hono `app` belongs in `tests/integration/`.
