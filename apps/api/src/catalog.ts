@@ -7,6 +7,7 @@ import {
   lifeChapters,
   namedTrips,
   placeLabels,
+  placeCache,
   visits,
   dataSources,
   and,
@@ -14,12 +15,13 @@ import {
   sql,
   desc,
   or,
-  ilike,
+  inArray,
   gte,
   lte,
   journeyTrace,
   thinTrace,
   haversineM,
+  makeCoordPlaceKey,
   METERS_TO_MILES,
   type TenantId,
 } from "@locations/db";
@@ -34,47 +36,120 @@ async function hiddenPlaceKeySet(db: Db, tenant: TenantId): Promise<Set<string>>
   return new Set(rows.filter((r) => r.hidden).map((r) => r.placeKey));
 }
 
-export async function listClusters(
-  db: Db,
-  tenant: TenantId,
-  opts: { q?: string; sort?: string; limit?: number; cursor?: string },
-) {
-  const hidden = await hiddenPlaceKeySet(db, tenant);
-  const filters = [eq(visits.tenant, tenant)];
-  const q = opts.q?.trim().slice(0, 80);
-  if (q && q.length >= 2) filters.push(ilike(visits.cluster, `%${q}%`));
+/** Real-place keys start with `g:` (Google placeId) or `c:` (snapped position); anything else is a region. */
+export function isRealPlaceKey(key: string): boolean {
+  return key.startsWith("g:") || key.startsWith("c:");
+}
+
+type PlaceGroup = {
+  key: string;
+  region: string;
+  count: number;
+  duration: number;
+  lat: number;
+  lon: number;
+  first: string;
+  last: string;
+  /** Most recent stay's exact position: Day View caches its street name under it. */
+  repLat: number;
+  repLon: number;
+  semanticType: string;
+};
+
+/** Visits grouped by real place (or by region for older `cluster` keys). */
+async function placeGroups(db: Db, tenant: TenantId, key?: string): Promise<PlaceGroup[]> {
+  const byRegion = key !== undefined && !isRealPlaceKey(key);
+  const keyCol = byRegion ? visits.cluster : visits.placeKey;
+  const filters = [eq(visits.tenant, tenant), sql`${visits.placeKey} is not null`];
+  if (key !== undefined) filters.push(eq(keyCol, key));
   const rows = await db
     .select({
-      cluster: visits.cluster,
+      key: sql<string>`${keyCol}`,
+      region: sql<string>`(array_agg(${visits.cluster} order by ${visits.start} desc))[1]`,
       count: sql<number>`count(*)::int`,
       duration: sql<number>`coalesce(sum(${visits.durationMinutes}), 0)`,
       lat: sql<number>`avg(${visits.lat})`,
       lon: sql<number>`avg(${visits.lon})`,
       first: sql<string>`min(${visits.date})`,
       last: sql<string>`max(${visits.date})`,
+      repLat: sql<number>`(array_agg(${visits.lat} order by ${visits.start} desc))[1]`,
+      repLon: sql<number>`(array_agg(${visits.lon} order by ${visits.start} desc))[1]`,
+      semanticType: sql<string>`mode() within group (order by ${visits.semanticType})`,
     })
     .from(visits)
     .where(and(...filters))
-    .groupBy(visits.cluster);
+    .groupBy(keyCol);
+  return rows.map((r) => ({
+    ...r,
+    duration: Number(r.duration) || 0,
+    lat: Number(r.lat),
+    lon: Number(r.lon),
+    repLat: Number(r.repLat),
+    repLon: Number(r.repLon),
+  }));
+}
 
+/**
+ * Display names: the user's label, else the street-level name Day View cached for the
+ * place, else Google's semantic type (Home, Work), else its coordinates. Cache only.
+ */
+async function placeDisplayNames(db: Db, tenant: TenantId, groups: PlaceGroup[]) {
   const labels = await db
-    .select()
+    .select({ placeKey: placeLabels.placeKey, label: placeLabels.label })
     .from(placeLabels)
     .where(eq(placeLabels.tenant, tenant));
   const labelByKey = new Map(labels.map((l) => [l.placeKey, l.label]));
 
-  let list = rows
-    .filter((r) => !hidden.has(r.cluster))
-    .map((r) => ({
-      cluster: r.cluster,
-      label: labelByKey.get(r.cluster) || r.cluster,
-      visits: r.count,
-      duration_minutes: Number(r.duration) || 0,
-      lat: Number(r.lat),
-      lon: Number(r.lon),
-      first: r.first,
-      last: r.last,
-    }));
+  const coordKey = (g: PlaceGroup) => makeCoordPlaceKey(g.repLat, g.repLon);
+  const keys = [...new Set(groups.map(coordKey))];
+  const cached = new Map<string, string>();
+  for (let i = 0; i < keys.length; i += 500) {
+    const rows = await db
+      .select({ placeId: placeCache.placeId, name: placeCache.name })
+      .from(placeCache)
+      .where(inArray(placeCache.placeId, keys.slice(i, i + 500)));
+    for (const r of rows) if (r.name && r.name !== "Unknown") cached.set(r.placeId, r.name);
+  }
+
+  const names = new Map<string, string>();
+  for (const g of groups) {
+    const semantic = g.semanticType && g.semanticType !== "Unknown" ? g.semanticType : "";
+    names.set(
+      g.key,
+      labelByKey.get(g.key) ||
+        cached.get(coordKey(g)) ||
+        semantic ||
+        `Near ${g.lat.toFixed(3)}, ${g.lon.toFixed(3)}`,
+    );
+  }
+  return names;
+}
+
+export async function listClusters(
+  db: Db,
+  tenant: TenantId,
+  opts: { q?: string; sort?: string; limit?: number; cursor?: string },
+) {
+  const hidden = await hiddenPlaceKeySet(db, tenant);
+  const groups = (await placeGroups(db, tenant)).filter((g) => !hidden.has(g.key));
+  const names = await placeDisplayNames(db, tenant, groups);
+
+  let list = groups.map((g) => ({
+    cluster: g.key,
+    region: g.region,
+    label: names.get(g.key) ?? g.key,
+    visits: g.count,
+    duration_minutes: g.duration,
+    lat: g.lat,
+    lon: g.lon,
+    first: g.first,
+    last: g.last,
+  }));
+
+  const q = opts.q?.trim().slice(0, 80).toLowerCase();
+  if (q && q.length >= 2) {
+    list = list.filter((p) => p.label.toLowerCase().includes(q) || p.region.toLowerCase().includes(q));
+  }
 
   const sort = opts.sort || "visits";
   list.sort((a, b) => {
@@ -93,30 +168,22 @@ export async function listClusters(
   return { clusters: page, cursor: next };
 }
 
+/** Visits filter for a place key: a real place, or a region for older links. */
+function placeFilter(key: string) {
+  return isRealPlaceKey(key) ? eq(visits.placeKey, key) : eq(visits.cluster, key);
+}
+
 export async function getCluster(db: Db, tenant: TenantId, key: string) {
-  const cluster = key.slice(0, 200);
+  const placeKey = key.slice(0, 200);
   const hidden = await hiddenPlaceKeySet(db, tenant);
-  const rows = await db
-    .select({
-      cluster: visits.cluster,
-      count: sql<number>`count(*)::int`,
-      duration: sql<number>`coalesce(sum(${visits.durationMinutes}), 0)`,
-      lat: sql<number>`avg(${visits.lat})`,
-      lon: sql<number>`avg(${visits.lon})`,
-      first: sql<string>`min(${visits.date})`,
-      last: sql<string>`max(${visits.date})`,
-    })
-    .from(visits)
-    .where(and(eq(visits.tenant, tenant), eq(visits.cluster, cluster)))
-    .groupBy(visits.cluster)
-    .limit(1);
-  const row = rows[0];
-  if (!row) return null;
+  const group = (await placeGroups(db, tenant, placeKey))[0];
+  if (!group) return null;
+  const names = await placeDisplayNames(db, tenant, [group]);
 
   const sample = await db
     .select({ start: visits.start, date: visits.date })
     .from(visits)
-    .where(and(eq(visits.tenant, tenant), eq(visits.cluster, cluster)))
+    .where(and(eq(visits.tenant, tenant), placeFilter(placeKey)))
     .limit(400);
   const hours = Array.from({ length: 24 }, () => 0);
   for (const v of sample) {
@@ -124,6 +191,8 @@ export async function getCluster(db: Db, tenant: TenantId, key: string) {
     if (!Number.isNaN(h)) hours[h] += 1;
   }
 
+  // Corridors run region to region, so a place shows its region's routes.
+  const region = isRealPlaceKey(placeKey) ? group.region : placeKey;
   const cacheRows = await db
     .select({ data: analyticsCache.data })
     .from(analyticsCache)
@@ -131,25 +200,20 @@ export async function getCluster(db: Db, tenant: TenantId, key: string) {
     .limit(1);
   const cached = (cacheRows[0]?.data ?? []) as { from: string; to: string; count: number }[];
   const related = Array.isArray(cached)
-    ? cached.filter((c) => c.from === cluster || c.to === cluster).slice(0, 12)
+    ? cached.filter((c) => c.from === region || c.to === region).slice(0, 12)
     : [];
 
-  const labels = await db
-    .select()
-    .from(placeLabels)
-    .where(and(eq(placeLabels.tenant, tenant), eq(placeLabels.placeKey, cluster)))
-    .limit(1);
-
   return {
-    cluster,
-    label: labels[0]?.label || cluster,
-    hidden: hidden.has(cluster),
-    visits: row.count,
-    duration_minutes: Number(row.duration) || 0,
-    lat: Number(row.lat),
-    lon: Number(row.lon),
-    first: row.first,
-    last: row.last,
+    cluster: placeKey,
+    region,
+    label: names.get(group.key) ?? placeKey,
+    hidden: hidden.has(placeKey),
+    visits: group.count,
+    duration_minutes: group.duration,
+    lat: group.lat,
+    lon: group.lon,
+    first: group.first,
+    last: group.last,
     hour_histogram: hours,
     corridors: related,
   };
@@ -161,8 +225,8 @@ export async function listClusterVisits(
   key: string,
   opts: { from?: string; to?: string; limit?: number; cursor?: string },
 ) {
-  const cluster = key.slice(0, 200);
-  const filters = [eq(visits.tenant, tenant), eq(visits.cluster, cluster)];
+  const placeKey = key.slice(0, 200);
+  const filters = [eq(visits.tenant, tenant), placeFilter(placeKey)];
   if (opts.from) filters.push(gte(visits.date, opts.from));
   if (opts.to) filters.push(lte(visits.date, opts.to));
   if (opts.cursor) filters.push(sql`${visits.start} < ${opts.cursor}`);

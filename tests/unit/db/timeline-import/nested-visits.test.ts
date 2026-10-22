@@ -41,3 +41,13 @@ describe("nested Timeline visits", () => {
     expect(visits).toHaveLength(2);
   });
 });
+
+describe("place keys", () => {
+  it("use Google's place id, else the position snapped to ~100 m", () => {
+    const withId = visit("08:00", "09:00", "0", 51.5);
+    (withId.visit.topCandidate as { placeID?: string }).placeID = "ChIJabc";
+    const { visits } = parseTimelineJson([withId, visit("10:00", "11:00", "0", 51.50049)]);
+    expect(visits[0].placeKey).toBe("g:ChIJabc");
+    expect(visits[1].placeKey).toBe("c:51.500,-0.100");
+  });
+});

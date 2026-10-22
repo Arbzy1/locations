@@ -19,6 +19,7 @@ import {
   mapTransportMode,
   METERS_TO_MILES,
   parseGeo,
+  visitPlaceKey,
 } from "./geo.js";
 import {
   buildStore,
@@ -72,6 +73,7 @@ type VisitDraft = {
   fixLat: number | null;
   fixLon: number | null;
   fixCount: number | null;
+  placeKey: string;
 };
 
 type ActivityDraft = {
@@ -596,6 +598,7 @@ function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
         fixLat: null,
         fixLon: null,
         fixCount: null,
+        placeKey: visitPlaceKey(top.placeID, coords[0], coords[1]),
       });
       visitLevels.push(Number(record.visit.hierarchyLevel ?? 0) || 0);
     } else if (record.activity) {

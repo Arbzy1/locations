@@ -667,6 +667,7 @@ function visitToApi(v: VisitRow) {
     fix_count: v.fixCount ?? 0,
     moved_m: Math.round(haversineM(v.lat, v.lon, lat, lon)),
     cluster: v.cluster,
+    place_key: v.placeKey,
     semantic_type: v.semanticType,
     place_id: v.placeId,
     duration_minutes: v.durationMinutes,
@@ -765,9 +766,11 @@ export async function getHeatmap(
       semanticType: visits.semanticType,
       durationMinutes: visits.durationMinutes,
       date: visits.date,
+      placeKey: visits.placeKey,
     })
     .from(visits)
     .where(and(...filters));
+  const hidden = await hiddenPlaceKeySet(db, tenant);
 
   type Cell = {
     lat: number;
@@ -782,6 +785,8 @@ export async function getHeatmap(
   const cells = new Map<string, Cell>();
 
   for (const r of rows) {
+    // A place hidden in the directory drops out of the heatmap entirely.
+    if (r.placeKey && hidden.has(r.placeKey)) continue;
     const lat = Math.round(r.lat * 1e5) / 1e5;
     const lon = Math.round(r.lon * 1e5) / 1e5;
     const key = `${lat},${lon}`;
@@ -849,8 +854,6 @@ export async function getHeatmap(
       }
     }
   }
-
-  const hidden = await hiddenPlaceKeySet(db, tenant);
 
   return points
     .filter((p) => {
@@ -1044,7 +1047,16 @@ export async function loadDayRows(
   const dayActivities = sourceIds?.length
     ? dayActivitiesRaw.filter((a) => a.sourceId && sourceIds.includes(a.sourceId))
     : dayActivitiesRaw;
-  return { day, visits: dayVisits, activities: dayActivities };
+  // The user's names for these places (tenant table, so read here, not in buildDay).
+  const placeKeys = [...new Set(dayVisits.map((v) => v.placeKey).filter((k): k is string => !!k))];
+  const labelRows = placeKeys.length
+    ? await db
+        .select({ placeKey: placeLabels.placeKey, label: placeLabels.label })
+        .from(placeLabels)
+        .where(and(eq(placeLabels.tenant, tenant), inArray(placeLabels.placeKey, placeKeys)))
+    : [];
+  const placeLabelsByKey = new Map(labelRows.map((r) => [r.placeKey, r.label]));
+  return { day, visits: dayVisits, activities: dayActivities, placeLabels: placeLabelsByKey };
 }
 
 export type DayRows = NonNullable<Awaited<ReturnType<typeof loadDayRows>>>;
@@ -1065,6 +1077,7 @@ export async function buildDay(
     await onProgress?.(event);
   };
   const { day, visits: dayVisits, activities: dayActivities } = rows;
+  const userPlaceLabels = rows.placeLabels ?? new Map<string, string>();
 
   await report({
     stage: "Building timeline",
@@ -1437,7 +1450,8 @@ export async function buildDay(
 
     const coordKey = `${Math.round(v.lat * 1e5) / 1e5},${Math.round(v.lon * 1e5) / 1e5}`;
     const placeInfo = placeNames.get(coordKey) ?? { name: "", address: "", data: {} };
-    vd.place_name = placeInfo.name;
+    const userLabel = v.placeKey ? userPlaceLabels.get(v.placeKey) : undefined;
+    vd.place_name = userLabel || placeInfo.name;
     vd.place_address = placeInfo.address;
     if ("short" in placeInfo && placeInfo.short) {
       vd.place_short_address = placeInfo.short;
@@ -2071,10 +2085,13 @@ export async function searchTenant(
     .map((row) => row.placeKey)
     .slice(0, 30);
   const clusterMatch = [ilike(visits.cluster, like), ilike(visits.semanticType, like)];
-  if (labelKeys.length) clusterMatch.push(inArray(visits.cluster, labelKeys));
-  const places = await db
+  if (labelKeys.length) {
+    clusterMatch.push(inArray(visits.cluster, labelKeys), inArray(visits.placeKey, labelKeys));
+  }
+  const rows = await db
     .select({
       cluster: visits.cluster,
+      placeKey: visits.placeKey,
       lat: visits.lat,
       lon: visits.lon,
       date: visits.date,
@@ -2083,6 +2100,11 @@ export async function searchTenant(
     .where(and(eq(visits.tenant, tenant), or(...clusterMatch)))
     .orderBy(desc(visits.date))
     .limit(40);
+  // A region-name match links to the region; anything else (a label, Home, Work) to the real place.
+  const places = rows.map(({ placeKey, ...row }) => ({
+    ...row,
+    cluster: row.cluster.toLowerCase().includes(needle) || !placeKey ? row.cluster : placeKey,
+  }));
   const unique: typeof places = [];
   const seen = new Set<string>();
   for (const row of places) {

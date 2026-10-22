@@ -68,6 +68,12 @@ export function makeRouteCacheKey(
   return `${startLat.toFixed(6)},${startLon.toFixed(6)},${endLat.toFixed(6)},${endLon.toFixed(6)},${profile}`;
 }
 
+/** A stay's real-place key: Google's placeId, else its position snapped to ~100 m. */
+export function visitPlaceKey(placeId: string | null | undefined, lat: number, lon: number): string {
+  if (placeId) return `g:${placeId}`;
+  return `c:${lat.toFixed(3)},${lon.toFixed(3)}`;
+}
+
 export function makeCoordPlaceKey(lat: number, lon: number): string {
   return `coord:${lat.toFixed(5)},${lon.toFixed(5)}`;
 }

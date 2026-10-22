@@ -26,11 +26,12 @@ Three read-only audits (UX/layout, product, performance/reliability) fed this pl
 
 ## Phase 3 - Data correctness
 
-- [ ] Import only leaf visits (Timeline `hierarchyLevel`), so nested stays are not double counted.
-- [ ] Records.json and Timeline Edits raw signals feed GPS paths and stay detection instead of 2-minute fake visits.
-- [ ] Home/work, away nights, commute and moving history use the user's timezone.
-- [ ] Real places: a `place_key` per visit (Google placeId, else a snapped coordinate key); places directory, labels, search and Day View use it; the 0.5 degree grid becomes a region rollup only.
-- [ ] Legacy Takeout "Semantic Location History" (`timelineObjects`) parser, all monthly files merged, Google place names kept per tenant.
+- [x] Import only leaf visits (Timeline `hierarchyLevel`), so nested stays are not double counted.
+- [x] Records.json and Timeline Edits raw signals feed GPS paths and stay detection instead of 2-minute fake visits.
+- [x] Home/work, away nights, commute and moving history use the user's timezone.
+- [x] Real places: a `place_key` per visit (Google placeId, else a snapped coordinate key); places directory, labels, search and Day View use it; the 0.5 degree grid becomes a region rollup only.
+- [x] Legacy Takeout "Semantic Location History" (`timelineObjects`) parser, all monthly files merged.
+- [ ] Keep Google's place names from legacy exports per tenant (needs a tenant place-name table separate from user labels).
 
 ## Phase 4 - Layout
 
