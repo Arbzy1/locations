@@ -935,6 +935,9 @@ export async function rebuildTenantAggregates(
   const analytics = computeAllAnalytics(store, { timezone: settingsRows[0]?.timezone });
 
   for (const [key, data] of Object.entries(analytics)) {
+    // Nothing to show (e.g. no commute when home and work share a region): leave the
+    // key out; reads treat a missing key as empty. data is NOT NULL.
+    if (data === null || data === undefined) continue;
     await db
       .insert(analyticsCache)
       .values({ tenant, key, data })
@@ -968,6 +971,12 @@ export async function rebuildHourOfWeekCache(
     moving: computeMovingHistory(store, timezone),
   };
   for (const [key, data] of Object.entries(caches)) {
+    if (data === null || data === undefined) {
+      await db
+        .delete(analyticsCache)
+        .where(and(eq(analyticsCache.tenant, tenant), eq(analyticsCache.key, key)));
+      continue;
+    }
     await db
       .insert(analyticsCache)
       .values({ tenant, key, data })
