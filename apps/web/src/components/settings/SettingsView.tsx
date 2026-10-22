@@ -29,6 +29,16 @@ function initials(name?: string, email?: string) {
   return src.slice(0, 2).toUpperCase() || "?";
 }
 
+/** Short plan words for the header badge. */
+const PLAN_BADGE: Record<string, string> = {
+  active: 'Plan active',
+  trialing: 'Free trial',
+  past_due: 'Payment failed',
+  unpaid: 'Payment failed',
+  paused: 'Paused',
+  canceled: 'Plan ended',
+};
+
 export default function SettingsView() {
   const { data: session } = useSession();
   const { entitlements } = useUnits();
@@ -143,7 +153,7 @@ export default function SettingsView() {
               {user?.emailVerified ? "Verified" : "Unverified"}
             </Badge>
             <Badge title={`Billing status: ${status}`}>
-              {entitlements?.entitled ? `${status} · entitled` : status}
+              {PLAN_BADGE[status] ?? (entitlements?.entitled ? 'Can import' : 'No plan')}
             </Badge>
             {graceActive && (
               <Badge title="Import is paused during the read-only grace period">Grace</Badge>

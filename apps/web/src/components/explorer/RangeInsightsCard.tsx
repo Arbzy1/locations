@@ -112,7 +112,7 @@ export default function RangeInsightsCard() {
             <Skeleton key={i} className="h-20" />
           ))}
         </div>
-      ) : isError || !data ? (
+      ) : isError || !data?.current || !data.last_year ? (
         <ErrorState title="This period did not load." onRetry={() => void refetch()} />
       ) : (
         <>

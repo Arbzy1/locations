@@ -44,9 +44,9 @@ Three read-only audits (UX/layout, product, performance/reliability) fed this pl
 
 ## Phase 5 - Features
 
-- [ ] Insights for any date range, and this year vs last.
-- [ ] Privacy: delete everything at a place, auto-delete after N years, home blur in exports.
-- [ ] Visit notes and mode correction (tenant overrides applied in Day View).
-- [ ] GPX / GeoJSON / visits CSV export.
-- [ ] Use Timeline `timelineMemory` (seed named trips) and Google's own home/work.
-- [ ] "On this day" email instead of the monthly recap.
+- [x] Insights for any date range, and this year vs last.
+- [x] Privacy: delete everything at a place, auto-delete after N years, home blur in exports.
+- [x] Visit notes and mode correction (tenant overrides applied in Day View).
+- [x] GPX / GeoJSON / visits CSV export.
+- [x] Use Timeline `timelineMemory` (seed named trips) and Google's own home/work.
+- [x] "On this day" in the app (Insights). Not as an email: AGENTS.md forbids activity digests and place names in mail.

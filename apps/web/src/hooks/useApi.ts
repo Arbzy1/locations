@@ -718,6 +718,30 @@ export function useRangeInsights(range: { from: string; to: string }) {
   });
 }
 
+export type OnThisDay = {
+  date: string;
+  years: {
+    date: string;
+    years_ago: number;
+    miles: number;
+    visits: number;
+    journeys: number;
+    modes: Record<string, number>;
+    places: { key: string; label: string }[];
+  }[];
+};
+
+/** The same calendar day in earlier years. */
+export function useOnThisDay(date: string) {
+  const tenantKey = useTenantKey();
+  return useQuery<OnThisDay>({
+    queryKey: ['on-this-day', tenantKey, date],
+    queryFn: () => fetchJson(`/api/on-this-day?date=${encodeURIComponent(date)}`),
+    enabled: tenantKey !== 'anon' && Boolean(date),
+    staleTime: Infinity,
+  });
+}
+
 /** Days with a stay at a hotspot, newest first. */
 export function useHotspotDays(point: { lat: number; lon: number } | null) {
   const tenantKey = useTenantKey();

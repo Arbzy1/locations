@@ -659,7 +659,16 @@ export function inferHomeWork(store: Store, timeZone?: string | null): HomeWorkG
     const [cluster, visits] = [...m.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
     return cluster ? { cluster, visits } : null;
   };
-  return { home: top(homeCounts), work: top(workCounts) };
+  // Google's own Home / Work labels beat a guess from the hour of day.
+  const labelled = (kind: "home" | "work") => {
+    const counts = new Map<string, number>();
+    for (const v of store.visits) {
+      const type = (v.semanticType || "").toLowerCase();
+      if (type === kind || type === `inferred ${kind}`) counts.set(v.cluster, (counts.get(v.cluster) ?? 0) + 1);
+    }
+    return top(counts);
+  };
+  return { home: labelled("home") ?? top(homeCounts), work: labelled("work") ?? top(workCounts) };
 }
 
 export type AreaStat = { cluster: string; visits: number; lat: number; lon: number };

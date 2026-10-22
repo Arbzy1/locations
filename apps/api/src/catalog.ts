@@ -16,6 +16,7 @@ import {
   desc,
   or,
   inArray,
+  lt,
   gte,
   lte,
   journeyTrace,
@@ -426,6 +427,67 @@ export async function getRangeInsights(db: Db, tenant: TenantId, opts: { from: s
       count: newKeys.length,
       sample: newKeys.slice(0, 8).map((key) => ({ key, label: names.get(key) ?? key })),
     },
+  };
+}
+
+/**
+ * "On this day": the same calendar day in earlier years, newest first, with distance,
+ * counts and the places where most time was spent. In-app only (never emailed).
+ */
+export async function getOnThisDay(db: Db, tenant: TenantId, opts: { date: string }) {
+  if (!ISO_DAY.test(opts.date)) return { error: "date must be YYYY-MM-DD" as const };
+  const monthDay = opts.date.slice(5);
+  const days = await db
+    .select({
+      date: dayStats.date,
+      miles: dayStats.totalDistanceMiles,
+      visits: dayStats.visitCount,
+      journeys: dayStats.activityCount,
+      modes: dayStats.modes,
+    })
+    .from(dayStats)
+    .where(
+      and(eq(dayStats.tenant, tenant), sql`substr(${dayStats.date}, 6, 5) = ${monthDay}`, lt(dayStats.date, opts.date)),
+    )
+    .orderBy(desc(dayStats.date))
+    .limit(25);
+  if (!days.length) return { date: opts.date, years: [] };
+
+  const hidden = await hiddenPlaceKeySet(db, tenant);
+  const stays = await db
+    .select({
+      date: visits.date,
+      key: sql<string>`${visits.placeKey}`,
+      minutes: sql<number>`coalesce(sum(${visits.durationMinutes}), 0)`,
+    })
+    .from(visits)
+    .where(
+      and(
+        eq(visits.tenant, tenant),
+        inArray(visits.date, days.map((d) => d.date)),
+        sql`${visits.placeKey} is not null`,
+      ),
+    )
+    .groupBy(visits.date, visits.placeKey);
+  const keys = [...new Set(stays.map((r) => r.key))].filter((k) => !hidden.has(k));
+  const groups = keys.length ? (await placeGroups(db, tenant)).filter((g) => keys.includes(g.key)) : [];
+  const names = await placeDisplayNames(db, tenant, groups);
+
+  return {
+    date: opts.date,
+    years: days.map((d) => ({
+      date: d.date,
+      years_ago: Number(opts.date.slice(0, 4)) - Number(d.date.slice(0, 4)),
+      miles: Math.round(d.miles * 10) / 10,
+      visits: d.visits,
+      journeys: d.journeys,
+      modes: d.modes,
+      places: stays
+        .filter((r) => r.date === d.date && !hidden.has(r.key))
+        .sort((a, b) => Number(b.minutes) - Number(a.minutes))
+        .slice(0, 3)
+        .map((r) => ({ key: r.key, label: names.get(r.key) ?? r.key })),
+    })),
   };
 }
 

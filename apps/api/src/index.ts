@@ -82,6 +82,7 @@ import {
   getExportRows,
   deletePlaceData,
   getRangeInsights,
+  getOnThisDay,
   saveTimelineOverride,
   applyRetention,
   RETENTION_YEAR_OPTIONS,
@@ -994,6 +995,16 @@ app.patch("/api/overrides", async (c) => {
   return c.json(result);
 });
 
+app.get("/api/on-this-day", async (c) => {
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  // The client sends its local date so "today" matches the user's calendar.
+  const date = (c.req.query("date") ?? new Date().toISOString().slice(0, 10)).trim();
+  const result = await withTenant(db, tenant, (tx) => getOnThisDay(tx, tenant, { date }));
+  if (isErrorResult(result)) return c.json(result, 400);
+  return c.json(result);
+});
+
 app.get("/api/insights/range", async (c) => {
   const db = requestDb(c);
   const tenant = c.get("tenant");
@@ -1685,7 +1696,10 @@ export default {
     }
   },
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    await runRetention(env);
-    await runMonthlyRecaps(env);
+    // Independent jobs: one failing must not skip the other.
+    const results = await Promise.allSettled([runRetention(env), runMonthlyRecaps(env)]);
+    for (const [i, r] of results.entries()) {
+      if (r.status === "rejected") console.error(JSON.stringify({ kind: i === 0 ? "retention" : "monthly_recap", ok: false }));
+    }
   },
 };

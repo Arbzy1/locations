@@ -2478,6 +2478,7 @@ export {
   getExportRows,
   deletePlaceData,
   getRangeInsights,
+  getOnThisDay,
   listNamedTrips,
   upsertNamedTrip,
   deleteNamedTrip,

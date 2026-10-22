@@ -52,6 +52,11 @@ export type RawTimelineRecord = {
     distanceMeters?: number | string;
     topCandidate?: { type?: string };
   };
+  /** Google's own "trip" summaries: where you went and how far from home. */
+  timelineMemory?: {
+    destinations?: Array<{ identifier?: string }>;
+    distanceFromOriginKms?: string | number;
+  };
   /** GPS breadcrumbs. Classic exports use minute offsets; semanticSegments use `time`. */
   timelinePath?: Array<{
     point?: string;
@@ -90,9 +95,18 @@ type ActivityDraft = {
   path: PathPoint[] | null;
 };
 
+/** A trip Google itself recognised (Timeline `timelineMemory`). */
+export type TimelineMemory = {
+  start: string;
+  end: string;
+  destinations: string[];
+  distanceKm: number | null;
+};
+
 export type ParsedTimeline = {
   visits: VisitDraft[];
   activities: ActivityDraft[];
+  memories?: TimelineMemory[];
 };
 
 const BATCH = 500;
@@ -568,6 +582,7 @@ function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
   const visitLevels: number[] = [];
   const activityRows: ActivityDraft[] = [];
   const pathPoints: PathPoint[] = [];
+  const memories: TimelineMemory[] = [];
 
   for (const record of raw) {
     const startTime = record.startTime ?? "";
@@ -576,6 +591,17 @@ function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
 
     if (record.timelinePath) {
       for (const p of pathPointsFromRecord(record)) pathPoints.push(p);
+    }
+    if (record.timelineMemory) {
+      const km = Number(record.timelineMemory.distanceFromOriginKms);
+      memories.push({
+        start: startTime,
+        end: endTime,
+        destinations: (record.timelineMemory.destinations ?? [])
+          .map((d) => d.identifier)
+          .filter((id): id is string => Boolean(id)),
+        distanceKm: Number.isFinite(km) ? km : null,
+      });
     }
 
     if (record.visit) {
@@ -630,7 +656,27 @@ function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
   attachPathPoints(activityRows, pathPoints);
   attachVisitFixes(leafVisits, pathPoints);
 
-  return { visits: leafVisits, activities: activityRows };
+  return { visits: leafVisits, activities: activityRows, memories };
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Named-trip rows for Google's own trips, with ids stable per source so renames survive. */
+export function namedTripsFromMemories(memories: TimelineMemory[], sourceId: string) {
+  return memories
+    .map((m) => {
+      const start = m.start.slice(0, 10);
+      const end = m.end.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || end < start) return null;
+      const dates: string[] = [];
+      for (let t = Date.parse(start); t <= Date.parse(end) && dates.length < 60; t += 86_400_000) {
+        dates.push(new Date(t).toISOString().slice(0, 10));
+      }
+      const month = `${MONTHS[Number(start.slice(5, 7)) - 1]} ${start.slice(0, 4)}`;
+      const away = m.distanceKm ? ` (${Math.round(m.distanceKm)} km from home)` : "";
+      return { id: `google-${sourceId}-${start}-${end}`, name: `Trip, ${month}${away}`, start, end, dates };
+    })
+    .filter((t): t is NonNullable<typeof t> => t !== null);
 }
 
 /** Parent fragments shorter than this around a nested stay are dropped. */
@@ -992,6 +1038,15 @@ export async function importSourceData(
     .update(dataSources)
     .set({ updatedAt: new Date() })
     .where(eq(dataSources.id, sourceId));
+
+  // Google's own trips become named trips; existing ones (maybe renamed) are kept.
+  const trips = namedTripsFromMemories(parsed.memories ?? [], sourceId);
+  for (let i = 0; i < trips.length; i += BATCH) {
+    await db
+      .insert(schema.namedTrips)
+      .values(trips.slice(i, i + BATCH).map((t) => ({ ...t, tenant })))
+      .onConflictDoNothing();
+  }
 
   const { days } = await rebuildTenantAggregates(db, tenant);
 
