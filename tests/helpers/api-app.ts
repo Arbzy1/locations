@@ -69,6 +69,7 @@ export function createServicesMock(overrides: Record<string, unknown> = {}) {
     listPlaceLabels: vi.fn(async () => []),
     listClusters: vi.fn(async () => ({ clusters: [], cursor: null })),
     getExportRows: vi.fn(async () => ({ visits: [], journeys: [] })),
+    saveTimelineOverride: vi.fn(async () => ({ error: "Not found" as const, status: 404 as const })),
     getRangeInsights: vi.fn(async () => ({ current: {}, last_year: {}, top_places: [], new_places: { count: 0, sample: [] } })),
     deletePlaceData: vi.fn(async () => ({ error: "Place not found" as const, status: 404 as const })),
     applyRetention: vi.fn(async () => ({ visitCount: 0, activityCount: 0, days: 0 })),

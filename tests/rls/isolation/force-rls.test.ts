@@ -57,6 +57,37 @@ describe.skipIf(!url)("FORCE RLS (live DATABASE_URL)", () => {
     }
   });
 
+  it("hides other-tenant timeline_overrides rows without a Drizzle tenant filter", async ({ skip }) => {
+    const sql = rlsSql();
+    if ((await prepareRlsAppRole(sql)) === "unavailable") {
+      skip();
+      return;
+    }
+    const tenantA = `rls-note-a-${randomUUID()}`;
+    const tenantB = `rls-note-b-${randomUUID()}`;
+    const start = `2024-01-01T00:00:00Z#${randomUUID()}`;
+    try {
+      await rlsTransaction(sql, [
+        sql`SELECT set_config('app.tenant', ${tenantA}, true)`,
+        sql`
+          INSERT INTO timeline_overrides (tenant, kind, item_start, note)
+          VALUES (${tenantA}, 'visit', ${start}, 'probe')
+        `,
+      ]);
+      const results = await rlsTransaction(sql, [
+        sql`SELECT set_config('app.tenant', ${tenantB}, true)`,
+        sql`SELECT tenant FROM timeline_overrides WHERE item_start = ${start}`,
+      ]);
+      const visible = results[results.length - 1] as { tenant: string }[];
+      expect(visible).toEqual([]);
+    } finally {
+      await rlsTransaction(sql, [
+        sql`SELECT set_config('app.tenant', ${tenantA}, true)`,
+        sql`DELETE FROM timeline_overrides WHERE tenant = ${tenantA} AND item_start = ${start}`,
+      ]);
+    }
+  });
+
   it("hides other-tenant named_trips rows without a Drizzle tenant filter", async ({ skip }) => {
     const sql = rlsSql();
     if ((await prepareRlsAppRole(sql)) === "unavailable") {

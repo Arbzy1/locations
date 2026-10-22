@@ -82,6 +82,7 @@ import {
   getExportRows,
   deletePlaceData,
   getRangeInsights,
+  saveTimelineOverride,
   applyRetention,
   RETENTION_YEAR_OPTIONS,
   listNamedTrips,
@@ -973,6 +974,21 @@ app.delete("/api/places/:key/data", async (c) => {
   const tenant = c.get("tenant");
   const result = await withTenant(db, tenant, (tx) =>
     deletePlaceData(tx, tenant, decodeURIComponent(c.req.param("key"))),
+  );
+  if ("error" in result) return c.json({ error: result.error }, result.status);
+  return c.json(result);
+});
+
+app.patch("/api/overrides", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body) return c.json({ error: "JSON body required" }, 400);
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  // Pick fields explicitly: never spread the request body into a write.
+  const result = await withTenant(db, tenant, (tx) =>
+    saveTimelineOverride(tx, tenant, { kind: body.kind, start: body.start, note: body.note, mode: body.mode }),
   );
   if ("error" in result) return c.json({ error: result.error }, result.status);
   return c.json(result);

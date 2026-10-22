@@ -22,6 +22,10 @@ export interface Visit {
   fix_count?: number;
   /** Metres between Google's place and the GPS-fix position. */
   moved_m?: number;
+  /** The real place this stay belongs to. */
+  place_key?: string | null;
+  /** The user's own note. */
+  note?: string | null;
 }
 
 export interface RouteStep {
@@ -62,6 +66,11 @@ export interface Activity {
   from_place?: string;
   to_place?: string;
   source_id?: string | null;
+  /** The user's own note. */
+  note?: string | null;
+  /** True when the user corrected Google's transport mode. */
+  mode_corrected?: boolean;
+  google_mode?: string;
 }
 
 export interface Connector {

@@ -313,6 +313,25 @@ export const lifeChapters = pgTable(
   (t) => [index("life_chapters_tenant_idx").on(t.tenant)],
 );
 
+/**
+ * The user's notes and transport-mode fixes. Keyed by the item's start time, not its row
+ * id, so they still apply after the same export is imported again.
+ */
+export const timelineOverrides = pgTable(
+  "timeline_overrides",
+  {
+    tenant: text("tenant").notNull(),
+    kind: text("kind").notNull().$type<"visit" | "activity">(),
+    itemStart: text("item_start").notNull(),
+    note: text("note"),
+    mode: text("mode"),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tenant, t.kind, t.itemStart] })],
+);
+
+export type TimelineOverrideRow = typeof timelineOverrides.$inferSelect;
+
 /** Saved map camera (lng/lat, not lat/lon) for MapLibre jumpTo. */
 export type MapBookmark = {
   id: string;

@@ -68,7 +68,13 @@ function dayDb(v: VisitRow[], a: ActivityRow[]) {
     return [];
   };
   const query = (rows: unknown[]) => {
-    const q = { where: () => q, orderBy: async () => rows, limit: async () => rows };
+    // Awaitable after where() too, like a Drizzle query builder.
+    const q = {
+      where: () => q,
+      orderBy: async () => rows,
+      limit: async () => rows,
+      then: (resolve: (r: unknown[]) => unknown) => resolve(rows),
+    };
     return q;
   };
   return {

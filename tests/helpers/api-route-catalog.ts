@@ -84,6 +84,7 @@ export const API_ROUTE_CATALOG: ApiRoute[] = [
   { method: "GET", path: "/api/hotspots/days", samplePath: "/api/hotspots/days?lat=51.5&lon=-0.1", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
   { method: "GET", path: "/api/export/:format", samplePath: "/api/export/csv", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
   { method: "GET", path: "/api/insights/range", samplePath: "/api/insights/range?from=2024-01-01&to=2024-12-31", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
+  { method: "PATCH", path: "/api/overrides", samplePath: "/api/overrides", auth: "session", demo: "denyWrite", idScope: "none", rateLimited: false },
   { method: "DELETE", path: "/api/places/:key/data", samplePath: "/api/places/g%3Aother/data", auth: "session", demo: "denyWrite", idScope: "none", rateLimited: false },
   { method: "GET", path: "/api/trip-range/:start/:end", samplePath: "/api/trip-range/2024-01-01/2024-01-02", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
   { method: "GET", path: "/api/trips", samplePath: "/api/trips", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
