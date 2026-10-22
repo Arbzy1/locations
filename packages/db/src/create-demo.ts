@@ -52,5 +52,8 @@ async function main() {
 
 main().catch((err) => {
   console.error(err instanceof Error ? err.message : err);
+  // Drizzle wraps driver errors as "Failed query"; the useful part is the cause.
+  const cause = err instanceof Error ? (err.cause as { message?: string; code?: string } | undefined) : undefined;
+  if (cause) console.error(`Cause: ${cause.message ?? String(cause)}${cause.code ? ` (code ${cause.code})` : ""}`);
   process.exit(1);
 });
