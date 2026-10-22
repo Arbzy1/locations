@@ -342,7 +342,7 @@ export default function InsightsView() {
               <BarChart data={monthly}>
                 <XAxis
                   dataKey="month"
-                  tick={{ fill: chart.muted, fontSize: 10 }}
+                  tick={{ fill: chart.muted, fontSize: 11 }}
                   tickFormatter={(v: string) => {
                     const [y, m] = v.split('-');
                     return m === '01' ? y : '';

@@ -66,6 +66,8 @@ export default function MobilePanel({
           aria-modal="true"
           aria-labelledby={titleId}
           aria-hidden={!open}
+          // Off-screen while closed: keep its controls out of the tab order too.
+          inert={!open}
         >
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
             <h2 id={titleId} className="truncate text-sm font-semibold text-text">

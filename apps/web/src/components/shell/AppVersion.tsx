@@ -29,7 +29,7 @@ export function AppVersion({
       size={compact ? "icon" : "sm"}
       className={cn(
         "font-mono tabular-nums text-text-muted",
-        compact ? "h-11 w-11 px-0 text-[9px]" : "h-11 justify-start px-3 text-[11px]",
+        compact ? "h-11 w-11 px-0 text-[11px]" : "h-11 justify-start px-3 text-[11px]",
         className,
       )}
       title={`What's new in ${APP_VERSION_LABEL}`}

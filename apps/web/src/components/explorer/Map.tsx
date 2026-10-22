@@ -976,7 +976,12 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     });
     mapRef.current = map;
     if (!compact) {
-      map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
+      // Corners: Layers top-right, zoom bottom-right on desktop (bottom sheets cover it on
+      // phones, so it stays top-left there), playback and page actions bottom-left.
+      map.addControl(
+        new maplibregl.NavigationControl({ visualizePitch: true }),
+        window.matchMedia('(min-width: 1024px)').matches ? 'bottom-right' : 'top-left',
+      );
     }
     const onReady = () => {
       overlayReady.current = false;
@@ -1311,8 +1316,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         </DialogContent>
       </Dialog>
       {showLegend && (
-        <div className="pointer-events-auto absolute right-3 bottom-10 z-[400] max-h-[min(140px,28vh)] min-w-0 max-w-[min(12rem,42vw)] overflow-y-auto rounded-lg border border-border bg-surface p-2 text-[10px] text-text lg:max-h-[260px] lg:min-w-[160px] lg:max-w-none lg:p-2.5 lg:text-[11px]">
-          <div className="mb-1.5 text-[10px] font-semibold text-text-muted">YOUR DAY</div>
+        <div className="pointer-events-auto absolute right-3 bottom-10 z-[400] lg:right-16 max-h-[min(140px,28vh)] min-w-0 max-w-[min(12rem,42vw)] overflow-y-auto rounded-lg border border-border bg-surface p-2 text-[11px] text-text lg:max-h-[260px] lg:min-w-[160px] lg:max-w-none lg:p-2.5 lg:text-[11px]">
+          <div className="mb-1.5 text-[11px] font-semibold text-text-muted">YOUR DAY</div>
           {[
             ...visits.map((v) => ({
               time: v.start,
@@ -1345,7 +1350,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
                 <span className="shrink-0 text-text-muted">{item.sub}</span>
               </div>
             ))}
-          <p className="mt-1 text-[9px] text-text-muted opacity-70">
+          <p className="mt-1 text-[11px] text-text-muted opacity-70">
             {isNarrow ? 'Tap the timeline to focus the map.' : 'Zoom in further for on-map labels. Click the timeline to focus the map.'}
           </p>
         </div>

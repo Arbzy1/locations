@@ -178,7 +178,7 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
         </div>
       )}
 
-      <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[10px] text-text-muted">
+      <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[11px] text-text-muted">
         {WEEKDAYS.map((d) => (
           <div key={d} className="py-0.5">
             {d}
@@ -241,7 +241,7 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
                     <span
                       key={mode}
                       className="h-1 w-1 rounded-full"
-                      style={{ backgroundColor: MODE_COLORS[mode] || '#8b949e' }}
+                      style={{ backgroundColor: MODE_COLORS[mode] || 'var(--text-muted)' }}
                     />
                   ))}
                 </span>
@@ -251,7 +251,7 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
         })}
       </div>
 
-      <div className="mt-2 space-y-1.5 text-[10px] text-text-muted">
+      <div className="mt-2 space-y-1.5 text-[11px] text-text-muted">
         <div className="flex items-center gap-2">
           <span>Distance</span>
           <div className="flex h-2 flex-1 overflow-hidden rounded-full">
@@ -271,7 +271,7 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
               <span key={mode} className="inline-flex items-center gap-1">
                 <span
                   className="h-1.5 w-1.5 rounded-full"
-                  style={{ backgroundColor: MODE_COLORS[mode] || '#8b949e' }}
+                  style={{ backgroundColor: MODE_COLORS[mode] || 'var(--text-muted)' }}
                 />
                 {MODE_LABELS[mode] || mode}
               </span>

@@ -360,7 +360,7 @@ export default function CommandPalette() {
                 onClick={() => choose(row)}
               >
                 <span className="truncate">
-                  <span className="mr-2 text-[10px] uppercase tracking-wide text-text-muted">{row.group}</span>
+                  <span className="mr-2 text-[11px] uppercase tracking-wide text-text-muted">{row.group}</span>
                   {row.label}
                 </span>
                 {row.hint && <span className="shrink-0 font-mono text-xs text-text-muted">{row.hint}</span>}
@@ -397,7 +397,7 @@ export default function CommandPalette() {
               Remove {p.name}
             </Button>
           ))}
-          <p className="w-full text-[10px] text-text-muted">
+          <p className="w-full text-[11px] text-text-muted">
             Type ? for shortcuts. Ctrl/Cmd+K search. g then h/d/t/i/e/s jumps.
           </p>
         </div>
@@ -418,7 +418,7 @@ export default function CommandPalette() {
         >
           <Search size={14} />
           Search
-          <span className="ml-auto hidden font-mono text-[10px] sm:inline">Ctrl K</span>
+          <span className="ml-auto hidden font-mono text-[11px] sm:inline">Ctrl K</span>
         </Button>
       ) : (
         <Button
