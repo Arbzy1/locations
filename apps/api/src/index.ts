@@ -81,6 +81,7 @@ import {
   getHotspotDays,
   getExportRows,
   deletePlaceData,
+  getRangeInsights,
   applyRetention,
   RETENTION_YEAR_OPTIONS,
   listNamedTrips,
@@ -974,6 +975,19 @@ app.delete("/api/places/:key/data", async (c) => {
     deletePlaceData(tx, tenant, decodeURIComponent(c.req.param("key"))),
   );
   if ("error" in result) return c.json({ error: result.error }, result.status);
+  return c.json(result);
+});
+
+app.get("/api/insights/range", async (c) => {
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    getRangeInsights(tx, tenant, {
+      from: (c.req.query("from") ?? "").trim(),
+      to: (c.req.query("to") ?? "").trim(),
+    }),
+  );
+  if (isErrorResult(result)) return c.json(result, 400);
   return c.json(result);
 });
 

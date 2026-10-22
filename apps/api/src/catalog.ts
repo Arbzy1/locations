@@ -308,6 +308,127 @@ export async function deletePlaceData(db: Db, tenant: TenantId, key: string) {
   return { visitCount: removedVisits.length, activityCount: dropIds.length, trimmedPaths };
 }
 
+/** Longest period the range insights summarise. */
+export const INSIGHTS_RANGE_MAX_DAYS = 3660;
+
+/** The same dates one year earlier, clamped for 29 February. */
+export function sameRangeLastYear(from: string, to: string): { from: string; to: string } {
+  const shift = (d: string) => {
+    const [y, m, day] = d.split("-").map(Number);
+    const target = new Date(Date.UTC(y - 1, m - 1, day));
+    // 29 Feb has no twin: Date rolls to 1 Mar, so step back to 28 Feb.
+    if (target.getUTCMonth() !== m - 1) target.setUTCDate(0);
+    return target.toISOString().slice(0, 10);
+  };
+  return { from: shift(from), to: shift(to) };
+}
+
+async function periodSummary(db: Db, tenant: TenantId, from: string, to: string) {
+  const [days] = await db
+    .select({
+      days: sql<number>`count(*)::int`,
+      miles: sql<number>`coalesce(sum(${dayStats.totalDistanceMiles}), 0)`,
+    })
+    .from(dayStats)
+    .where(and(eq(dayStats.tenant, tenant), gte(dayStats.date, from), lte(dayStats.date, to)));
+  const modes = await db
+    .select({
+      mode: activities.mode,
+      journeys: sql<number>`count(*)::int`,
+      meters: sql<number>`coalesce(sum(${activities.distanceMeters}), 0)`,
+    })
+    .from(activities)
+    .where(and(eq(activities.tenant, tenant), gte(activities.date, from), lte(activities.date, to)))
+    .groupBy(activities.mode);
+  const [stays] = await db
+    .select({
+      visits: sql<number>`count(*)::int`,
+      places: sql<number>`count(distinct ${visits.placeKey})::int`,
+    })
+    .from(visits)
+    .where(and(eq(visits.tenant, tenant), gte(visits.date, from), lte(visits.date, to)));
+  const byMode: Record<string, { journeys: number; miles: number }> = {};
+  let journeys = 0;
+  for (const m of modes) {
+    journeys += m.journeys;
+    byMode[m.mode] = {
+      journeys: m.journeys,
+      miles: Math.round((Number(m.meters) * METERS_TO_MILES) * 10) / 10,
+    };
+  }
+  return {
+    from,
+    to,
+    days_with_data: days?.days ?? 0,
+    miles: Math.round(Number(days?.miles ?? 0) * 10) / 10,
+    journeys,
+    visits: stays?.visits ?? 0,
+    places: stays?.places ?? 0,
+    modes: byMode,
+  };
+}
+
+/**
+ * Insights for any period: totals, transport mix, top places by time, places visited
+ * for the first time, and the same summary for those dates a year earlier.
+ */
+export async function getRangeInsights(db: Db, tenant: TenantId, opts: { from: string; to: string }) {
+  const { from, to } = opts;
+  if (!ISO_DAY.test(from) || !ISO_DAY.test(to) || from > to) {
+    return { error: "from and to must be YYYY-MM-DD with from <= to" as const };
+  }
+  if (to > addDays(from, INSIGHTS_RANGE_MAX_DAYS - 1)) {
+    return { error: "Choose a period of up to ten years" as const };
+  }
+  const hidden = await hiddenPlaceKeySet(db, tenant);
+  const current = await periodSummary(db, tenant, from, to);
+  const last = sameRangeLastYear(from, to);
+  const previous = await periodSummary(db, tenant, last.from, last.to);
+
+  const placeRows = await db
+    .select({
+      key: sql<string>`${visits.placeKey}`,
+      minutes: sql<number>`coalesce(sum(${visits.durationMinutes}), 0)`,
+      visits: sql<number>`count(*)::int`,
+    })
+    .from(visits)
+    .where(
+      and(eq(visits.tenant, tenant), gte(visits.date, from), lte(visits.date, to), sql`${visits.placeKey} is not null`),
+    )
+    .groupBy(visits.placeKey)
+    .orderBy(desc(sql`coalesce(sum(${visits.durationMinutes}), 0)`))
+    .limit(12);
+  const topKeys = placeRows.map((r) => r.key).filter((k) => !hidden.has(k)).slice(0, 8);
+
+  // First visits: places whose earliest stay ever falls inside the period.
+  const firsts = await db
+    .select({ key: sql<string>`${visits.placeKey}`, first: sql<string>`min(${visits.date})` })
+    .from(visits)
+    .where(and(eq(visits.tenant, tenant), sql`${visits.placeKey} is not null`))
+    .groupBy(visits.placeKey)
+    .having(and(gte(sql`min(${visits.date})`, from), lte(sql`min(${visits.date})`, to)));
+  const newKeys = firsts.filter((f) => !hidden.has(f.key)).map((f) => f.key);
+
+  const groups = (await placeGroups(db, tenant)).filter((g) => topKeys.includes(g.key) || newKeys.slice(0, 8).includes(g.key));
+  const names = await placeDisplayNames(db, tenant, groups);
+  const byKey = new Map(placeRows.map((r) => [r.key, r]));
+
+  return {
+    current,
+    last_year: previous,
+    top_places: topKeys.map((key) => ({
+      key,
+      label: names.get(key) ?? key,
+      minutes: Math.round(Number(byKey.get(key)?.minutes ?? 0)),
+      visits: byKey.get(key)?.visits ?? 0,
+    })),
+    new_places: {
+      count: newKeys.length,
+      sample: newKeys.slice(0, 8).map((key) => ({ key, label: names.get(key) ?? key })),
+    },
+  };
+}
+
 export async function getCorridorDetail(db: Db, tenant: TenantId, a: string, b: string) {
   const from = a.slice(0, 200);
   const to = b.slice(0, 200);

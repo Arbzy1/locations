@@ -687,6 +687,37 @@ export function useRouteLines(opts: { from: string; to: string; sources?: string
   });
 }
 
+export type RangeSummary = {
+  from: string;
+  to: string;
+  days_with_data: number;
+  miles: number;
+  journeys: number;
+  visits: number;
+  places: number;
+  modes: Record<string, { journeys: number; miles: number }>;
+};
+
+export type RangeInsights = {
+  current: RangeSummary;
+  last_year: RangeSummary;
+  top_places: { key: string; label: string; minutes: number; visits: number }[];
+  new_places: { count: number; sample: { key: string; label: string }[] };
+};
+
+/** Insights for any period, with the same dates last year. */
+export function useRangeInsights(range: { from: string; to: string }) {
+  const tenantKey = useTenantKey();
+  const qs = new URLSearchParams(range).toString();
+  return useQuery<RangeInsights>({
+    queryKey: ['insights-range', tenantKey, qs],
+    queryFn: () => fetchJson(`/api/insights/range?${qs}`),
+    enabled: tenantKey !== 'anon' && Boolean(range.from && range.to && range.from <= range.to),
+    staleTime: Infinity,
+    placeholderData: (prev) => prev,
+  });
+}
+
 /** Days with a stay at a hotspot, newest first. */
 export function useHotspotDays(point: { lat: number; lon: number } | null) {
   const tenantKey = useTenantKey();

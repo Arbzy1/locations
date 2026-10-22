@@ -2388,6 +2388,7 @@ export {
   getHotspotDays,
   getExportRows,
   deletePlaceData,
+  getRangeInsights,
   listNamedTrips,
   upsertNamedTrip,
   deleteNamedTrip,
