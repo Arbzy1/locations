@@ -14,9 +14,9 @@ describe("normalizeTimelineInput", () => {
     expect(records.length).toBeGreaterThan(0);
   });
 
-  it("parses Records.json locations", () => {
-    const records = normalizeTimelineInput(loadTimelineFixture("timeline-records.json"));
-    expect(records.length).toBe(1);
+  it("reads Records.json without inventing a stay from one fix", () => {
+    // A single raw fix is not a stay; see raw-signals.test.ts for detection.
+    expect(normalizeTimelineInput(loadTimelineFixture("timeline-records.json"))).toEqual([]);
   });
 
   it("rejects Settings.json", () => {

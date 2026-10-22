@@ -20,7 +20,16 @@ import {
   METERS_TO_MILES,
   parseGeo,
 } from "./geo.js";
-import { buildStore, computeAllAnalytics, computeHourOfWeek } from "./analytics.js";
+import {
+  buildStore,
+  computeAllAnalytics,
+  computeAwayNights,
+  computeCommute,
+  computeHourOfWeek,
+  computeMovingHistory,
+  inferHomeWork,
+} from "./analytics.js";
+import { MAX_FIX_ACCURACY_M, detectStaysAndMoves, pathRecord } from "./raw-signals.js";
 
 type Db = NeonHttpDatabase<typeof schema> | NeonDatabase<typeof schema>;
 
@@ -28,6 +37,8 @@ export type RawTimelineRecord = {
   startTime?: string;
   endTime?: string;
   visit?: {
+    /** 0 for a top-level stay; higher levels are stays nested inside it (a shop in a mall). */
+    hierarchyLevel?: string | number;
     topCandidate?: {
       placeLocation?: string;
       semanticType?: string;
@@ -149,6 +160,7 @@ type NestedSemanticSegment = {
 };
 
 type SemanticVisit = {
+  hierarchyLevel?: string | number;
   topCandidate?: {
     placeId?: string;
     placeID?: string;
@@ -187,6 +199,7 @@ function pushVisitActivity(
       startTime,
       endTime,
       visit: {
+        hierarchyLevel: visit.hierarchyLevel,
         topCandidate: {
           placeLocation: toGeo(coords[0], coords[1]),
           semanticType: titleCaseSemantic(top.semanticType),
@@ -254,26 +267,20 @@ function fromTimelineEdits(edits: TimelineEdit[]): RawTimelineRecord[] {
     pushVisitActivity(records, startTime, endTime, seg.segment?.visit, seg.segment?.activity);
   }
 
+  // Raw positions are GPS fixes, not stays: they become journey paths and visit
+  // fixes, or (with no semantic segments at all) the input to stay detection.
+  const fixes: PathPoint[] = [];
   for (const edit of edits) {
     const position = edit.rawSignal?.signal?.position;
     if (!position?.timestamp) continue;
     const coords = latLngFromE7(position.point);
-    if (!coords) continue;
-    const startTime = position.timestamp;
-    const endDt = new Date(startTime);
-    endDt.setMinutes(endDt.getMinutes() + 2);
-    records.push({
-      startTime,
-      endTime: endDt.toISOString(),
-      visit: {
-        topCandidate: {
-          placeLocation: toGeo(coords[0], coords[1]),
-          semanticType: "Unknown",
-        },
-      },
-    });
+    const ms = Date.parse(position.timestamp);
+    if (!coords || !Number.isFinite(ms)) continue;
+    fixes.push([round6(coords[0]), round6(coords[1]), Math.round(ms / 1000)]);
   }
-
+  if (!records.length) return detectStaysAndMoves(fixes);
+  const path = pathRecord(fixes.sort((a, b) => a[2] - b[2]));
+  if (path) records.push(path);
   return records;
 }
 
@@ -310,35 +317,24 @@ export function normalizeTimelineInput(raw: unknown): RawTimelineRecord[] {
 }
 
 function fromRecordsJson(locations: Array<Record<string, unknown>>): RawTimelineRecord[] {
-  const records: RawTimelineRecord[] = [];
+  const fixes: PathPoint[] = [];
   for (const loc of locations) {
     const latE7 = Number(loc.latitudeE7 ?? loc.latE7);
     const lngE7 = Number(loc.longitudeE7 ?? loc.lngE7);
     if (!Number.isFinite(latE7) || !Number.isFinite(lngE7)) continue;
+    const accuracy = Number(loc.accuracy);
+    if (Number.isFinite(accuracy) && accuracy > MAX_FIX_ACCURACY_M) continue;
     const ts =
       (typeof loc.timestamp === "string" && loc.timestamp) ||
       (typeof loc.timestampMs === "string" && loc.timestampMs) ||
       (typeof loc.timestampMs === "number" && String(loc.timestampMs)) ||
       "";
     if (!ts) continue;
-    const startIso = ts.length < 13 && /^\d+$/.test(ts) ? new Date(Number(ts)).toISOString() : ts.includes("T") ? ts : new Date(Number(ts)).toISOString();
-    const endDt = new Date(startIso);
-    if (Number.isNaN(endDt.getTime())) continue;
-    endDt.setMinutes(endDt.getMinutes() + 2);
-    const lat = latE7 / 1e7;
-    const lon = lngE7 / 1e7;
-    records.push({
-      startTime: startIso,
-      endTime: endDt.toISOString(),
-      visit: {
-        topCandidate: {
-          placeLocation: toGeo(lat, lon),
-          semanticType: "Unknown",
-        },
-      },
-    });
+    const ms = /^\d+$/.test(ts) ? Number(ts) : Date.parse(ts);
+    if (!Number.isFinite(ms)) continue;
+    fixes.push([round6(latE7 / 1e7), round6(lngE7 / 1e7), Math.round(ms / 1000)]);
   }
-  return records;
+  return detectStaysAndMoves(fixes);
 }
 
 /** Seconds of slack around a journey window; classic path offsets are whole minutes. */
@@ -468,6 +464,7 @@ export function attachVisitFixes(
 
 function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
   const visitRows: VisitDraft[] = [];
+  const visitLevels: number[] = [];
   const activityRows: ActivityDraft[] = [];
   const pathPoints: PathPoint[] = [];
 
@@ -501,6 +498,7 @@ function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
         fixLon: null,
         fixCount: null,
       });
+      visitLevels.push(Number(record.visit.hierarchyLevel ?? 0) || 0);
     } else if (record.activity) {
       const act = record.activity;
       const top = act.topCandidate ?? {};
@@ -526,10 +524,68 @@ function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
     }
   }
 
+  const leafVisits = splitNestedVisits(visitRows, visitLevels);
   attachPathPoints(activityRows, pathPoints);
-  attachVisitFixes(visitRows, pathPoints);
+  attachVisitFixes(leafVisits, pathPoints);
 
-  return { visits: visitRows, activities: activityRows };
+  return { visits: leafVisits, activities: activityRows };
+}
+
+/** Parent fragments shorter than this around a nested stay are dropped. */
+const MIN_FRAGMENT_MINUTES = 2;
+
+/**
+ * Google nests stays (a shop inside a shopping centre) as overlapping visits with a
+ * higher `hierarchyLevel`. Importing both counts that time twice, so each parent is
+ * cut around its nested stays and only the uncovered pieces are kept.
+ */
+export function splitNestedVisits(rows: VisitDraft[], levels: number[]): VisitDraft[] {
+  if (!levels.some((l) => l > 0)) return rows;
+  const items = rows.map((row, i) => ({
+    row,
+    level: levels[i] ?? 0,
+    startMs: Date.parse(row.start),
+    endMs: Date.parse(row.end),
+  }));
+  // Only nested stays can be children; scanning just those keeps this near-linear.
+  const nested = items.filter((it) => it.level > 0).sort((a, b) => a.startMs - b.startMs);
+  const out: VisitDraft[] = [];
+
+  for (const parent of items) {
+    const children = nested.filter(
+      (c) =>
+        c !== parent &&
+        c.level > parent.level &&
+        c.startMs < parent.endMs &&
+        c.endMs > parent.startMs,
+    );
+    if (!children.length) {
+      out.push(parent.row);
+      continue;
+    }
+    let cursorMs = parent.startMs;
+    let cursorIso = parent.row.start;
+    const piece = (endMs: number, endIso: string) => {
+      const minutes = (endMs - cursorMs) / 60000;
+      if (minutes < MIN_FRAGMENT_MINUTES) return;
+      out.push({
+        ...parent.row,
+        start: cursorIso,
+        end: endIso,
+        date: cursorIso.slice(0, 10),
+        durationMinutes: Math.round(minutes * 10) / 10,
+      });
+    };
+    for (const child of children) {
+      if (child.startMs > cursorMs) piece(child.startMs, child.row.start);
+      if (child.endMs > cursorMs) {
+        cursorMs = child.endMs;
+        cursorIso = child.row.end;
+      }
+    }
+    if (parent.endMs > cursorMs) piece(parent.endMs, parent.row.end);
+  }
+  return out.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
 }
 
 /** Parse Google Timeline JSON (classic array or Timeline Edits export). */
@@ -737,22 +793,35 @@ export async function rebuildTenantAggregates(
   return { days: dayStatRows.length };
 }
 
-/** Rebuild only the hour-of-week cache after a timezone change. */
+/** Rebuild the analytics that depend on local time after a timezone change. */
 export async function rebuildHourOfWeekCache(
   db: Db,
   tenant: TenantId,
   timezone?: string | null,
 ): Promise<void> {
   const visitSelect = await db.select().from(visits).where(eq(visits.tenant, tenant));
-  const store = buildStore(visitSelect, [], []);
-  const data = computeHourOfWeek(store, timezone);
-  await db
-    .insert(analyticsCache)
-    .values({ tenant, key: "hour-of-week", data })
-    .onConflictDoUpdate({
-      target: [analyticsCache.tenant, analyticsCache.key],
-      set: { data, updatedAt: new Date() },
-    });
+  const { path: _path, ...activityColumns } = getTableColumns(activities);
+  const activitySelect = (
+    await db.select(activityColumns).from(activities).where(eq(activities.tenant, tenant))
+  ).map((row) => ({ ...row, path: null }));
+  const daySelect = await db.select().from(dayStats).where(eq(dayStats.tenant, tenant));
+  const store = buildStore(visitSelect, activitySelect, daySelect);
+  const caches: Record<string, unknown> = {
+    "hour-of-week": computeHourOfWeek(store, timezone),
+    "home-work": inferHomeWork(store, timezone),
+    "away-nights": computeAwayNights(store, timezone),
+    commute: computeCommute(store, timezone),
+    moving: computeMovingHistory(store, timezone),
+  };
+  for (const [key, data] of Object.entries(caches)) {
+    await db
+      .insert(analyticsCache)
+      .values({ tenant, key, data })
+      .onConflictDoUpdate({
+        target: [analyticsCache.tenant, analyticsCache.key],
+        set: { data, updatedAt: new Date() },
+      });
+  }
 }
 
 /**

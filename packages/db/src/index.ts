@@ -23,6 +23,7 @@ export * from "./analytics.js";
 export * from "./activity-guess.js";
 export * from "./demo-landmarks.js";
 export * from "./timeline-import.js";
+export * from "./raw-signals.js";
 export * from "./with-tenant.js";
 export * from "./entitlements.js";
 export * from "./quotas.js";
