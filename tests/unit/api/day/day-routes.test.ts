@@ -156,6 +156,24 @@ describe("getDay journey lines and gaps", () => {
     expect(day.visits[0].moved_m).toBeGreaterThan(100);
   });
 
+  it("caps live routing calls so a busy day stays under the Workers subrequest limit", async () => {
+    const t0 = Date.parse(`${DATE}T06:00:00Z`) / 1000;
+    const busy = Array.from({ length: 20 }, (_, k) => {
+      const start = t0 + k * 1800;
+      const hh = (s: number) => new Date(s * 1000).toISOString().slice(11, 16);
+      return {
+        ...journey(100 + k, hh(start), hh(start + 1200), [40.7 + k * 0.01, -74.0], [40.705 + k * 0.01, -73.99]),
+        path: [
+          [40.701 + k * 0.01, -73.998, start + 300],
+          [40.703 + k * 0.01, -73.995, start + 600],
+          [40.704 + k * 0.01, -73.992, start + 900],
+        ] as [number, number, number][],
+      };
+    });
+    await getDay(dayDb([], busy), "t1", DATE);
+    expect(vi.mocked(fetch).mock.calls.length).toBeLessThanOrEqual(25);
+  });
+
   it("names a stay with Google's own name over the geocoded one", async () => {
     const named = { ...home, googleName: "Grand Central Terminal" };
     const day = (await getDay(dayDb([named, work], []), "t1", DATE)) as unknown as {

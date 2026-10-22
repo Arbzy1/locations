@@ -153,12 +153,18 @@ export function getDb(env: Env) {
 }
 
 /**
- * Stateless HTTP connection for the shared route/place caches. They have no RLS,
- * so Day View routing can run outside the tenant transaction.
+ * Connection for the shared route/place caches, used outside any tenant transaction
+ * (they have no RLS). A pooled WebSocket, not the HTTP driver: on Workers every HTTP
+ * query is a subrequest, and a busy day makes far more lookups than the cap allows.
+ * Callers close it with `closeDb`.
  */
 export function getCacheDb(env: Env) {
-  // Same query builder surface for the select/insert calls the caches make.
-  return createHttpDb(env.DATABASE_URL) as unknown as ReturnType<typeof createDb>;
+  return createDb(env.DATABASE_URL);
+}
+
+/** End a pool-backed connection; safe on test doubles without one. */
+export async function closeDb(db: unknown) {
+  await (db as { $client?: { end?: () => Promise<void> } }).$client?.end?.().catch(() => undefined);
 }
 
 /** Worker liveness helper. Never logs the connection string or query errors. */
@@ -180,6 +186,7 @@ export async function fetchRoute(
   endLat: number,
   endLon: number,
   mode: string,
+  budget?: LiveLookupBudget,
 ): Promise<{ geometry: [number, number][]; steps: RouteStep[] }> {
   const fallback = {
     geometry: [[startLat, startLon], [endLat, endLon]] as [number, number][],
@@ -191,6 +198,11 @@ export async function fetchRoute(
   const key = makeRouteCacheKey(startLat, startLon, endLat, endLon, profile);
   const cached = await db.select().from(routeCache).where(eq(routeCache.key, key)).limit(1);
   if (cached[0]) return { geometry: cached[0].geometry, steps: cached[0].steps };
+  // Out of live calls for this request: draw it straight now, route it on a later view.
+  if (budget) {
+    if (budget.live < 1) return fallback;
+    budget.live -= 1;
+  }
 
   const url =
     `${OSRM_BASE}/${profile}/${startLon},${startLat};${endLon},${endLat}` +
@@ -376,11 +388,20 @@ async function routeViaTrace(pts: PathPoint[], profile: string, referenceM: numb
  * far from the recorded distance (the public OSRM server routes walks as a car).
  * Definite answers, including "no believable road route", are cached by trace hash.
  */
+/** Upper bound of OSRM calls one GPS journey costs (map-matching chunks plus a fallback route). */
+const TRACE_ROUTE_CALLS = 5;
+/**
+ * Live OSRM calls per Day View request. Workers cap outbound requests per request
+ * (50 on the free plan), shared with place-name lookups; cached routes cost nothing.
+ */
+export const MAX_LIVE_ROUTE_CALLS = 25;
+
 export async function fetchTraceRoute(
   db: ReturnType<typeof createDb>,
   trace: PathPoint[],
   mode: string,
   recordedDistanceM = 0,
+  budget?: LiveLookupBudget,
 ): Promise<RoutedLine | null> {
   const profile = MODE_TO_PROFILE[mode] ?? "driving";
   const pts = tracePointsForMatch(trace);
@@ -389,6 +410,10 @@ export async function fetchTraceRoute(
   const cached = await db.select().from(routeCache).where(eq(routeCache.key, key)).limit(1);
   if (cached[0]) {
     return cached[0].geometry.length ? { geometry: cached[0].geometry, steps: cached[0].steps } : null;
+  }
+  if (budget) {
+    if (budget.live < TRACE_ROUTE_CALLS) return null;
+    budget.live -= TRACE_ROUTE_CALLS;
   }
 
   const referenceM = Math.max(polylineLengthM(pts), recordedDistanceM || 0);
@@ -427,6 +452,7 @@ export async function routeActivity(
   db: ReturnType<typeof createDb>,
   a: ActivityRow,
   anchors?: { start: LatLon; end: LatLon },
+  budget?: LiveLookupBudget,
 ): Promise<RoutedLine & { source: RouteSource; gpsPoints: number }> {
   const gpsPoints = a.path?.length ?? 0;
   const trace = journeyTrace(
@@ -436,7 +462,7 @@ export async function routeActivity(
   );
   if (trace && trace.length >= 3) {
     if (!RAW_TRACE_MODES.has(a.mode)) {
-      const road = await fetchTraceRoute(db, trace, a.mode, a.distanceMeters);
+      const road = await fetchTraceRoute(db, trace, a.mode, a.distanceMeters, budget);
       if (road) return { ...road, source: "gps-road", gpsPoints };
     }
     return {
@@ -449,7 +475,7 @@ export async function routeActivity(
   if (a.mode === "train" || a.mode === "subway") {
     return { geometry: [], steps: [], source: "rail-arc", gpsPoints };
   }
-  const estimate = await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode);
+  const estimate = await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode, budget);
   return {
     ...estimate,
     source: estimate.steps.length ? "road-estimate" : "straight",
@@ -968,7 +994,7 @@ export type DayProgressEvent = {
 };
 
 /** Live Nominatim lookups allowed per Day View for "via" places (cache hits are free). */
-const MAX_LIVE_VIA_LOOKUPS = 10;
+const MAX_LIVE_VIA_LOOKUPS = 8;
 const VIA_SAMPLE_EVERY_M = 2500;
 const VIA_SAMPLES_MAX = 5;
 
@@ -1172,6 +1198,7 @@ export async function buildDay(
   const drawnEnds = new Map<ActivityRow, { start: LatLon; end: LatLon }>();
 
   const viaBudget = { live: MAX_LIVE_VIA_LOOKUPS };
+  const routeBudget: LiveLookupBudget = { live: MAX_LIVE_ROUTE_CALLS };
   const enrichedActivities = [];
   for (let idx = 0; idx < events.length; idx++) {
     const ev = events[idx];
@@ -1196,7 +1223,7 @@ export async function buildDay(
       start: journeyAnchor([a.startLat, a.startLon], prevStop, a.path?.[0]),
       end: journeyAnchor([a.endLat, a.endLon], nextStop, a.path?.at(-1)),
     };
-    const route = await routeActivity(db, a, anchors);
+    const route = await routeActivity(db, a, anchors, routeBudget);
     const d = activityToApi(a) as Record<string, unknown>;
     d.note = overrides.get(`activity|${a.start}`)?.note ?? null;
     const googleMode = originalModes.get(a.start);
@@ -1250,7 +1277,7 @@ export async function buildDay(
         a.mode === "train" || a.mode === "subway"
           ? makeRailArc(snapStartLat, snapStartLon, snapEndLat, snapEndLon)
           : snapGeometry(
-              (await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode)).geometry,
+              (await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode, routeBudget)).geometry,
               snapStartLat,
               snapStartLon,
               snapEndLat,
@@ -1370,6 +1397,7 @@ export async function buildDay(
         c.toLat,
         c.toLon,
         connectorMode(c.gapM, c.from_time, c.to_time),
+        routeBudget,
       );
       connectors.push({
         from_time: c.from_time,
