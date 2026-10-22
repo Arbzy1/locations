@@ -4,6 +4,7 @@ import { Button } from "../ui/button";
 import { Card, CardTitle } from "../ui/card";
 import { Dialog, DialogContent } from "../ui/dialog";
 import ExportFilesCard from "./ExportFilesCard";
+import RetentionCard from "./RetentionCard";
 
 type Props = {
   onMessage: (msg: string) => void;
@@ -147,6 +148,8 @@ export default function SettingsPrivacy({ onMessage, onError }: Props) {
       </Card>
 
       <ExportFilesCard />
+
+      <RetentionCard onMessage={onMessage} onError={onError} />
 
       <Card className="border-destructive/30">
         <CardTitle className="text-base text-destructive">Danger zone</CardTitle>

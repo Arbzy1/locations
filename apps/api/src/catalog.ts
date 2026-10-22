@@ -22,6 +22,7 @@ import {
   thinTrace,
   haversineM,
   makeCoordPlaceKey,
+  rebuildTenantAggregates,
   METERS_TO_MILES,
   type TenantId,
 } from "@locations/db";
@@ -249,6 +250,62 @@ export async function listClusterVisits(
     visits: rows,
     cursor: rows.length === limit ? rows[rows.length - 1]?.start : null,
   };
+}
+
+/** Journeys and GPS fixes this close to a deleted place go with it. */
+export const PLACE_DELETE_RADIUS_M = 200;
+
+/**
+ * Privacy: remove a place from history. Deletes its stays, journeys that start or end
+ * there, GPS fixes near it on other journeys, and its label; then rebuilds aggregates.
+ */
+export async function deletePlaceData(db: Db, tenant: TenantId, key: string) {
+  const placeKey = key.slice(0, 200);
+  if (!isRealPlaceKey(placeKey)) return { error: "Choose a single place to delete" as const, status: 400 as const };
+  const group = (await placeGroups(db, tenant, placeKey))[0];
+  if (!group) return { error: "Place not found" as const, status: 404 as const };
+  const near = (lat: number, lon: number) =>
+    haversineM(group.lat, group.lon, lat, lon) <= PLACE_DELETE_RADIUS_M;
+
+  const removedVisits = await db
+    .delete(visits)
+    .where(and(eq(visits.tenant, tenant), eq(visits.placeKey, placeKey)))
+    .returning({ id: visits.id });
+
+  const journeys = await db
+    .select({
+      id: activities.id,
+      startLat: activities.startLat,
+      startLon: activities.startLon,
+      endLat: activities.endLat,
+      endLon: activities.endLon,
+      path: activities.path,
+    })
+    .from(activities)
+    .where(eq(activities.tenant, tenant));
+  const dropIds: number[] = [];
+  let trimmedPaths = 0;
+  for (const j of journeys) {
+    if (near(j.startLat, j.startLon) || near(j.endLat, j.endLon)) {
+      dropIds.push(j.id);
+      continue;
+    }
+    if (!j.path?.some(([lat, lon]) => near(lat, lon))) continue;
+    const kept = j.path.filter(([lat, lon]) => !near(lat, lon));
+    await db
+      .update(activities)
+      .set({ path: kept.length ? kept : null })
+      .where(and(eq(activities.tenant, tenant), eq(activities.id, j.id)));
+    trimmedPaths += 1;
+  }
+  for (let i = 0; i < dropIds.length; i += 500) {
+    await db
+      .delete(activities)
+      .where(and(eq(activities.tenant, tenant), inArray(activities.id, dropIds.slice(i, i + 500))));
+  }
+  await db.delete(placeLabels).where(and(eq(placeLabels.tenant, tenant), eq(placeLabels.placeKey, placeKey)));
+  await rebuildTenantAggregates(db, tenant);
+  return { visitCount: removedVisits.length, activityCount: dropIds.length, trimmedPaths };
 }
 
 export async function getCorridorDetail(db: Db, tenant: TenantId, a: string, b: string) {

@@ -333,6 +333,8 @@ export const userSettings = pgTable("user_settings", {
   mapBookmarks: jsonb("map_bookmarks").$type<MapBookmark[]>().notNull().default([]),
   mapTileDarkUrl: text("map_tile_dark_url"),
   mapTileLightUrl: text("map_tile_light_url"),
+  /** Delete location history older than this many years (null keeps everything). */
+  retentionYears: integer("retention_years"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

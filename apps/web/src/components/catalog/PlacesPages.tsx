@@ -19,6 +19,11 @@ import { formatDuration, formatTime } from '../../utils/format';
 import { MODE_LABELS } from '../../types';
 import { Skeleton } from '../ui/skeleton';
 import { EmptyState, ErrorState } from '../ui/states';
+import PlaceActions from './PlaceActions';
+import { useSession } from '../../lib/auth';
+
+/** Real places (`g:` Google id, `c:` snapped spot) can be renamed and deleted; regions cannot. */
+const isRealPlaceKey = (key: string) => key.startsWith('g:') || key.startsWith('c:');
 
 export function PlacesDirectory() {
   const [q, setQ] = useState('');
@@ -93,6 +98,8 @@ export function PlacePage() {
   const decoded = decodeURIComponent(key);
   const { data, isError } = useCluster(decoded);
   const { data: visitPage } = useClusterVisits(decoded);
+  const { data: session } = useSession();
+  const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
   useEffect(() => {
     if (data?.cluster) rememberRecentPlace(data.cluster, data.label || data.cluster);
   }, [data?.cluster, data?.label]);
@@ -122,6 +129,9 @@ export function PlacePage() {
           areaMarkers={[{ lat: data.lat, lon: data.lon, label: data.label, visits: data.visits }]}
         />
       </div>
+      {!isDemo && isRealPlaceKey(data.cluster) && (
+        <PlaceActions key={data.cluster} placeKey={data.cluster} label={data.label} hidden={Boolean(data.hidden)} />
+      )}
       <div>
         <h3 className="mb-2 text-sm font-semibold text-text-muted">Time of day (UTC)</h3>
         <div className="flex h-16 items-end gap-px">

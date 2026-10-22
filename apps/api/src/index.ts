@@ -80,6 +80,9 @@ import {
   getRouteLines,
   getHotspotDays,
   getExportRows,
+  deletePlaceData,
+  applyRetention,
+  RETENTION_YEAR_OPTIONS,
   listNamedTrips,
   upsertNamedTrip,
   deleteNamedTrip,
@@ -96,6 +99,7 @@ import {
 import { billingEmailKind, sendProductEmail } from "./email";
 import { parsePlaceColor, sanitizePlaceTags } from "./place-labels";
 import { runMonthlyRecaps } from "./monthly-recap";
+import { runRetention } from "./retention";
 import { runExportPackJob } from "./export-pack-job";
 import { publicExportJob } from "./export-pack";
 import {
@@ -961,6 +965,18 @@ app.get("/api/routes", async (c) => {
   return c.json(result);
 });
 
+app.delete("/api/places/:key/data", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    deletePlaceData(tx, tenant, decodeURIComponent(c.req.param("key"))),
+  );
+  if ("error" in result) return c.json({ error: result.error }, result.status);
+  return c.json(result);
+});
+
 app.get("/api/export/:format", async (c) => {
   const format = c.req.param("format") as ExportFormat;
   if (!EXPORT_FORMATS.includes(format)) return c.json({ error: "Format must be gpx, geojson or csv" }, 400);
@@ -1190,7 +1206,16 @@ app.patch("/api/account/settings", async (c) => {
     mapBookmarks?: unknown;
     mapTileDarkUrl?: string | null;
     mapTileLightUrl?: string | null;
+    retentionYears?: number | null;
   } | null;
+  const retentionYears = body?.retentionYears;
+  if (
+    retentionYears !== undefined &&
+    retentionYears !== null &&
+    !(RETENTION_YEAR_OPTIONS as readonly number[]).includes(retentionYears)
+  ) {
+    return c.json({ error: `Keep history for ${RETENTION_YEAR_OPTIONS.join(", ")} years, or forever` }, 400);
+  }
   const allowedHosts = parseCustomTileHosts(c.env.MAP_CUSTOM_TILE_HOSTS);
   if (body?.mapTileDarkUrl != null && body.mapTileDarkUrl !== "") {
     const check = validateTileTemplate(body.mapTileDarkUrl, allowedHosts);
@@ -1215,8 +1240,22 @@ app.patch("/api/account/settings", async (c) => {
       mapBookmarks: Array.isArray(mapBookmarks) ? mapBookmarks : undefined,
       mapTileDarkUrl: body?.mapTileDarkUrl,
       mapTileLightUrl: body?.mapTileLightUrl,
+      retentionYears,
     }),
   );
+  if (typeof retentionYears === "number") {
+    // Apply the new limit now rather than waiting for the monthly run.
+    c.executionCtx.waitUntil(
+      (async () => {
+        const jobDb = getDb(c.env);
+        try {
+          await withTenant(jobDb, tenant, (tx) => applyRetention(tx, tenant, retentionYears));
+        } finally {
+          await (jobDb as { $client?: { end?: () => Promise<void> } }).$client?.end?.();
+        }
+      })(),
+    );
+  }
   return c.json(settings);
 });
 
@@ -1616,6 +1655,7 @@ export default {
     }
   },
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    await runRetention(env);
     await runMonthlyRecaps(env);
   },
 };

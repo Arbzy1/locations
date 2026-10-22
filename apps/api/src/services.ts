@@ -1974,9 +1974,31 @@ export async function getUserSettings(db: ReturnType<typeof createDb>, tenant: T
       mapBookmarks: [] as MapBookmark[],
       mapTileDarkUrl: null as string | null,
       mapTileLightUrl: null as string | null,
+      retentionYears: null as number | null,
       updatedAt: new Date(),
     }
   );
+}
+
+/** Choices offered for auto-delete; anything else is rejected. */
+export const RETENTION_YEAR_OPTIONS = [1, 2, 3, 5, 10] as const;
+
+/** First date kept when only the last `years` years are retained. */
+export function retentionCutoff(years: number, now = new Date()): string {
+  const d = new Date(Date.UTC(now.getUTCFullYear() - years, now.getUTCMonth(), now.getUTCDate()));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Delete this tenant's history from before its retention cutoff. */
+export async function applyRetention(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  years: number,
+  now = new Date(),
+) {
+  const cutoff = retentionCutoff(years, now);
+  const dayBefore = new Date(Date.parse(cutoff) - 86_400_000).toISOString().slice(0, 10);
+  return deleteDateRange(db, { tenant, from: "0001-01-01", to: dayBefore });
 }
 
 export async function upsertUserSettings(
@@ -1990,9 +2012,12 @@ export async function upsertUserSettings(
     mapBookmarks?: MapBookmark[];
     mapTileDarkUrl?: string | null;
     mapTileLightUrl?: string | null;
+    retentionYears?: number | null;
   },
 ) {
   const current = await getUserSettings(db, tenant);
+  const retentionYears =
+    patch.retentionYears === undefined ? (current.retentionYears ?? null) : patch.retentionYears;
   const distanceUnit = patch.distanceUnit ?? current.distanceUnit ?? "mi";
   const timezone = patch.timezone === undefined ? current.timezone : patch.timezone;
   const monthlyRecapEnabled =
@@ -2024,6 +2049,7 @@ export async function upsertUserSettings(
       mapBookmarks,
       mapTileDarkUrl,
       mapTileLightUrl,
+      retentionYears,
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
@@ -2036,6 +2062,7 @@ export async function upsertUserSettings(
         mapBookmarks,
         mapTileDarkUrl,
         mapTileLightUrl,
+        retentionYears,
         updatedAt: new Date(),
       },
     });
@@ -2051,6 +2078,7 @@ export async function upsertUserSettings(
     mapBookmarks,
     mapTileDarkUrl,
     mapTileLightUrl,
+    retentionYears,
   };
 }
 
@@ -2359,6 +2387,7 @@ export {
   getRouteLines,
   getHotspotDays,
   getExportRows,
+  deletePlaceData,
   listNamedTrips,
   upsertNamedTrip,
   deleteNamedTrip,
