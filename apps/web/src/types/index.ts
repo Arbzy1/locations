@@ -15,6 +15,13 @@ export interface Visit {
   stop_number?: number;
   total_stops?: number;
   source_id?: string | null;
+  /** Google's place position; `lat`/`lon` may be the GPS-fix median instead. */
+  place_lat?: number;
+  place_lon?: number;
+  /** GPS fixes recorded during the stay (0 when the position is Google's place). */
+  fix_count?: number;
+  /** Metres between Google's place and the GPS-fix position. */
+  moved_m?: number;
 }
 
 export interface RouteStep {
@@ -43,6 +50,15 @@ export interface Activity {
   route_source?: 'gps-road' | 'gps' | 'road-estimate' | 'rail-arc' | 'straight';
   /** Recorded GPS fixes behind this journey (Timeline `timelinePath`). */
   gps_points?: number;
+  /** Start, recorded GPS fixes, end, joined to the same stops as `route_geometry`. */
+  recorded_geometry?: [number, number][] | null;
+  /** OSRM route between start and end, only when the day was loaded with compare. */
+  predicted_geometry?: [number, number][];
+  /** How far the predicted line strays from the GPS fixes. */
+  prediction_gap?: { medianM: number; maxM: number; within100Pct: number } | null;
+  accuracy?: JourneyAccuracy;
+  /** Towns or areas the recorded trace passed through. */
+  via_places?: string[];
   from_place?: string;
   to_place?: string;
   source_id?: string | null;
@@ -261,7 +277,7 @@ export interface RouteProgress {
   percent: number;
 }
 
-export type TabId = 'hotspots' | 'day' | 'trips' | 'insights' | 'settings';
+export type TabId = 'hotspots' | 'day' | 'routes' | 'trips' | 'insights' | 'settings';
 
 export interface DataSourceInfo {
   id: string;
@@ -323,3 +339,53 @@ export const MODE_LABELS: Record<string, string> = {
   flying: 'Flying',
   unknown: 'Unknown',
 };
+
+export interface JourneyAccuracy {
+  score: 'high' | 'medium' | 'low';
+  fixes: number;
+  maxGapMin: number;
+  meanOffsetM: number | null;
+}
+
+/** Which line Day View draws for each journey. */
+export type LineVariant = 'best' | 'recorded' | 'predicted';
+
+/** One journey in the Routes (period) view, as recorded. */
+export interface RouteLine {
+  date: string;
+  start: string;
+  mode: string;
+  source_id: string | null;
+  /** True when the line follows recorded GPS fixes; false is a straight start-to-end guess. */
+  recorded: boolean;
+  miles: number;
+  coords: [number, number][];
+}
+
+export interface RouteLinesResponse {
+  from: string;
+  to: string;
+  truncated: boolean;
+  days: number;
+  total_miles: number;
+  modes: Record<string, { count: number; miles: number }>;
+  lines: RouteLine[];
+}
+
+export interface HotspotDay {
+  date: string;
+  minutes: number;
+  visits: number;
+  first: string;
+  last: string;
+}
+
+export interface HotspotDaysResponse {
+  lat: number;
+  lon: number;
+  radius_m: number;
+  total_days: number;
+  total_minutes: number;
+  truncated: boolean;
+  days: HotspotDay[];
+}

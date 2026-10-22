@@ -14,6 +14,7 @@ export type ParsedCommand =
 export type ChordPath =
   | "/hotspots"
   | "/day"
+  | "/routes"
   | "/trips"
   | "/insights"
   | "/places"
@@ -22,6 +23,7 @@ export type ChordPath =
 export const CHORD_MAP: Record<string, ChordPath> = {
   h: "/hotspots",
   d: "/day",
+  r: "/routes",
   t: "/trips",
   i: "/insights",
   e: "/places",

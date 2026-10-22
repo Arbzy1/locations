@@ -22,7 +22,8 @@ export default function ExploreMenu({ compact, expanded }: { compact?: boolean; 
   const month = today.slice(0, 7);
 
   const extra: ExploreLink[] = [
-    { group: 'Time', to: `/month/${month}`, label: 'This month', title: 'Calendar and heatmap for this month' },
+    { group: 'Time', to: `/routes?period=month&ym=${month}`, label: 'This month', title: 'Every journey line this month' },
+    { group: 'Time', to: `/month/${month}`, label: 'Month calendar', title: 'Calendar and heatmap for this month' },
     { group: 'Time', to: `/week/${today}`, label: 'This week', title: 'Seven-day strip for this week' },
   ];
 

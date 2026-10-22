@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+Routes view (`/routes`, `g r`): every journey line for a day, month, year, or custom range (up to a year), coloured by transport mode, as recorded (GPS trace, or a dashed straight line when there were no fixes). Month chips with mileage for every month with data, year chips, `[` and `]` to step, a mode legend that hides or shows modes, source chips, and "Show everything". The map fits the busiest region so trips abroad do not shrink everyday journeys. Lines open their day in a new tab. Served by `GET /api/routes` (no routing calls). "This month" in Explore and the month page link here.
+
+Day View "Journey lines" toggle: Best (GPS snapped to roads), Recorded (straight lines between GPS fixes), or Predicted (OSRM fastest route, loaded with `?compare=1`), with how closely the prediction follows your GPS points. Each journey gets a confidence badge (fix count, longest gap, offset from the drawn line) and "through" towns from its GPS trace. Stays are drawn at the median of GPS fixes recorded during them (`visits.fix_lat`/`fix_lon`/`fix_count`, migration `0015_visit_fix`), with how far that is from Google's place; needs a re-import.
+
+Hotspots: tap a hotspot (zoomed in) or "Days I was here" on a listed place to see every day you were there with time spent, each with "New tab" (keeps the Hotspots page as it was) and "Open". The selected spot is kept in the URL (`?spot=`). Served by `GET /api/hotspots/days`.
+
+The demo tenant keeps a single source on import, so demo days no longer show each journey twice.
+
 Day View no longer crashes when a day loads. The playback marker was added to the map before it had a position, which threw inside MapLibre and blanked the page. The map also stops redrawing every line and marker on each playback frame.
 
 Maps load again. Carto raster tiles now return "API key required" images, so the default basemap is OpenFreeMap's keyless vector styles (`dark` and `positron`) when `MAP_STYLE_*` and `MAP_TILE_*` are unset; the CSP allows `tiles.openfreemap.org` only while that default is in use, and raster tiles saved in Settings still win. Day View journey lines draw again: source colours were `var(--token)` strings that MapLibre cannot paint, so they are resolved to the theme's colour, and with a single data source each journey keeps its own colour. Timeline journey rows no longer nest the road-steps button inside another button.

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useQuery, useQueryClient, useQueries } from '@tanstack/react-query';
 import type {
   DayData,
+  RouteLinesResponse,
+  HotspotDaysResponse,
   DaySummary,
   Overview,
   HeatmapPoint,
@@ -76,9 +78,11 @@ async function fetchDayStreaming(
   onProgress: (p: DayLoadProgress) => void,
   signal?: AbortSignal,
   sourceIds?: string[],
+  compare?: boolean,
 ): Promise<DayData> {
   const params = new URLSearchParams({ stream: '1' });
   if (sourceIds?.length) params.set('sources', sourceIds.join(','));
+  if (compare) params.set('compare', '1');
   const res = await fetch(`/api/day/${date}?${params.toString()}`, {
     credentials: 'include',
     signal,
@@ -145,16 +149,18 @@ async function fetchDayStreaming(
   return result;
 }
 
-export function useDayData(date: string, sourceIds?: string[]) {
+/** `compare` also loads the OSRM-predicted line for each journey (Day View toggle). */
+export function useDayData(date: string, sourceIds?: string[], opts?: { compare?: boolean }) {
   const tenantKey = useTenantKey();
   const [progress, setProgress] = useState<DayLoadProgress | null>(null);
   const sourceKey = sourceIds?.slice().sort().join(',') ?? '';
+  const compare = Boolean(opts?.compare);
 
   const query = useQuery<DayData>({
-    queryKey: ['day', tenantKey, date, sourceKey],
+    queryKey: ['day', tenantKey, date, sourceKey, compare],
     queryFn: ({ signal }) => {
       setProgress({ stage: 'Starting', percent: 0, logs: ['Starting…'] });
-      return fetchDayStreaming(date, setProgress, signal, sourceIds);
+      return fetchDayStreaming(date, setProgress, signal, sourceIds, compare);
     },
     enabled: !!date && tenantKey !== 'anon',
     staleTime: Infinity,
@@ -659,5 +665,32 @@ export function usePublicConfig() {
     queryKey: ['public-config'],
     queryFn: () => fetchJson('/api/config'),
     staleTime: 60_000,
+  });
+}
+
+/** Every journey line in a date range, as recorded (Routes view). */
+export function useRouteLines(opts: { from: string; to: string; sources?: string[] }) {
+  const tenantKey = useTenantKey();
+  const params = new URLSearchParams({ from: opts.from, to: opts.to });
+  if (opts.sources?.length) params.set('sources', opts.sources.join(','));
+  const qs = params.toString();
+  return useQuery<RouteLinesResponse>({
+    queryKey: ['routes', tenantKey, qs],
+    queryFn: () => fetchJson(`/api/routes?${qs}`),
+    enabled: tenantKey !== 'anon' && Boolean(opts.from && opts.to),
+    staleTime: Infinity,
+    placeholderData: (prev) => prev,
+  });
+}
+
+/** Days with a stay at a hotspot, newest first. */
+export function useHotspotDays(point: { lat: number; lon: number } | null) {
+  const tenantKey = useTenantKey();
+  const qs = point ? new URLSearchParams({ lat: String(point.lat), lon: String(point.lon) }).toString() : '';
+  return useQuery<HotspotDaysResponse>({
+    queryKey: ['hotspot-days', tenantKey, qs],
+    queryFn: () => fetchJson(`/api/hotspots/days?${qs}`),
+    enabled: tenantKey !== 'anon' && Boolean(point),
+    staleTime: Infinity,
   });
 }

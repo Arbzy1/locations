@@ -269,6 +269,12 @@ function buildTimelineEvents(
   return events;
 }
 
+function accuracyTitle(acc: NonNullable<Activity['accuracy']>): string {
+  if (!acc.fixes) return 'Low confidence: no GPS points were recorded for this journey';
+  const offset = acc.meanOffsetM == null ? '' : `, line sits ${acc.meanOffsetM} m from them on average`;
+  return `${acc.score[0].toUpperCase()}${acc.score.slice(1)} confidence: ${acc.fixes} GPS points, longest gap ${acc.maxGapMin} min${offset}`;
+}
+
 /** Translucent colour for hex values and `var(--token)` alike (`${hex}55` breaks on var()). */
 const tint = (color: string, percent: number) =>
   `color-mix(in srgb, ${color} ${percent}%, transparent)`;
@@ -515,7 +521,25 @@ export default function Timeline({
                           · {a.route_source.startsWith('gps') ? 'GPS' : 'estimated'}
                         </span>
                       )}
+                      {a.accuracy && (
+                        <span
+                          className={cn(
+                            'ml-auto rounded px-1 text-[9px] font-semibold uppercase',
+                            a.accuracy.score === 'high' && 'bg-walk/15 text-walk',
+                            a.accuracy.score === 'medium' && 'bg-bus/15 text-bus',
+                            a.accuracy.score === 'low' && 'bg-text-muted/15 text-text-muted',
+                          )}
+                          title={accuracyTitle(a.accuracy)}
+                        >
+                          {a.accuracy.score}
+                        </span>
+                      )}
                     </div>
+                    {a.via_places && a.via_places.length > 0 && (
+                      <div className="mt-0.5 truncate text-[10px] text-text-muted" title="Towns and areas your GPS trace passed through">
+                        through {a.via_places.join(' → ')}
+                      </div>
+                    )}
                     {mainRoads && mainRoads.length > 0 && (
                       <div className="text-[10px] text-text-muted/50 mt-0.5 truncate">
                         via {mainRoads.join(' → ')}

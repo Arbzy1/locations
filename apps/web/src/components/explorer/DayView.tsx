@@ -10,7 +10,8 @@ import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from '../s
 import { formatDate, formatMilesOrKm } from '../../utils/format';
 import { useUnits } from '../../lib/units';
 import { MODE_COLORS, MODE_LABELS } from '../../types';
-import type { Visit, Activity, Connector, MapFocusTarget } from '../../types';
+import type { Visit, Activity, Connector, MapFocusTarget, LineVariant } from '../../types';
+import { withLineVariant } from '../../lib/map/lineVariant';
 import {
   buildPlaybackSegments,
   playbackRange,
@@ -30,6 +31,16 @@ import {
   Calendar,
   Loader2,
 } from 'lucide-react';
+
+const LINE_VARIANTS: { id: LineVariant; label: string; title: string }[] = [
+  { id: 'best', label: 'Best', title: 'GPS points snapped onto roads where possible' },
+  { id: 'recorded', label: 'Recorded', title: 'Only what your phone recorded: straight lines between GPS points' },
+  { id: 'predicted', label: 'Predicted', title: "OSRM's fastest route between each journey's start and end" },
+];
+
+function formatMeters(m: number): string {
+  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
+}
 
 function focusTargetForVisit(v: Visit): MapFocusTarget {
   return { lat: v.lat, lon: v.lon, zoom: 16 };
@@ -86,10 +97,33 @@ export default function DayView({ initialDate }: Props) {
   const [followPlayhead, setFollowPlayhead] = useState(false);
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
   const { data: sources } = useSources();
+  const [lineVariant, setLineVariant] = useState<LineVariant>('best');
   const { data: dayData, isLoading, isFetching, progress } = useDayData(
     selectedDate,
     sourceFilter.length ? sourceFilter : undefined,
+    { compare: lineVariant === 'predicted' },
   );
+  /** Journeys with the line the toggle picked, for the map and playback alike. */
+  const shownActivities = useMemo(
+    () =>
+      dayData && !('error' in dayData)
+        ? lineVariant === 'best'
+          ? dayData.activities
+          : dayData.activities.map((a) => withLineVariant(a, lineVariant))
+        : undefined,
+    [dayData, lineVariant],
+  );
+  const gapSummary = useMemo(() => {
+    const gaps = (dayData && !('error' in dayData) ? dayData.activities : [])
+      .map((a) => a.prediction_gap)
+      .filter((g): g is NonNullable<typeof g> => Boolean(g));
+    if (!gaps.length) return null;
+    return {
+      within: Math.round(gaps.reduce((s, g) => s + g.within100Pct, 0) / gaps.length),
+      maxM: Math.max(...gaps.map((g) => g.maxM)),
+      journeys: gaps.length,
+    };
+  }, [dayData]);
 
   const sourceColors = useMemo(() => {
     const map: Record<string, string> = {};
@@ -103,8 +137,8 @@ export default function DayView({ initialDate }: Props) {
 
   const segments = useMemo(() => {
     if (!selectedDate || !dayData || 'error' in dayData) return [];
-    return buildPlaybackSegments(selectedDate, dayData.visits, dayData.activities, dayData.connectors);
-  }, [dayData, selectedDate]);
+    return buildPlaybackSegments(selectedDate, dayData.visits, shownActivities ?? [], dayData.connectors);
+  }, [dayData, selectedDate, shownActivities]);
 
   const range = useMemo(() => playbackRange(segments), [segments]);
   const rangeKey = range ? `${selectedDate}:${range.startMs}:${range.endMs}` : '';
@@ -299,7 +333,8 @@ export default function DayView({ initialDate }: Props) {
 
   const mapProps = {
     visits: dayData && !('error' in dayData) ? dayData.visits : undefined,
-    activities: dayData && !('error' in dayData) ? dayData.activities : undefined,
+    activities: shownActivities,
+    lineVariant,
     connectors: dayData && !('error' in dayData) ? dayData.connectors : undefined,
     focusTarget: mapFocus,
     sizeSignal,
@@ -453,6 +488,35 @@ export default function DayView({ initialDate }: Props) {
               {dayData.clusters.join(' / ')}
             </div>
           )}
+
+          <div className="mt-3">
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">Journey lines</div>
+            <div className="grid grid-cols-3 gap-1 rounded-lg bg-bg p-1" role="radiogroup" aria-label="Journey lines">
+              {LINE_VARIANTS.map((v) => (
+                <Button
+                  key={v.id}
+                  role="radio"
+                  aria-checked={lineVariant === v.id}
+                  variant={lineVariant === v.id ? 'default' : 'ghost'}
+                  size="sm"
+                  title={v.title}
+                  onClick={() => setLineVariant(v.id)}
+                >
+                  {v.label}
+                </Button>
+              ))}
+            </div>
+            {lineVariant === 'predicted' && gapSummary && (
+              <p className="mt-2 text-xs text-text-muted">
+                OSRM's predicted routes pass within 100 m of {gapSummary.within}% of your GPS points
+                (worst {formatMeters(gapSummary.maxM)} off, {gapSummary.journeys} journey
+                {gapSummary.journeys === 1 ? '' : 's'} with GPS).
+              </p>
+            )}
+            {lineVariant === 'recorded' && (
+              <p className="mt-2 text-xs text-text-muted">Straight lines between the GPS points your phone recorded.</p>
+            )}
+          </div>
         </div>
       )}
 

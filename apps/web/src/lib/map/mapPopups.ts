@@ -1,4 +1,4 @@
-import type { Activity, Connector, Visit } from '../../types';
+import type { Activity, Connector, RouteLine, Visit } from '../../types';
 import { MODE_LABELS } from '../../types';
 import { formatTime, formatDistance, formatDuration, type DistanceUnit } from '../../utils/format';
 import { continuesPastDate, startedBeforeDate, UNKNOWN_MOVEMENT_HINT } from '../explorer/dayPlayback';
@@ -48,6 +48,7 @@ export function visitPopupHtml(v: Visit, i: number, visitsLength: number, dayDat
       ${v.place_name && v.place_name !== v.cluster ? ' Place name resolved via Nominatim/OpenStreetMap.' : ''}
     </div>
     <div style="color:var(--text-muted);font-size:0.75em;margin-top:2px">Coordinates: ${v.lat.toFixed(5)}, ${v.lon.toFixed(5)}</div>
+    ${v.fix_count && v.fix_count >= 2 ? `<div style="color:var(--text-muted);font-size:0.75em;margin-top:2px">Position from ${v.fix_count} GPS points${v.moved_m ? `, ${v.moved_m} m from Google's place` : ''}</div>` : ''}
     ${lookaroundLinksHtml(v.lat, v.lon)}
   </div>`;
 }
@@ -97,6 +98,9 @@ export function activityPopupHtml(
     <div style="font-weight:600">${escapeHtml(formatDistance(a.distance_meters, unit))} &middot; ${escapeHtml(formatDuration(a.duration_minutes))}</div>
     ${roadSummary ? `<div style="margin-top:4px;color:var(--text-muted);font-size:0.8em">via ${escapeHtml(roadSummary)}</div>` : ''}
     <div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;color:var(--text-muted);font-size:0.8em">${routeNote}</div>
+    ${a.via_places?.length ? `<div style="margin-top:4px;font-size:0.8em">Through ${escapeHtml(a.via_places.join(' → '))}</div>` : ''}
+    ${a.accuracy ? `<div style="margin-top:4px;color:var(--text-muted);font-size:0.8em"><strong>${escapeHtml(a.accuracy.score)} confidence</strong>: ${a.accuracy.fixes} GPS point${a.accuracy.fixes === 1 ? '' : 's'}, longest gap ${a.accuracy.maxGapMin} min${a.accuracy.meanOffsetM == null ? '' : `, line ${a.accuracy.meanOffsetM} m from them on average`}</div>` : ''}
+    ${a.prediction_gap ? `<div style="margin-top:4px;color:var(--text-muted);font-size:0.8em">OSRM prediction: ${a.prediction_gap.within100Pct}% of GPS points within 100 m, worst ${a.prediction_gap.maxM} m off</div>` : ''}
     <div style="color:var(--text-muted);font-size:0.75em;margin-top:4px">From: ${a.start_lat.toFixed(5)}, ${a.start_lon.toFixed(5)} &rarr; To: ${a.end_lat.toFixed(5)}, ${a.end_lon.toFixed(5)}</div>
     ${lookaroundLinksHtml(midLat, midLon)}
   </div>`;
@@ -118,5 +122,16 @@ export function connectorPopupHtml(c: Connector, unit: DistanceUnit): string {
     </div>
     <div style="margin-top:6px;color:var(--text-muted);font-size:0.8em">${escapeHtml(UNKNOWN_MOVEMENT_HINT)}</div>
     ${lookaroundLinksHtml(midLat, midLon)}
+  </div>`;
+}
+
+/** Period (Routes) view line popup with a new-tab link to that day. */
+export function routeLinePopupHtml(l: RouteLine, unit: DistanceUnit): string {
+  const mode = MODE_LABELS[l.mode] || l.mode;
+  return `<div class="text-sm" style="max-width:240px">
+    <div style="font-weight:600">${escapeHtml(mode)} &middot; ${escapeHtml(formatDistance(l.miles * 1609.34, unit))}</div>
+    <div style="color:var(--text-muted)">${escapeHtml(l.date)} ${escapeHtml(formatTime(l.start))}</div>
+    <div style="color:var(--text-muted);font-size:0.8em;margin-top:4px">${l.recorded ? 'Drawn from recorded GPS points.' : 'No GPS points: straight line between start and end.'}</div>
+    <a href="/day/${escapeHtml(l.date)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;color:var(--accent)">Open day in new tab</a>
   </div>`;
 }

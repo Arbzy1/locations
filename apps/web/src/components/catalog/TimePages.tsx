@@ -34,6 +34,12 @@ export function MonthPage() {
         >
           Next
         </Button>
+        <Button
+          title="Show every journey line this month"
+          onClick={() => void navigate(`/routes?period=month&ym=${month}`)}
+        >
+          Show all routes
+        </Button>
       </div>
       <DayCalendar days={days} selectedDate={selected} onSelectDate={(d) => void navigate(`/day/${d}`)} />
       <div className="h-64 overflow-hidden rounded-lg border border-border">

@@ -17,6 +17,7 @@ import { interactiveMotion, reducedInteractiveMotion } from './lib/motion';
 import { cn } from './lib/utils';
 import HotspotsView from './components/explorer/HotspotsView';
 import DayView from './components/explorer/DayView';
+import RoutesView from './components/explorer/RoutesView';
 import DayTripsView from './components/explorer/DayTripsView';
 import InsightsView from './components/explorer/InsightsView';
 import SettingsView from './components/settings/SettingsView';
@@ -55,6 +56,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   Shield,
+  Route as RouteIcon,
 } from 'lucide-react';
 
 const queryClient = new QueryClient({
@@ -71,6 +73,7 @@ const queryClient = new QueryClient({
 const TAB_LABELS: Record<TabId, string> = {
   hotspots: 'Hotspots',
   day: 'Day View',
+  routes: 'Routes',
   trips: 'Day Trips',
   insights: 'Insights',
   settings: 'Settings',
@@ -79,12 +82,14 @@ const TAB_LABELS: Record<TabId, string> = {
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'hotspots', label: TAB_LABELS.hotspots, icon: <Flame size={18} /> },
   { id: 'day', label: TAB_LABELS.day, icon: <Calendar size={18} /> },
+  { id: 'routes', label: TAB_LABELS.routes, icon: <RouteIcon size={18} /> },
   { id: 'trips', label: TAB_LABELS.trips, icon: <Compass size={18} /> },
   { id: 'insights', label: TAB_LABELS.insights, icon: <TrendingUp size={18} /> },
 ];
 
 function tabFromPath(pathname: string): TabId {
   if (pathname.startsWith('/day')) return 'day';
+  if (pathname.startsWith('/routes')) return 'routes';
   if (pathname === '/trips' || pathname === '/trips/') return 'trips';
   if (pathname.startsWith('/insights') || pathname.startsWith('/review')) return 'insights';
   if (pathname.startsWith('/settings')) return 'settings';
@@ -510,6 +515,7 @@ function AppContent() {
               <div key={activeTab} className="ui-enter h-full overflow-hidden">
                 {activeTab === 'hotspots' && <HotspotsView />}
                 {activeTab === 'day' && <DayView initialDate={dayViewDate} />}
+                {activeTab === 'routes' && <RoutesView />}
                 {activeTab === 'trips' && <DayTripsView onSelectDate={handleSelectDate} />}
                 {activeTab === 'insights' && <InsightsView />}
               </div>
@@ -620,6 +626,7 @@ function AuthedShell() {
         <Route path="/" element={<Navigate to="/hotspots" replace />} />
         <Route path="/hotspots" element={<AppContent />} />
         <Route path="/day/:date?" element={<AppContent />} />
+        <Route path="/routes" element={<AppContent />} />
         <Route path="/trips" element={<AppContent />} />
         <Route path="/trips/new" element={<AppContent />} />
         <Route path="/trips/:start/:end" element={<AppContent />} />
