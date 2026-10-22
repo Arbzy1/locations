@@ -5,7 +5,7 @@ const legacy = {
   timelineObjects: [
     {
       placeVisit: {
-        location: { latitudeE7: 515000000, longitudeE7: -1000000, placeId: "ChIJhome", semanticType: "TYPE_HOME" },
+        location: { latitudeE7: 515000000, longitudeE7: -1000000, placeId: "ChIJhome", semanticType: "TYPE_HOME", name: "Home Sweet Home" },
         duration: { startTimestampMs: String(Date.UTC(2019, 0, 5, 8)), endTimestampMs: String(Date.UTC(2019, 0, 5, 12)) },
         childVisits: [
           {
@@ -46,6 +46,9 @@ describe("legacy Semantic Location History", () => {
     expect(visits.reduce((s, v) => s + v.durationMinutes, 0)).toBe(240);
     expect(visits[0].semanticType).toBe("Home");
     expect(visits[0].placeId).toBe("ChIJhome");
+    expect(visits[0].googleName).toBe("Home Sweet Home");
+    // The nested stay had no name in the export.
+    expect(visits[1].googleName).toBeNull();
     expect(activities).toHaveLength(1);
     expect(activities[0].mode).toBe("car");
     expect(activities[0].distanceMeters).toBe(5600);

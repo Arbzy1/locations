@@ -31,7 +31,7 @@ Three read-only audits (UX/layout, product, performance/reliability) fed this pl
 - [x] Home/work, away nights, commute and moving history use the user's timezone.
 - [x] Real places: a `place_key` per visit (Google placeId, else a snapped coordinate key); places directory, labels, search and Day View use it; the 0.5 degree grid becomes a region rollup only.
 - [x] Legacy Takeout "Semantic Location History" (`timelineObjects`) parser, all monthly files merged.
-- [ ] Keep Google's place names from legacy exports per tenant (needs a tenant place-name table separate from user labels).
+- [x] Keep Google's place names from legacy exports per tenant (`visits.google_name`; user labels still win).
 
 ## Phase 4 - Layout
 

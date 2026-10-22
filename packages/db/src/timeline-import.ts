@@ -44,6 +44,8 @@ export type RawTimelineRecord = {
       placeLocation?: string;
       semanticType?: string;
       placeID?: string;
+      /** Google's place name (older Takeout exports only). */
+      name?: string;
     };
   };
   activity?: {
@@ -79,6 +81,7 @@ type VisitDraft = {
   fixLon: number | null;
   fixCount: number | null;
   placeKey: string;
+  googleName: string | null;
 };
 
 type ActivityDraft = {
@@ -344,7 +347,7 @@ type LegacyDuration = {
   endTimestampMs?: string;
 };
 type LegacyPlaceVisit = {
-  location?: E7Point & { placeId?: string; semanticType?: string };
+  location?: E7Point & { placeId?: string; semanticType?: string; name?: string };
   duration?: LegacyDuration;
   childVisits?: LegacyPlaceVisit[];
 };
@@ -390,6 +393,7 @@ function fromLegacyTimelineObjects(objects: LegacyTimelineObject[]): RawTimeline
             placeLocation: toGeo(coords[0], coords[1]),
             semanticType: titleCaseSemantic(pv.location?.semanticType?.replace(/^TYPE_/, "")),
             placeID: pv.location?.placeId,
+            name: pv.location?.name,
           },
         },
       });
@@ -625,6 +629,7 @@ function parseClassicRecords(raw: RawTimelineRecord[]): ParsedTimeline {
         fixLon: null,
         fixCount: null,
         placeKey: visitPlaceKey(top.placeID, coords[0], coords[1]),
+        googleName: top.name?.trim().slice(0, 200) || null,
       });
       visitLevels.push(Number(record.visit.hierarchyLevel ?? 0) || 0);
     } else if (record.activity) {

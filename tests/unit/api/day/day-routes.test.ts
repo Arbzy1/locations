@@ -156,6 +156,15 @@ describe("getDay journey lines and gaps", () => {
     expect(day.visits[0].moved_m).toBeGreaterThan(100);
   });
 
+  it("names a stay with Google's own name over the geocoded one", async () => {
+    const named = { ...home, googleName: "Grand Central Terminal" };
+    const day = (await getDay(dayDb([named, work], []), "t1", DATE)) as unknown as {
+      visits: Array<{ place_name: string }>;
+    };
+    expect(day.visits[0].place_name).toBe("Grand Central Terminal");
+    expect(day.visits[1].place_name).toBe("Place");
+  });
+
   it("returns recorded and, with compare, predicted lines plus accuracy", async () => {
     const t = Date.parse(`${DATE}T09:10:00Z`) / 1000;
     const train = {

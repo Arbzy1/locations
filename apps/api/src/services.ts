@@ -1482,7 +1482,8 @@ export async function buildDay(
     const coordKey = `${Math.round(v.lat * 1e5) / 1e5},${Math.round(v.lon * 1e5) / 1e5}`;
     const placeInfo = placeNames.get(coordKey) ?? { name: "", address: "", data: {} };
     const userLabel = v.placeKey ? userPlaceLabels.get(v.placeKey) : undefined;
-    vd.place_name = userLabel || placeInfo.name;
+    // The user's name first, then Google's own name from the export, then geocoding.
+    vd.place_name = userLabel || v.googleName || placeInfo.name;
     vd.place_address = placeInfo.address;
     if ("short" in placeInfo && placeInfo.short) {
       vd.place_short_address = placeInfo.short;

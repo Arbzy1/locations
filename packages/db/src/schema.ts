@@ -192,6 +192,8 @@ export const visits = pgTable(
     fixCount: integer("fix_count"),
     /** The real place: `g:<Google placeId>`, else `c:<lat>,<lon>` snapped to ~100 m. */
     placeKey: text("place_key"),
+    /** Google's name for the place, when the export includes one (older Takeout). */
+    googleName: text("google_name"),
   },
   (t) => [
     index("visits_tenant_date_idx").on(t.tenant, t.date),

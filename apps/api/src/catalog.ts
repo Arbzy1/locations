@@ -56,6 +56,7 @@ type PlaceGroup = {
   repLat: number;
   repLon: number;
   semanticType: string;
+  googleName: string | null;
 };
 
 /** Visits grouped by real place (or by region for older `cluster` keys). */
@@ -77,6 +78,7 @@ async function placeGroups(db: Db, tenant: TenantId, key?: string): Promise<Plac
       repLat: sql<number>`(array_agg(${visits.lat} order by ${visits.start} desc))[1]`,
       repLon: sql<number>`(array_agg(${visits.lon} order by ${visits.start} desc))[1]`,
       semanticType: sql<string>`mode() within group (order by ${visits.semanticType})`,
+      googleName: sql<string | null>`(array_agg(${visits.googleName} order by ${visits.start} desc) filter (where ${visits.googleName} is not null))[1]`,
     })
     .from(visits)
     .where(and(...filters))
@@ -92,8 +94,8 @@ async function placeGroups(db: Db, tenant: TenantId, key?: string): Promise<Plac
 }
 
 /**
- * Display names: the user's label, else the street-level name Day View cached for the
- * place, else Google's semantic type (Home, Work), else its coordinates. Cache only.
+ * Display names: the user's label, else Google's own name from the export, else the
+ * street-level name Day View cached, else Google's semantic type, else coordinates.
  */
 async function placeDisplayNames(db: Db, tenant: TenantId, groups: PlaceGroup[]) {
   const labels = await db
@@ -119,6 +121,7 @@ async function placeDisplayNames(db: Db, tenant: TenantId, groups: PlaceGroup[])
     names.set(
       g.key,
       labelByKey.get(g.key) ||
+        g.googleName ||
         cached.get(coordKey(g)) ||
         semantic ||
         `Near ${g.lat.toFixed(3)}, ${g.lon.toFixed(3)}`,
