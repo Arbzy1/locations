@@ -1,4 +1,4 @@
-import { CreditCard, LayoutDashboard, Lock, Ruler, Upload, User } from "lucide-react";
+import { CreditCard, Fuel, LayoutDashboard, Lock, Ruler, Upload, User } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { Button } from "../ui/button";
 import { cn } from "../../lib/utils";
@@ -15,6 +15,7 @@ const ITEMS: {
   { id: "billing", label: "Billing", title: "Subscription and invoices", icon: CreditCard },
   { id: "display", label: "Display", title: "Colour moods, units, timezone, and map tiles", icon: Ruler },
   { id: "data", label: "Timeline", title: "Import and manage Timeline data", icon: Upload },
+  { id: "journey-cost", label: "Journey cost", title: "Home, work, default car, and mileage tally", icon: Fuel },
   { id: "privacy", label: "Privacy", title: "Exports and delete account", icon: Lock },
 ];
 

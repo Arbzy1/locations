@@ -17,6 +17,7 @@ export type ChordPath =
   | "/routes"
   | "/trips"
   | "/insights"
+  | "/journey-cost"
   | "/places"
   | "/settings";
 
@@ -26,6 +27,7 @@ export const CHORD_MAP: Record<string, ChordPath> = {
   r: "/routes",
   t: "/trips",
   i: "/insights",
+  j: "/journey-cost",
   e: "/places",
   s: "/settings",
 };

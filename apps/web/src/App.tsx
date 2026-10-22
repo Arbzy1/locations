@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -47,6 +47,7 @@ import { isCatalogPath, catalogTitle } from './lib/nav/paths';
 import { shouldFireImportCutIn, type ImportCutInJob } from './lib/explorer/import-cut-in';
 import { adminPageLabel } from './components/admin/adminNav';
 import {
+  Fuel,
   Map as MapIcon,
   MapPin,
   Calendar,
@@ -78,19 +79,23 @@ const TAB_LABELS: Record<TabId, string> = {
   routes: 'Routes',
   trips: 'Day Trips',
   insights: 'Insights',
+  'journey-cost': 'Journey Cost',
   settings: 'Settings',
 };
 
-type NavId = 'map' | 'day' | 'trips' | 'places' | 'insights';
+type NavId = 'map' | 'day' | 'trips' | 'places' | 'insights' | 'journey-cost';
 
-/** The five primary destinations. Map opens the heatmap or the journey lines. */
+/** The primary destinations. Map opens the heatmap or the journey lines. */
 const NAV: { id: NavId; label: string; short: string; icon: React.ReactNode }[] = [
   { id: 'map', label: 'Map', short: 'Map', icon: <MapIcon size={18} /> },
   { id: 'day', label: 'Days', short: 'Days', icon: <Calendar size={18} /> },
   { id: 'trips', label: 'Trips', short: 'Trips', icon: <Compass size={18} /> },
   { id: 'places', label: 'Places', short: 'Places', icon: <MapPin size={18} /> },
   { id: 'insights', label: 'Insights', short: 'Insights', icon: <TrendingUp size={18} /> },
+  { id: 'journey-cost', label: TAB_LABELS['journey-cost'], short: 'Cost', icon: <Fuel size={18} /> },
 ];
+
+const JourneyCostView = lazy(() => import('./components/brim/JourneyCostView'));
 
 function tabFromPath(pathname: string): TabId {
   if (pathname.startsWith('/day')) return 'day';
@@ -98,6 +103,7 @@ function tabFromPath(pathname: string): TabId {
   if (pathname === '/trips' || pathname === '/trips/') return 'trips';
   if (pathname.startsWith('/insights') || pathname.startsWith('/review')) return 'insights';
   if (pathname.startsWith('/settings')) return 'settings';
+  if (pathname.startsWith('/journey-cost')) return 'journey-cost';
   return 'hotspots';
 }
 
@@ -472,6 +478,18 @@ function AppContent() {
               <div key={location.pathname} className="ui-enter h-full overflow-hidden">
                 <CatalogRouter />
               </div>
+            ) : activeTab === 'journey-cost' ? (
+              <div key="journey-cost" className="ui-enter h-full overflow-hidden">
+                <Suspense
+                  fallback={
+                    <div className="flex h-full items-center justify-center text-text-muted">
+                      <Loader2 className="animate-spin text-accent" size={24} />
+                    </div>
+                  }
+                >
+                  <JourneyCostView />
+                </Suspense>
+              </div>
             ) : activeTab === 'settings' && !isDemo ? (
               <div key="settings" className="ui-enter h-full">
                 <SettingsView />
@@ -625,6 +643,8 @@ function AuthedShell() {
         <Route path="/trips/new" element={<AppContent />} />
         <Route path="/trips/:start/:end" element={<AppContent />} />
         <Route path="/insights" element={<AppContent />} />
+        <Route path="/journey-cost" element={<AppContent />} />
+        <Route path="/journey-cost/:section" element={<AppContent />} />
         <Route path="/settings" element={<AppContent />} />
         <Route path="/places" element={<AppContent />} />
         <Route path="/places/:key" element={<AppContent />} />

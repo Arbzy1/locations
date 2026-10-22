@@ -9,7 +9,7 @@ alwaysApply: true
 
 ## Project overview
 
-Hosted Google Timeline / location-history explorer: heatmaps, day views, trips, insights, and self-serve accounts.
+Hosted Google Timeline / location-history explorer: heatmaps, day views, trips, insights, and self-serve accounts. Also hosts **Journey cost** (formerly Brim): UK trip cost for fuel or charging, tolls, and clean-air charges (`/journey-cost`).
 
 | Layer | Tech |
 |-------|------|
@@ -26,6 +26,7 @@ Monorepo (npm workspaces) under this directory:
 apps/web/      React frontend
 apps/api/      Worker entry (Hono)
 packages/db/   Schema, migrate, import, user tooling
+packages/brim/ Journey cost engine, routing providers, UK reference data (pure TS, no I/O in ./engine)
 scripts/       Setup wizard, rule sync, helpers
 docs/          Product, security, legal, engineering docs
 ```
@@ -256,13 +257,14 @@ See [docs/security/README.md](docs/security/README.md).
 
 ### Row Level Security
 
-Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_stats`, `analytics_cache`, `data_sources`, `import_jobs`, `export_jobs`, `subscriptions`, `user_settings`, `place_labels`, `named_trips`, `life_chapters`, `timeline_overrides`).
+Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_stats`, `analytics_cache`, `data_sources`, `import_jobs`, `export_jobs`, `subscriptions`, `user_settings`, `place_labels`, `named_trips`, `life_chapters`, `timeline_overrides`, and the journey cost `brim_vehicles`, `brim_tariffs`, `brim_calibrations`, `brim_fill_ups`, `brim_journeys`, `brim_settings`, `brim_saved_places`).
 
 - Worker queries go through `withTenant(db, tenant, fn)` which `BEGIN`s, `set_config('app.tenant', tenant, true)`, runs work, then `COMMIT`.
 - `locations_app` has **NOBYPASSRLS**. Never point Wrangler `DATABASE_URL` at a BYPASSRLS role.
 - Empty GUC matches nothing (fail closed). WITH CHECK rejects inserts whose `tenant` column differs from the GUC.
 - Keep Drizzle `eq(table.tenant, tenant)` **and** RLS. Filters are not optional because RLS exists.
 - `route_cache` / `place_cache` are shared non-PII (OSM only). User-edited labels live on `place_labels` (tenant-scoped).
+- Journey cost reference tables (`brim_stations`, `brim_station_prices`, `brim_zones`, `brim_tolls`, `brim_vca_vehicles`, `brim_grid_intensity`, `brim_route_cache`, `brim_ingestion_state`) are shared non-PII with `USING (true)` policies. Registration plates are stored only encrypted on `brim_vehicles` and never logged.
 - Schema policies via Drizzle `enableRLS()` / `pgPolicy()`. FORCE RLS + GRANTs live in the documented custom migration.
 - New tenant tables need policies, GRANTs, and an RLS leak test.
 
@@ -368,6 +370,7 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 | `deploy:staging` / `deploy:prod` / `deploy:both` / `deploy:preview` | Build + Wrangler `--env staging` / `--env production` / both / staging version upload (secrets from local env files) |
 | `release` / `release:patch` / `release:minor` / `release:major` / `release:set` | Tag a semver release, bump workspace package versions, promote `docs/changelog.md` |
 | `db:*` | generate, migrate:dev/staging/prod/all, import, import-demo, warm-routes |
+| `brim:*` | Journey cost data: `check`, `load-zones`, `verify-zones`, `write-zones`, `sync-vca`, `sync-fuel`, `sync-carbon` (`-- --env staging|production`) |
 | `env:merge` / `env:sync` | Fill missing keys from per-env examples / copy secrets `.env*` → `.dev.vars*` |
 | `secrets:generate` / `secrets:rotate` | Fill or rotate `BETTER_AUTH_SECRET` in every `.env*` + `.dev.vars*` pair (or `--env`), then `cf:sync` for staging/prod |
 | `cf:sync` / `cf:sync:staging` / `cf:sync:prod` / `cf:sync:dry` | `wrangler secret bulk` from `.env*.example` keys (minus wrangler.toml vars); prunes unmanaged remote secrets |

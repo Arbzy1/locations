@@ -288,7 +288,7 @@ export interface RouteProgress {
   percent: number;
 }
 
-export type TabId = 'hotspots' | 'day' | 'routes' | 'trips' | 'insights' | 'settings';
+export type TabId = 'hotspots' | 'day' | 'routes' | 'trips' | 'insights' | 'journey-cost' | 'settings';
 
 export interface DataSourceInfo {
   id: string;

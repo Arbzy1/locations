@@ -1,0 +1,14 @@
+{
+  "source_url": "https://carfueldata.vehicle-certification-agency.gov.uk/downloads/default.aspx",
+  "licence": "Crown copyright / Open Government Licence",
+  "dataset_version": "vca-2026-08",
+  "verified_on": "2026-08-16",
+  "coverage": "UK type-approved cars (new and used from about 2001). Not motorcycles, grey imports, or kit cars.",
+  "notes": "The downloads index 302s to / without an ASP.NET session cookie from the homepage. File links are download.aspx?rg=… and ZIPs under /additional/, not bare .csv hrefs. data:sync-vca warms a session, follows those links, and extracts CSVs into data/vca/raw/. Do not commit the dump.",
+  "files": [
+    {
+      "name": "downloads-index.html",
+      "url": "https://carfueldata.vehicle-certification-agency.gov.uk/downloads/default.aspx"
+    }
+  ]
+}

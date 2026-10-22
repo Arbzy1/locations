@@ -19,6 +19,7 @@ import SettingsBilling from "./SettingsBilling";
 import SettingsDisplay from "./SettingsDisplay";
 import SettingsTimeline from "./SettingsTimeline";
 import SettingsPrivacy from "./SettingsPrivacy";
+import SettingsJourneyCost from "./SettingsJourneyCost";
 
 function initials(name?: string, email?: string) {
   const src = (name || email || "?").trim();
@@ -114,6 +115,9 @@ export default function SettingsView() {
       break;
     case "data":
       pane = <SettingsTimeline {...flash} />;
+      break;
+    case "journey-cost":
+      pane = <SettingsJourneyCost {...flash} />;
       break;
     case "privacy":
       pane = <SettingsPrivacy {...flash} />;

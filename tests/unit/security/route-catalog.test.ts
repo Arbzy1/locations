@@ -12,10 +12,15 @@ import {
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const indexSource = readFileSync(join(root, "apps/api/src/index.ts"), "utf8");
 const adminSource = readFileSync(join(root, "apps/api/src/admin.ts"), "utf8");
+const brimSource = readFileSync(join(root, "apps/api/src/brim/routes.ts"), "utf8");
 
 describe("API route catalog", () => {
-  it("matches every Hono /api route in apps/api/src/index.ts and admin.ts", () => {
-    const parsed = [...parseHonoApiRoutes(indexSource), ...parseHonoApiRoutes(adminSource)];
+  it("matches every Hono /api route in apps/api/src/index.ts, admin.ts, and brim/routes.ts", () => {
+    const parsed = [
+      ...parseHonoApiRoutes(indexSource),
+      ...parseHonoApiRoutes(adminSource),
+      ...parseHonoApiRoutes(brimSource),
+    ];
     const fromSource = new Set(parsed.map((r) => `${r.method} ${r.path}`));
     const fromCatalog = catalogRouteKeys();
     const missing = [...fromSource].filter((k) => !fromCatalog.has(k)).sort();

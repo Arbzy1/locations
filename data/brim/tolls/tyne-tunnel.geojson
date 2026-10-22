@@ -1,0 +1,55 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "tyne-tunnel",
+    "name": "Tyne Tunnel",
+    "authority": "TT2",
+    "kind": "toll",
+    "charge_pence_by_class": {
+      "car": 230,
+      "van": 460,
+      "motorcycle": 110
+    },
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true,
+      "exemptDates": [
+        "12-25"
+      ]
+    },
+    "source_url": "https://www.tt2.co.uk/tolls/",
+    "verified_on": "2026-08-16",
+    "operator_url": "https://www.tt2.co.uk/tolls/",
+    "dataset_version": "2026-08-16"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -1.49,
+            54.988
+          ],
+          [
+            -1.45,
+            54.988
+          ],
+          [
+            -1.45,
+            55.01
+          ],
+          [
+            -1.49,
+            55.01
+          ],
+          [
+            -1.49,
+            54.988
+          ]
+        ]
+      ]
+    ]
+  }
+}

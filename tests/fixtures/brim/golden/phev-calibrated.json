@@ -1,0 +1,54 @@
+{
+  "distanceMeters": 80000,
+  "durationSeconds": 0,
+  "energy": {
+    "kind": "liquid",
+    "litres": {
+      "point": 0.5236363636363638,
+      "low": 0.4869818181818183,
+      "high": 0.5602909090909093
+    },
+    "kwh": {
+      "battery": 14,
+      "grid": 15.909090909090908,
+      "low": 14.795454545454545,
+      "high": 17.022727272727273
+    }
+  },
+  "cost": {
+    "energyPence": {
+      "point": 190,
+      "low": 180,
+      "high": 210
+    },
+    "chargesPence": 0,
+    "totalPence": {
+      "point": 190,
+      "low": 180,
+      "high": 210
+    }
+  },
+  "charges": [],
+  "co2Kg": 3.325204363636364,
+  "consumption": {
+    "value": 3.2,
+    "unit": "l/100km",
+    "display": "88 mpg",
+    "tier": 0,
+    "label": "Based on your fill-ups"
+  },
+  "price": {
+    "pence": 7.5,
+    "unit": "p/kWh",
+    "source": "user-tariff",
+    "observedAt": "2026-01-15T12:00:00Z"
+  },
+  "reasons": [
+    "Used your last 4 brim-to-brim intervals rather than the brochure figure.",
+    "No road mix available, so we left consumption unadjusted and widened the range.",
+    "No forecast temperature, so we skipped the cold-weather adjustment.",
+    "Cost is billed on energy drawn from the grid, not energy in the battery.",
+    "Treated the plug-in hybrid as electric until the battery is empty, then petrol."
+  ],
+  "warnings": []
+}

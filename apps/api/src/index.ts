@@ -19,6 +19,8 @@ import { blockDemo, isDemoBlockedAuthPath } from "./guards";
 import { clientIp, rateLimit } from "./rate-limit";
 import { applySecurityHeaders, isProductionHttps } from "./security-headers";
 import { registerAdminRoutes } from "./admin";
+import { registerBrimRoutes } from "./brim/routes";
+import { BRIM_SYNC_CRON, runBrimSync } from "./brim/sync";
 import { resolveOpsFlags } from "./ops-flags";
 import {
   cspSourcesForHosts,
@@ -1226,6 +1228,7 @@ app.get("/api/import/jobs", async (c) => {
 });
 
 registerAdminRoutes(app);
+registerBrimRoutes(app);
 
 for (const key of [
   "away-nights",
@@ -1707,7 +1710,11 @@ export default {
       msg.ack();
     }
   },
-  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    if (controller.cron === BRIM_SYNC_CRON) {
+      await runBrimSync(env, new Date(controller.scheduledTime).toISOString());
+      return;
+    }
     // Independent jobs: one failing must not skip the other.
     const results = await Promise.allSettled([runRetention(env), runMonthlyRecaps(env)]);
     for (const [i, r] of results.entries()) {

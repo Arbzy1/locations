@@ -204,6 +204,43 @@ button:active:not(:disabled) {
   animation: ui-enter var(--ui-duration-enter) var(--ui-ease) both;
 }
 
+@keyframes accordion-down {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+.accordion-content[data-state="open"] {
+  animation: accordion-down var(--ui-duration-emphasis, 280ms) var(--ui-ease) both;
+}
+
+.accordion-content[data-state="closed"] {
+  animation: accordion-up var(--ui-duration-hover, 200ms) var(--ui-ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accordion-content[data-state="open"],
+  .accordion-content[data-state="closed"] {
+    animation-duration: 80ms;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --ui-duration-fast: 1ms;

@@ -1,0 +1,51 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "london-ulez",
+    "name": "London Ultra Low Emission Zone",
+    "authority": "Transport for London",
+    "kind": "ulez",
+    "charge_pence": 1250,
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true,
+      "exemptDates": [
+        "12-25"
+      ]
+    },
+    "source_url": "https://tfl.gov.uk/modes/driving/ultra-low-emission-zone",
+    "verified_on": "2026-08-16",
+    "operator_url": "https://tfl.gov.uk/modes/driving/ultra-low-emission-zone/check-your-vehicle",
+    "dataset_version": "2026-08-16"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -0.55,
+            51.286
+          ],
+          [
+            0.2,
+            51.286
+          ],
+          [
+            0.2,
+            51.7
+          ],
+          [
+            -0.55,
+            51.7
+          ],
+          [
+            -0.55,
+            51.286
+          ]
+        ]
+      ]
+    ]
+  }
+}

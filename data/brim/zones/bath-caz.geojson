@@ -1,0 +1,52 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "bath-caz",
+    "name": "Bath Clean Air Zone",
+    "authority": "Bath and North East Somerset Council",
+    "kind": "caz",
+    "caz_class": "C",
+    "charge_pence": 900,
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true,
+      "exemptDates": [
+        "12-25"
+      ]
+    },
+    "source_url": "https://beta.bathnes.gov.uk/clean-air-zone",
+    "verified_on": "2026-08-16",
+    "operator_url": "https://beta.bathnes.gov.uk/check-if-you-need-pay-clean-air-zone-charge",
+    "dataset_version": "2026-08-16"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -2.375,
+            51.376
+          ],
+          [
+            -2.348,
+            51.376
+          ],
+          [
+            -2.348,
+            51.39
+          ],
+          [
+            -2.375,
+            51.39
+          ],
+          [
+            -2.375,
+            51.376
+          ]
+        ]
+      ]
+    ]
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "distanceMeters": 160934,
+  "durationSeconds": 0,
+  "energy": {
+    "kind": "electric",
+    "kwh": {
+      "battery": 28.96812,
+      "grid": 32.91831818181818,
+      "low": 25.347105,
+      "high": 40.48953136363636
+    }
+  },
+  "cost": {
+    "energyPence": {
+      "point": 900,
+      "low": 700,
+      "high": 1100
+    },
+    "chargesPence": 0,
+    "totalPence": {
+      "point": 900,
+      "low": 700,
+      "high": 1100
+    }
+  },
+  "charges": [],
+  "co2Kg": 4.345218,
+  "consumption": {
+    "value": 18,
+    "unit": "kWh/100km",
+    "display": "18.0 kWh/100km",
+    "tier": 3,
+    "label": "Estimated from similar vehicles"
+  },
+  "price": {
+    "pence": 28,
+    "unit": "p/kWh",
+    "source": "hardcoded-fallback",
+    "observedAt": "2026-01-15T12:00:00Z"
+  },
+  "reasons": [
+    "Estimated from similar vehicles - we only know the fuel type.",
+    "No road mix available, so we left consumption unadjusted and widened the range.",
+    "No forecast temperature, so we skipped the cold-weather adjustment.",
+    "Cost is billed on energy drawn from the grid, not energy in the battery."
+  ],
+  "warnings": [
+    {
+      "code": "missing-battery",
+      "message": "Add usable battery size to see whether you will arrive with charge to spare.",
+      "severity": "info"
+    }
+  ]
+}

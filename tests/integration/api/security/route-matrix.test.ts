@@ -20,6 +20,8 @@ vi.mock("@locations/api/services", async () => {
   return factory();
 });
 
+vi.mock("@locations/api/brim/db/repo", () => import("@tests/helpers/brim-repo"));
+
 vi.mock("@locations/api/billing", () => ({
   stripeClient: (env: { STRIPE_SECRET_KEY?: string }) =>
     env.STRIPE_SECRET_KEY

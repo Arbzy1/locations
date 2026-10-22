@@ -1,0 +1,54 @@
+{
+  "distanceMeters": 80000,
+  "durationSeconds": 0,
+  "energy": {
+    "kind": "liquid",
+    "litres": {
+      "point": 10.67408695652174,
+      "low": 9.286455652173915,
+      "high": 12.061718260869567
+    },
+    "kwh": {
+      "battery": 5.6000000000000005,
+      "grid": 6.363636363636364,
+      "low": 5.536363636363637,
+      "high": 7.190909090909091
+    }
+  },
+  "cost": {
+    "energyPence": {
+      "point": 1500,
+      "low": 1300,
+      "high": 1700
+    },
+    "chargesPence": 0,
+    "totalPence": {
+      "point": 1500,
+      "low": 1300,
+      "high": 1700
+    }
+  },
+  "charges": [],
+  "co2Kg": 25.81522866086957,
+  "consumption": {
+    "value": 20.160000000000004,
+    "unit": "l/100km",
+    "display": "14 mpg",
+    "tier": 2,
+    "label": "Official figure, adjusted"
+  },
+  "price": {
+    "pence": 7.5,
+    "unit": "p/kWh",
+    "source": "user-tariff",
+    "observedAt": "2026-01-15T12:00:00Z"
+  },
+  "reasons": [
+    "Adjusted the official figure up 12% - official tests run optimistic.",
+    "No road mix available, so we left consumption unadjusted and widened the range.",
+    "No forecast temperature, so we skipped the cold-weather adjustment.",
+    "Cost is billed on energy drawn from the grid, not energy in the battery.",
+    "Treated the plug-in hybrid as electric until the battery is empty, then petrol."
+  ],
+  "warnings": []
+}

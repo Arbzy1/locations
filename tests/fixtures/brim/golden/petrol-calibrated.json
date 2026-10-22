@@ -1,0 +1,45 @@
+{
+  "distanceMeters": 160934,
+  "durationSeconds": 7200,
+  "energy": {
+    "kind": "liquid",
+    "litres": {
+      "point": 9.977908000000001,
+      "low": 9.27945444,
+      "high": 10.676361560000002
+    }
+  },
+  "cost": {
+    "energyPence": {
+      "point": 1400,
+      "low": 1300,
+      "high": 1490
+    },
+    "chargesPence": 0,
+    "totalPence": {
+      "point": 1400,
+      "low": 1300,
+      "high": 1490
+    }
+  },
+  "charges": [],
+  "co2Kg": 23.346309138400002,
+  "consumption": {
+    "value": 6.2,
+    "unit": "l/100km",
+    "display": "46 mpg",
+    "tier": 0,
+    "label": "Based on your fill-ups"
+  },
+  "price": {
+    "pence": 139.9,
+    "unit": "ppl",
+    "source": "national-median",
+    "observedAt": "2026-01-15T12:00:00Z"
+  },
+  "reasons": [
+    "Used your last 4 brim-to-brim intervals rather than the brochure figure.",
+    "No road mix available, so we left consumption unadjusted and widened the range."
+  ],
+  "warnings": []
+}

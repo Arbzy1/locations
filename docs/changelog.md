@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Journey cost (formerly the standalone Brim app) is now a Locations tab at `/journey-cost`: UK trip cost for petrol, diesel, hybrid, and EV cars, with tolls, clean-air zones, the cheapest forecourt along the route, a garage with brim-to-brim calibration, saved journeys, and the HMRC mileage tally. It uses your Locations account, works before any Timeline import, and adds a Journey cost section to Settings. Data is tenant-scoped under FORCE RLS and wiped with the account. Demo can estimate but not save.
+
 Day View "Points" line option: only the GPS points your phone recorded, with no lines, coloured by journey. The panel counts the points, how many journeys had none, and the longest gap between points; tap a point for its time.
 
 Older Takeout exports keep Google's own place names: Day View, the place directory and Insights show them unless you have renamed the place. Migration `0019_visit_google_name`; re-import to fill it.

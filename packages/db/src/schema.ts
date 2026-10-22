@@ -436,3 +436,5 @@ export function isStaffRole(role: string | null | undefined): boolean {
 export function isAdminRole(role: string | null | undefined): boolean {
   return role === "admin";
 }
+
+export * from "./brim-schema.js";

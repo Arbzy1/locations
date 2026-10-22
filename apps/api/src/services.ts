@@ -18,6 +18,10 @@ import {
   lifeChapters,
   userSettings,
   subscriptions,
+  brimSettings,
+  brimVehicles,
+  brimJourneys,
+  brimSavedPlaces,
   user,
   session,
   account,
@@ -2489,6 +2493,11 @@ export async function wipeTenantData(
   await db.delete(lifeChapters).where(eq(lifeChapters.tenant, tenant));
   await db.delete(userSettings).where(eq(userSettings.tenant, tenant));
   await db.delete(subscriptions).where(eq(subscriptions.tenant, tenant));
+  await db.delete(brimSettings).where(eq(brimSettings.tenant, tenant));
+  await db.delete(brimJourneys).where(eq(brimJourneys.tenant, tenant));
+  await db.delete(brimSavedPlaces).where(eq(brimSavedPlaces.tenant, tenant));
+  // Journey cost tariffs, fill-ups, and calibrations cascade from brim_vehicles.
+  await db.delete(brimVehicles).where(eq(brimVehicles.tenant, tenant));
   if (email) {
     await db.delete(verification).where(eq(verification.identifier, email));
   }

@@ -138,5 +138,19 @@
     "when": 1755268000000,
     "tag": "0019_visit_google_name",
     "breakpoints": true
+  },
+  {
+    "idx": 20,
+    "version": "7",
+    "when": 1755272000000,
+    "tag": "0020_brim",
+    "breakpoints": true
+  },
+  {
+    "idx": 21,
+    "version": "7",
+    "when": 1755276000000,
+    "tag": "0021_brim_rls",
+    "breakpoints": true
   }
 ]

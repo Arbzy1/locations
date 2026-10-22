@@ -1,0 +1,22 @@
+{
+  "name": "@locations/brim",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Journey-cost engine, routing providers, and UK reference data (fuel, EV tariffs, clean-air zones, tolls)",
+  "exports": {
+    "./engine": "./src/engine/index.ts",
+    "./routing": "./src/routing/index.ts",
+    "./shared": "./src/shared/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "typescript": "~5.9.3"
+  }
+}

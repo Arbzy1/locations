@@ -11,6 +11,7 @@ Locations (“we”) provides a hosted map journal for **your** Google Timeline 
 - Billing: Stripe customer and subscription ids (card data stays with Stripe)
 - Uploads: Takeout JSON/zip stored briefly on R2 then deleted after parse
 - Export packs: ZIP of your Timeline stored briefly on R2 then deleted after download
+- Journey cost: cars you save (make, model, efficiency, an encrypted registration plate if you enter one), fill-ups, tariffs, home and work places, and journeys you choose to save. Trip ends are sent to the routing and address search provider to price a trip. A registration plate is sent to the DVLA only when you ask for a lookup.
 
 We do not sell location data. We do not put coordinates, place names, day routes, or Takeout payloads in email. Mail is transactional only (verify, reset, magic link, OTP, import status, billing status, account deleted). There is no marketing list. See the product [email catalog](../product/email.md).
 

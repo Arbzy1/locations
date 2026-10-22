@@ -19,7 +19,7 @@ run_worker_first = ["/api/*"]
 enabled = true
 
 [triggers]
-crons = ["0 8 1 * *"]
+crons = ["0 8 1 * *", "*/20 * * * *"]
 
 [secrets]
 required = ["DATABASE_URL", "BETTER_AUTH_SECRET"]
@@ -31,6 +31,9 @@ CSP_ENFORCE = "false"
 GLOBE_ENABLED = "true"
 LANDING_ENABLED = "true"
 DEMO_TOUR = "true"
+BRIM_FIXTURES = "1"
+ROUTING_CEILING_USD = "50"
+ROUTING_SPENT_USD = "0"
 
 # Local / preview R2. Staging and production override this binding.
 [[r2_buckets]]
@@ -54,6 +57,9 @@ CSP_ENFORCE = "true"
 GLOBE_ENABLED = "true"
 LANDING_ENABLED = "true"
 DEMO_TOUR = "true"
+BRIM_FIXTURES = "1"
+ROUTING_CEILING_USD = "50"
+ROUTING_SPENT_USD = "0"
 
 [[env.staging.r2_buckets]]
 binding = "UPLOADS"
@@ -73,7 +79,7 @@ queue = "locations-imports-staging"
 max_batch_size = 1
 
 [env.staging.triggers]
-crons = ["0 8 1 * *"]
+crons = ["0 8 1 * *", "*/20 * * * *"]
 
 # ----- production -----
 [env.production]
@@ -91,6 +97,9 @@ CSP_ENFORCE = "true"
 GLOBE_ENABLED = "true"
 LANDING_ENABLED = "true"
 DEMO_TOUR = "true"
+BRIM_FIXTURES = "0"
+ROUTING_CEILING_USD = "50"
+ROUTING_SPENT_USD = "0"
 
 [[env.production.r2_buckets]]
 binding = "UPLOADS"
@@ -110,4 +119,4 @@ queue = "locations-imports"
 max_batch_size = 1
 
 [env.production.triggers]
-crons = ["0 8 1 * *"]
+crons = ["0 8 1 * *", "*/20 * * * *"]

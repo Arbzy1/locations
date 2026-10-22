@@ -1,0 +1,92 @@
+{
+  "verified_on": "2026-08-16",
+  "note": "Hand-maintained public-network averages. Not a live feed. Users can correct the figure on the estimate.",
+  "fallbacks": {
+    "home": {
+      "pencePerKwh": 7.5,
+      "source_url": "https://www.ofgem.gov.uk/energy-advice-households/get-cheaper-electricity-rates-electric-vehicles",
+      "verified_on": "2026-08-16",
+      "note": "Typical overnight home rate when the user has not entered a tariff."
+    },
+    "public": {
+      "pencePerKwh": 70,
+      "source_url": "https://www.zap-map.com/ev-stats/charging-price-index",
+      "verified_on": "2026-08-16",
+      "note": "Dated public DC average. Not a live median."
+    }
+  },
+  "networks": [
+    {
+      "id": "ionity",
+      "network": "Ionity",
+      "speed": "dc",
+      "pencePerKwh": 74,
+      "source_url": "https://ionity.eu/en/for-drivers/our-pricing",
+      "verified_on": "2026-08-16"
+    },
+    {
+      "id": "tesla-supercharger",
+      "network": "Tesla Supercharger",
+      "speed": "dc",
+      "pencePerKwh": 52,
+      "source_url": "https://www.tesla.com/en_gb/support/supercharger",
+      "verified_on": "2026-08-16"
+    },
+    {
+      "id": "bp-pulse-dc",
+      "network": "BP Pulse",
+      "speed": "dc",
+      "pencePerKwh": 79,
+      "source_url": "https://www.bp.com/en_gb/united-kingdom/home/products-and-services/bp-pulse.html",
+      "verified_on": "2026-08-16"
+    },
+    {
+      "id": "bp-pulse-ac",
+      "network": "BP Pulse",
+      "speed": "ac",
+      "pencePerKwh": 49,
+      "source_url": "https://www.bp.com/en_gb/united-kingdom/home/products-and-services/bp-pulse.html",
+      "verified_on": "2026-08-16"
+    },
+    {
+      "id": "shell-recharge",
+      "network": "Shell Recharge",
+      "speed": "dc",
+      "pencePerKwh": 79,
+      "source_url": "https://www.shell-recharge.com/en-gb/charge-your-car",
+      "verified_on": "2026-08-16"
+    },
+    {
+      "id": "instavolt",
+      "network": "Instavolt",
+      "speed": "dc",
+      "pencePerKwh": 74,
+      "source_url": "https://instavolt.co.uk/pricing/",
+      "verified_on": "2026-08-16"
+    },
+    {
+      "id": "pod-point",
+      "network": "Pod Point",
+      "speed": "ac",
+      "pencePerKwh": 42,
+      "source_url": "https://pod-point.com/guides/driver/ev-public-charging-costs",
+      "verified_on": "2026-08-16"
+    },
+    {
+      "id": "osprey",
+      "network": "Osprey",
+      "speed": "dc",
+      "pencePerKwh": 75,
+      "source_url": "https://ospreycharging.co.uk/drivers/",
+      "verified_on": "2026-08-16"
+    },
+    {
+      "id": "electroverse",
+      "network": "Octopus Electroverse",
+      "speed": "dc",
+      "pencePerKwh": 62,
+      "source_url": "https://electroverse.octopus.energy/",
+      "verified_on": "2026-08-16"
+    }
+  ]
+}
