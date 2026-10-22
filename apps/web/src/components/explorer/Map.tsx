@@ -54,6 +54,16 @@ type FC = {
 
 const emptyFc = (): FC => ({ type: 'FeatureCollection', features: [] });
 
+// Stable defaults: a fresh `[]` per render would rebuild syncOverlays every
+// render and redraw every source and marker (every frame during playback).
+const NO_VISITS: Visit[] = [];
+const NO_ACTIVITIES: Activity[] = [];
+const NO_CONNECTORS: Connector[] = [];
+const NO_HOTSPOT_LABELS: HotspotLabel[] = [];
+const NO_AREA_MARKERS: { lat: number; lon: number; label: string; visits: number }[] = [];
+const NO_CORRIDORS: { from: [number, number]; to: [number, number]; count: number }[] = [];
+const NO_PINS: { kind: 'home' | 'work'; lat: number; lon: number; label: string }[] = [];
+
 export type HeatmapLayerSpec = {
   id: string;
   points: HeatmapPoint[];
@@ -130,16 +140,16 @@ interface MapProps {
 
 const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   {
-    visits = [],
-    activities = [],
-    connectors = [],
+    visits = NO_VISITS,
+    activities = NO_ACTIVITIES,
+    connectors = NO_CONNECTORS,
     heatmapPoints,
     heatmapLayers,
     sourceColors,
-    hotspotLabels = [],
-    areaMarkers = [],
-    corridorLines = [],
-    homeWorkPins = [],
+    hotspotLabels = NO_HOTSPOT_LABELS,
+    areaMarkers = NO_AREA_MARKERS,
+    corridorLines = NO_CORRIDORS,
+    homeWorkPins = NO_PINS,
     compact = false,
     center = [20, 0],
     zoom = 2,
@@ -916,17 +926,20 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       playheadMarkerRef.current = null;
       return;
     }
+    const lngLat = toLngLat(playhead.lat, playhead.lon);
     if (!playheadMarkerRef.current) {
+      // MapLibre reads the marker position inside addTo(), so set it first.
       playheadMarkerRef.current = htmlMarker(
         `<div style="width:16px;height:16px;border-radius:50%;background:var(--accent);border:2px solid var(--on-accent);box-shadow:0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent)"></div>`,
-      );
+      ).setLngLat(lngLat);
       playheadMarkerRef.current.addTo(map);
+    } else {
+      playheadMarkerRef.current.setLngLat(lngLat);
     }
-    playheadMarkerRef.current.setLngLat(toLngLat(playhead.lat, playhead.lon));
     if (followPlayhead) {
       const reduce = reducedMotion();
-      if (reduce) map.jumpTo({ center: toLngLat(playhead.lat, playhead.lon) });
-      else map.easeTo({ center: toLngLat(playhead.lat, playhead.lon), duration: 200 });
+      if (reduce) map.jumpTo({ center: lngLat });
+      else map.easeTo({ center: lngLat, duration: 200 });
     }
   }, [playhead, followPlayhead]);
 

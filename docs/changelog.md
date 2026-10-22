@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Day View no longer crashes when a day loads. The playback marker was added to the map before it had a position, which threw inside MapLibre and blanked the page. The map also stops redrawing every line and marker on each playback frame.
+
 ## 0.0.1
 
 Colour moods in Settings, Display: 30 named palettes (light and dark each) on top of the existing theme toggle. Stored in `locations-mood`. Map tiles still follow light and dark.
