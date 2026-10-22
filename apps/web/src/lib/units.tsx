@@ -14,6 +14,7 @@ type MeResponse = {
     mapTileLightUrl?: string | null;
   };
   entitlements?: { entitled: boolean; status: string; graceUntil: string | null };
+  uploadLimitBytes?: number;
 };
 
 const UnitsContext = createContext<{
@@ -24,6 +25,7 @@ const UnitsContext = createContext<{
   mapTileDarkUrl: string | null;
   mapTileLightUrl: string | null;
   entitlements: MeResponse['entitlements'] | undefined;
+  uploadLimitBytes: number | null;
 }>({
   unit: 'mi',
   timezone: null,
@@ -32,6 +34,7 @@ const UnitsContext = createContext<{
   mapTileDarkUrl: null,
   mapTileLightUrl: null,
   entitlements: undefined,
+  uploadLimitBytes: null,
 });
 
 export function UnitsProvider({ children }: { children: ReactNode }) {
@@ -56,6 +59,7 @@ export function UnitsProvider({ children }: { children: ReactNode }) {
       mapTileDarkUrl: data?.settings?.mapTileDarkUrl ?? null,
       mapTileLightUrl: data?.settings?.mapTileLightUrl ?? null,
       entitlements: data?.entitlements,
+      uploadLimitBytes: data?.uploadLimitBytes ?? null,
     }),
     [data],
   );

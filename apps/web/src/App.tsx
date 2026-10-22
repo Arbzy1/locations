@@ -7,7 +7,6 @@ import {
   useImportStatus,
   useOverview,
   usePublicConfig,
-  useRouteProgress,
 } from './hooks/useApi';
 import { useSession, signOut } from './lib/auth';
 import { UnitsProvider } from './lib/units';
@@ -218,7 +217,6 @@ function AppContent() {
   const navReady = useRef(false);
   const cutInPrimed = useRef(false);
   const cutInPrev = useRef<{ id: string; status: string } | null>(null);
-  const { data: routeProgress } = useRouteProgress();
   const { data: overview, isLoading: overviewLoading } = useOverview();
   const { data: importStatus } = useImportStatus({
     poll: true,
@@ -462,18 +460,6 @@ function AppContent() {
                 <RailLabel show={navExpanded}>Settings</RailLabel>
               </Button>
             )}
-            {routeProgress && routeProgress.percent < 100 && (
-              <div
-                className={cn(
-                  'flex items-center text-xs text-text-muted',
-                  navExpanded ? 'h-11 gap-2 px-3' : 'h-11 w-11 justify-center',
-                )}
-                title={`Routes cached: ${routeProgress.percent}%`}
-              >
-                <Loader2 size={16} className="animate-spin text-accent" />
-                <RailLabel show={navExpanded}>Routes {routeProgress.percent}%</RailLabel>
-              </div>
-            )}
             {signOutButton}
           </div>
         </motion.aside>
@@ -581,15 +567,6 @@ function AppContent() {
                       <Settings size={16} />
                       Settings
                     </Button>
-                  )}
-                  {routeProgress && routeProgress.percent < 100 && (
-                    <div
-                      className="flex h-11 items-center gap-2 px-3 text-xs text-text-muted"
-                      title={`Routes cached: ${routeProgress.percent}%`}
-                    >
-                      <Loader2 size={14} className="animate-spin text-accent" />
-                      Routes {routeProgress.percent}%
-                    </div>
                   )}
                   <Button
                     type="button"

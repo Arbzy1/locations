@@ -898,34 +898,9 @@ export function filterHiddenAnalytics(key: string, data: unknown, hidden: Set<st
 }
 
 export async function getRouteProgress(db: ReturnType<typeof createDb>, tenant: TenantId) {
-  const rows = await db
-    .select({
-      startLat: activities.startLat,
-      startLon: activities.startLon,
-      endLat: activities.endLat,
-      endLon: activities.endLon,
-      mode: activities.mode,
-    })
-    .from(activities)
-    .where(eq(activities.tenant, tenant));
-
-  const keys: string[] = [];
-  for (const a of rows) {
-    if (SKIP.has(a.mode)) continue;
-    const profile = MODE_TO_PROFILE[a.mode] ?? "driving";
-    keys.push(makeRouteCacheKey(a.startLat, a.startLon, a.endLat, a.endLon, profile));
-  }
-  const total = keys.length;
-  let cached = 0;
-  for (let i = 0; i < keys.length; i += 400) {
-    const batch = keys.slice(i, i + 400);
-    if (!batch.length) continue;
-    const found = await db
-      .select({ key: routeCache.key })
-      .from(routeCache)
-      .where(inArray(routeCache.key, batch));
-    cached += found.length;
-  }
+  const { candidates, cachedKeys } = await loadRouteCandidates(db, tenant);
+  const total = new Set(candidates.map((c) => c.key)).size;
+  const cached = cachedKeys.size;
   return {
     running: false,
     total,
@@ -2132,12 +2107,15 @@ export async function deleteTenantDateRange(
   return deleteDateRange(db, { tenant, ...opts });
 }
 
-const REWARM_CAP = 100;
+/** Journeys per rewarm request; a GPS journey can take up to five OSRM calls. */
+const REWARM_CAP = 8;
 
-export async function rewarmRoutes(
-  db: ReturnType<typeof createDb>,
-  tenant: TenantId,
-) {
+/**
+ * Every journey's route_cache key, built the same way Day View routes it: GPS
+ * journeys use trace keys, the rest endpoint keys. Shared by progress and rewarm
+ * so the two always agree.
+ */
+async function loadRouteCandidates(db: ReturnType<typeof createDb>, tenant: TenantId) {
   const rows = await db
     .select({
       start: activities.start,
@@ -2153,7 +2131,6 @@ export async function rewarmRoutes(
     .from(activities)
     .where(eq(activities.tenant, tenant));
 
-  // Mirror routeActivity: GPS-backed journeys use trace routes, the rest endpoint routes.
   // Without neighbouring stops this cannot apply journeyAnchor, so the few journeys
   // whose recorded endpoint gets replaced in Day View are routed on first view instead.
   const candidates: Array<(typeof rows)[number] & { key: string; trace: PathPoint[] | null }> = [];
@@ -2174,18 +2151,29 @@ export async function rewarmRoutes(
   }
 
   const cachedKeys = new Set<string>();
-  const keys = candidates.map((c) => c.key);
+  const keys = [...new Set(candidates.map((c) => c.key))];
   for (let i = 0; i < keys.length; i += 400) {
     const batch = keys.slice(i, i + 400);
-    if (!batch.length) continue;
     const found = await db
       .select({ key: routeCache.key })
       .from(routeCache)
       .where(inArray(routeCache.key, batch));
     for (const row of found) cachedKeys.add(row.key);
   }
+  return { candidates, cachedKeys };
+}
 
-  const uncached = candidates.filter((c) => !cachedKeys.has(c.key));
+export async function rewarmRoutes(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+) {
+  const { candidates, cachedKeys } = await loadRouteCandidates(db, tenant);
+  const seen = new Set<string>();
+  const uncached = candidates.filter((c) => {
+    if (cachedKeys.has(c.key) || seen.has(c.key)) return false;
+    seen.add(c.key);
+    return true;
+  });
   const batch = uncached.slice(0, REWARM_CAP);
   for (const a of batch) {
     if (a.trace) await fetchTraceRoute(db, a.trace, a.mode, a.distanceMeters);

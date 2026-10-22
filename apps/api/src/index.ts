@@ -7,6 +7,7 @@ import {
   isEntitled,
   isStaffRole,
   quotaForEntitled,
+  countTimelineRecords,
   type TenantId,
   type PlaceColorToken,
 } from "@locations/db";
@@ -347,6 +348,8 @@ app.get("/api/me", async (c) => {
       status: sub?.status ?? "none",
       graceUntil: sub?.graceUntil ?? null,
     },
+    // Same plan quota the import routes enforce, so the UI can check size up front.
+    uploadLimitBytes: quotaForEntitled(Boolean(c.env.STRIPE_SECRET_KEY) ? entitled : true).maxUploadBytes,
     settings,
   });
 });
@@ -1463,7 +1466,7 @@ async function runImportJob(env: Env, message: ImportQueueMessage): Promise<void
     } catch {
       throw new Error("Invalid JSON file");
     }
-    const parsedCount = Array.isArray(records) ? records.length : 1;
+    const parsedCount = countTimelineRecords(records);
     await withTenant(jobDb, tenant, (tx) =>
       updateImportJob(tx, jobId, { status: "processing", parsedCount }, tenant),
     );
