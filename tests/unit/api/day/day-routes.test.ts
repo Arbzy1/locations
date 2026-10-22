@@ -194,6 +194,11 @@ describe("getDay journey lines and gaps", () => {
     expect(plain.activities[0].recorded_geometry).toContainEqual([40.73, -73.996]);
     expect(plain.activities[0].predicted_geometry).toBeUndefined();
     expect(plain.activities[0].accuracy.fixes).toBe(2);
+    // Points view: the raw fixes with their times, no snapped endpoints added.
+    expect((plain.activities[0] as unknown as { gps_fixes: number[][] }).gps_fixes).toEqual([
+      [40.73, -73.996, t],
+      [40.74, -73.992, t + 300],
+    ]);
 
     const compared = (await getDay(dayDb([home, work], [train]), "t1", DATE, undefined, undefined, {
       compare: true,

@@ -1247,6 +1247,9 @@ export async function buildDay(
     d.is_rail = a.mode === "train" || a.mode === "subway";
     d.route_source = route.source;
     d.gps_points = route.gpsPoints;
+    // Raw fixes as recorded ([lat, lon, unixSeconds]) for the Points view: no joining,
+    // snapping or endpoints, so sparse journeys look sparse.
+    d.gps_fixes = (a.path ?? []).map(([lat, lon, s]) => [lat, lon, s]);
 
     // What the phone recorded, joined to the same stops as the drawn line.
     const recorded = journeyTrace({

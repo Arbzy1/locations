@@ -37,6 +37,7 @@ const LINE_VARIANTS: { id: LineVariant; label: string; title: string }[] = [
   { id: 'best', label: 'Best', title: 'GPS points snapped onto roads where possible' },
   { id: 'recorded', label: 'Recorded', title: 'Only what your phone recorded: straight lines between GPS points' },
   { id: 'predicted', label: 'Predicted', title: "OSRM's fastest route between each journey's start and end" },
+  { id: 'points', label: 'Points', title: 'Only the GPS points your phone recorded, with no lines between them' },
 ];
 
 function formatMeters(m: number): string {
@@ -355,6 +356,25 @@ export default function DayView({ initialDate }: Props) {
         ? 'left-3 right-3 bottom-[calc(38%+0.5rem)]'
         : 'left-3 right-3 bottom-[calc(55%+0.5rem)]';
 
+  const fixSummary = useMemo(() => {
+    if (!dayData || 'error' in dayData) return null;
+    let points = 0;
+    let withFixes = 0;
+    let maxGapS = 0;
+    for (const a of dayData.activities) {
+      const fixes = a.gps_fixes ?? [];
+      points += fixes.length;
+      if (fixes.length) withFixes += 1;
+      for (let k = 1; k < fixes.length; k++) maxGapS = Math.max(maxGapS, fixes[k][2] - fixes[k - 1][2]);
+    }
+    return {
+      points,
+      withFixes,
+      journeys: dayData.activities.length,
+      maxGapMin: maxGapS ? Math.round(maxGapS / 60) : null,
+    };
+  }, [dayData]);
+
   const mapProps = {
     visits: dayData && !('error' in dayData) ? dayData.visits : undefined,
     activities: shownActivities,
@@ -515,7 +535,7 @@ export default function DayView({ initialDate }: Props) {
 
           <div className="mt-3">
             <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text-muted">Journey lines</div>
-            <div className="grid grid-cols-3 gap-1 rounded-lg bg-bg p-1" role="radiogroup" aria-label="Journey lines">
+            <div className="grid grid-cols-4 gap-1 rounded-lg bg-bg p-1" role="radiogroup" aria-label="Journey lines">
               {LINE_VARIANTS.map((v) => (
                 <Button
                   key={v.id}
@@ -539,6 +559,16 @@ export default function DayView({ initialDate }: Props) {
             )}
             {lineVariant === 'recorded' && (
               <p className="mt-2 text-xs text-text-muted">Straight lines between the GPS points your phone recorded.</p>
+            )}
+            {lineVariant === 'points' && fixSummary && (
+              <p className="mt-2 text-xs text-text-muted">
+                {fixSummary.points.toLocaleString()} GPS point{fixSummary.points === 1 ? '' : 's'} across{' '}
+                {fixSummary.withFixes} of {fixSummary.journeys} journeys
+                {fixSummary.maxGapMin !== null && `; longest gap between points ${fixSummary.maxGapMin} min`}.
+                {fixSummary.withFixes < fixSummary.journeys &&
+                  ` ${fixSummary.journeys - fixSummary.withFixes} had none, so they show nothing here.`}{' '}
+                Tap a point for its time.
+              </p>
             )}
           </div>
         </div>

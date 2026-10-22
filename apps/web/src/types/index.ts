@@ -66,6 +66,8 @@ export interface Activity {
   from_place?: string;
   to_place?: string;
   source_id?: string | null;
+  /** Raw GPS fixes as recorded: [lat, lon, unixSeconds]. */
+  gps_fixes?: [number, number, number][];
   /** The user's own note. */
   note?: string | null;
   /** True when the user corrected Google's transport mode. */
@@ -357,7 +359,7 @@ export interface JourneyAccuracy {
 }
 
 /** Which line Day View draws for each journey. */
-export type LineVariant = 'best' | 'recorded' | 'predicted';
+export type LineVariant = 'best' | 'recorded' | 'predicted' | 'points';
 
 /** One journey in the Routes (period) view, as recorded. */
 export interface RouteLine {

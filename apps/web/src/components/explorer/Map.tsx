@@ -188,6 +188,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   },
   ref,
 ) {
+  const pointsMode = lineVariant === 'points';
   const activities = useMemo(
     () => (lineVariant === 'best' ? rawActivities : rawActivities.map((a) => withLineVariant(a, lineVariant))),
     [rawActivities, lineVariant],
@@ -496,7 +497,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         },
       });
 
-      const actFeatures = sortedActivities.map((a, i) => {
+      const actFeatures = (pointsMode ? [] : sortedActivities).map((a, i) => {
         const positions: [number, number][] = a.route_geometry?.length
           ? a.route_geometry.map((c) => [c[0], c[1]])
           : [
@@ -542,6 +543,42 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           },
         });
       }
+
+      const fixFeatures = pointsMode
+        ? sortedActivities.flatMap((a, i) => {
+            const color = colorForActivity(a, i);
+            const fixes = a.gps_fixes ?? [];
+            return fixes.map(([lat, lon, s], k) => {
+              const gapMin = k > 0 ? Math.round((s - fixes[k - 1][2]) / 60) : null;
+              const time = formatTime(new Date(s * 1000).toISOString());
+              return {
+                type: 'Feature' as const,
+                properties: {
+                  color,
+                  html: `<div style="font-size:12px"><strong>${escapeHtml(time)}</strong> · ${escapeHtml(
+                    MODE_LABELS[a.mode] || a.mode,
+                  )}<br/>GPS point ${k + 1} of ${fixes.length}${
+                    gapMin !== null ? `, ${gapMin} min after the last` : ''
+                  }</div>`,
+                },
+                geometry: { type: 'Point' as const, coordinates: toLngLat(lat, lon) },
+              };
+            });
+          })
+        : [];
+      upsertSource(map, 'loc-fixes', { type: 'FeatureCollection', features: fixFeatures });
+      ensureLayer(map, {
+        id: 'loc-fixes',
+        type: 'circle',
+        source: 'loc-fixes',
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 2.5, 14, 4.5, 18, 7],
+          'circle-color': ['get', 'color'],
+          'circle-stroke-color': surface,
+          'circle-stroke-width': 1,
+          'circle-opacity': 0.95,
+        },
+      });
 
       const modeColor: unknown[] = ['match', ['get', 'mode']];
       for (const [mode, hex] of Object.entries(MODE_COLORS)) modeColor.push(mode, literalColor(hex));
@@ -769,7 +806,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         });
       }
 
-      if (z >= 15) {
+      if (z >= 15 && !pointsMode) {
         sortedActivities.forEach((a, i) => {
           const positions: [number, number][] = a.route_geometry?.length
             ? a.route_geometry.map((c) => [c[0], c[1]])
@@ -828,6 +865,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       overlayReady.current = true;
     },
     [
+      pointsMode,
       areaMarkers,
       corridorLines,
       connectors,
@@ -885,6 +923,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         'loc-act-unknown',
         'loc-period',
         'loc-period-guess',
+        'loc-fixes',
       ];
       for (const id of layers) {
         map.on('click', id, openFrom);

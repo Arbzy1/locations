@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Day View "Points" line option: only the GPS points your phone recorded, with no lines, coloured by journey. The panel counts the points, how many journeys had none, and the longest gap between points; tap a point for its time.
+
 Older Takeout exports keep Google's own place names: Day View, the place directory and Insights show them unless you have renamed the place. Migration `0019_visit_google_name`; re-import to fill it.
 
 New features: Insights for any period with the same dates last year beside it, and an "On this day" card (in the app only, never emailed). Export GPX, GeoJSON (up to a year) or a stays CSV, with home blurred to about 1 km by default. Privacy tools: rename, hide or delete everything at a place (stays, journeys to or from it, GPS points within 200 m), and keep history for 1 to 10 years (older days deleted now and on the 1st of each month). Notes on any stay or journey and transport-mode fixes that Day View routes with; both survive re-imports. Google's own trips (`timelineMemory`) become named trips and Google's Home and Work labels win over the hour-of-day guess. Migrations `0017_retention_years` and `0018_timeline_overrides` (new tenant table with FORCE RLS).
