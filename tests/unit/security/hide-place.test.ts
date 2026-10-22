@@ -33,7 +33,7 @@ describe("hide-place is discovery only", () => {
     expect(search).toContain("filterHiddenSearchPlaces");
     expect(day).not.toContain("hiddenPlaceKeySet");
     expect(visits).not.toContain("hiddenPlaceKeySet");
-    expect(cluster).toContain("hidden: hidden.has(cluster)");
+    expect(cluster).toContain("hidden: hidden.has(placeKey)");
     expect(cluster).not.toMatch(/\.filter\(\s*\(.*hidden/);
   });
 });

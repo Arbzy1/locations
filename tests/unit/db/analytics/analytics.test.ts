@@ -508,3 +508,26 @@ describe("computeDataHealth", () => {
     expect(computeDataHealth(store).duplicateVisits).toBe(1);
   });
 });
+
+describe("timezone-aware nights", () => {
+  // 14:00 UTC is 23:00 in Tokyo: a night there, an afternoon in UTC.
+  const visits = [1, 2, 3].map((d) =>
+    visit({ id: d, date: `2024-01-0${d}`, start: `2024-01-0${d}T14:00:00Z`, cluster: "tokyo-flat" }),
+  );
+  const store = buildStore(visits, [], []);
+
+  it("infers home from local night hours", () => {
+    expect(inferHomeWork(store).home).toBeNull();
+    expect(inferHomeWork(store, "Asia/Tokyo").home?.cluster).toBe("tokyo-flat");
+  });
+
+  it("counts long evening stays as nights", () => {
+    const evening = buildStore(
+      [{ ...visit({ date: "2024-01-01", start: "2024-01-01T19:00:00Z", cluster: "hotel" }), durationMinutes: 600 }],
+      [],
+      [],
+    );
+    expect(inferHomeWork(evening).home?.cluster).toBe("hotel");
+    expect(computeAwayNights(evening)).toEqual([]);
+  });
+});

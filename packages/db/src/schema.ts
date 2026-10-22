@@ -190,9 +190,12 @@ export const visits = pgTable(
     fixLat: real("fix_lat"),
     fixLon: real("fix_lon"),
     fixCount: integer("fix_count"),
+    /** The real place: `g:<Google placeId>`, else `c:<lat>,<lon>` snapped to ~100 m. */
+    placeKey: text("place_key"),
   },
   (t) => [
     index("visits_tenant_date_idx").on(t.tenant, t.date),
+    index("visits_tenant_place_key_idx").on(t.tenant, t.placeKey),
     index("visits_place_id_idx").on(t.placeId),
     index("visits_tenant_source_idx").on(t.tenant, t.sourceId),
     index("visits_tenant_cluster_idx").on(t.tenant, t.cluster),

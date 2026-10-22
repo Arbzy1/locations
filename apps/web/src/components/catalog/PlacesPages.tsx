@@ -23,7 +23,7 @@ export function PlacesDirectory() {
   const [sort, setSort] = useState('visits');
   const { data } = useClusters(q, sort);
   return (
-    <CatalogPage title="Place directory" description="Every named cluster in your imported Timeline. Hidden places are omitted here; Day View still lists those visits.">
+    <CatalogPage title="Place directory" description="Every place you stayed, from Google's place or the spot itself. Rename one and Day View uses your name. Hidden places are left out here and on the heatmap; Day View still lists those visits.">
       <div className="flex flex-wrap gap-2">
         <EjectField label="Filter places" htmlFor="places-filter" className="max-w-sm min-w-0 flex-1">
           <Input
