@@ -2358,6 +2358,7 @@ export {
   getTripRange,
   getRouteLines,
   getHotspotDays,
+  getExportRows,
   listNamedTrips,
   upsertNamedTrip,
   deleteNamedTrip,

@@ -79,6 +79,7 @@ import {
   getTripRange,
   getRouteLines,
   getHotspotDays,
+  getExportRows,
   listNamedTrips,
   upsertNamedTrip,
   deleteNamedTrip,
@@ -97,6 +98,15 @@ import { parsePlaceColor, sanitizePlaceTags } from "./place-labels";
 import { runMonthlyRecaps } from "./monthly-recap";
 import { runExportPackJob } from "./export-pack-job";
 import { publicExportJob } from "./export-pack";
+import {
+  EXPORT_FORMATS,
+  blurHome,
+  guessHomePlace,
+  toGeoJson,
+  toGpx,
+  toVisitsCsv,
+  type ExportFormat,
+} from "./exports";
 
 type Variables = {
   user: { id: string; email: string; name: string; role: string } | null;
@@ -949,6 +959,39 @@ app.get("/api/routes", async (c) => {
   );
   if (isErrorResult(result)) return c.json(result, 400);
   return c.json(result);
+});
+
+app.get("/api/export/:format", async (c) => {
+  const format = c.req.param("format") as ExportFormat;
+  if (!EXPORT_FORMATS.includes(format)) return c.json({ error: "Format must be gpx, geojson or csv" }, 400);
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    getExportRows(tx, tenant, {
+      from: c.req.query("from"),
+      to: c.req.query("to"),
+      journeys: format !== "csv",
+    }),
+  );
+  if (isErrorResult(result)) return c.json(result, 400);
+  // Home is guessed from all of the range's stays, before anything is blurred.
+  const data =
+    c.req.query("blur_home") === "1" ? blurHome(result, guessHomePlace(result.visits)) : result;
+  const span = [c.req.query("from"), c.req.query("to")].filter(Boolean).join("_to_") || "all";
+  const name = `locations-${span}`;
+  if (format === "gpx") {
+    c.header("Content-Type", "application/gpx+xml; charset=utf-8");
+    c.header("Content-Disposition", `attachment; filename="${name}.gpx"`);
+    return c.body(toGpx(data));
+  }
+  if (format === "geojson") {
+    c.header("Content-Type", "application/geo+json; charset=utf-8");
+    c.header("Content-Disposition", `attachment; filename="${name}.geojson"`);
+    return c.body(JSON.stringify(toGeoJson(data)));
+  }
+  c.header("Content-Type", "text/csv; charset=utf-8");
+  c.header("Content-Disposition", `attachment; filename="${name}-stays.csv"`);
+  return c.body(toVisitsCsv(data.visits));
 });
 
 app.get("/api/hotspots/days", async (c) => {

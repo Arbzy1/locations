@@ -68,6 +68,7 @@ export function createServicesMock(overrides: Record<string, unknown> = {}) {
     upsertPlaceLabel: vi.fn(),
     listPlaceLabels: vi.fn(async () => []),
     listClusters: vi.fn(async () => ({ clusters: [], cursor: null })),
+    getExportRows: vi.fn(async () => ({ visits: [], journeys: [] })),
     getCluster: vi.fn(async () => null),
     listClusterVisits: vi.fn(async () => ({ visits: [], cursor: null })),
     getCorridorDetail: vi.fn(async () => null),

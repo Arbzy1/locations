@@ -503,6 +503,68 @@ const HOTSPOT_RADIUS_MAX_M = 2000;
 const HOTSPOT_DAYS_MAX = 400;
 
 /** Days with a stay near a point (a hotspot), newest first, with time spent. */
+/** Longest range a GPX or GeoJSON export covers (GPS paths make them large). */
+export const EXPORT_PATH_RANGE_MAX_DAYS = 366;
+
+/**
+ * Stays and journeys for an export. CSV (stays only) may span everything; formats with
+ * journey geometry need a range of at most a year.
+ */
+export async function getExportRows(
+  db: Db,
+  tenant: TenantId,
+  opts: { from?: string; to?: string; journeys: boolean },
+) {
+  const from = opts.from?.trim() || "";
+  const to = opts.to?.trim() || "";
+  if ((from && !ISO_DAY.test(from)) || (to && !ISO_DAY.test(to)) || (from && to && from > to)) {
+    return { error: "from and to must be YYYY-MM-DD with from <= to" as const };
+  }
+  if (opts.journeys) {
+    if (!from || !to) return { error: "Choose a date range for GPX or GeoJSON" as const };
+    if (to > addDays(from, EXPORT_PATH_RANGE_MAX_DAYS - 1)) {
+      return { error: "GPX and GeoJSON exports cover up to a year at a time" as const };
+    }
+  }
+  const visitFilters = [eq(visits.tenant, tenant)];
+  if (from) visitFilters.push(gte(visits.date, from));
+  if (to) visitFilters.push(lte(visits.date, to));
+  const visitRows = await db
+    .select({
+      start: visits.start,
+      end: visits.end,
+      date: visits.date,
+      lat: visits.lat,
+      lon: visits.lon,
+      durationMinutes: visits.durationMinutes,
+      semanticType: visits.semanticType,
+      placeKey: visits.placeKey,
+      cluster: visits.cluster,
+    })
+    .from(visits)
+    .where(and(...visitFilters))
+    .orderBy(visits.start);
+  if (!opts.journeys) return { visits: visitRows, journeys: [] };
+
+  const journeyRows = await db
+    .select({
+      start: activities.start,
+      end: activities.end,
+      date: activities.date,
+      startLat: activities.startLat,
+      startLon: activities.startLon,
+      endLat: activities.endLat,
+      endLon: activities.endLon,
+      mode: activities.mode,
+      distanceMeters: activities.distanceMeters,
+      path: activities.path,
+    })
+    .from(activities)
+    .where(and(eq(activities.tenant, tenant), gte(activities.date, from), lte(activities.date, to)))
+    .orderBy(activities.start);
+  return { visits: visitRows, journeys: journeyRows };
+}
+
 export async function getHotspotDays(
   db: Db,
   tenant: TenantId,
