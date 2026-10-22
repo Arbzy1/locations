@@ -14,7 +14,7 @@ import { APP_VERSION } from "./version";
 import { googleAuthEnabled, type Env, type ImportQueueMessage } from "./env";
 import { createAuth } from "./auth";
 import { corsOriginFor } from "./cors";
-import { blockDemo } from "./guards";
+import { blockDemo, isDemoBlockedAuthPath } from "./guards";
 import { clientIp, rateLimit } from "./rate-limit";
 import { applySecurityHeaders, isProductionHttps } from "./security-headers";
 import { registerAdminRoutes } from "./admin";
@@ -154,6 +154,12 @@ app.all("/api/auth/*", async (c) => {
   }
   const flags = await resolveOpsFlags(c.env);
   const auth = createAuth(c.env, { disableSignUp: flags.signupDisabled });
+  if (isDemoBlockedAuthPath(c.req.method, c.req.path)) {
+    const current = await auth.api.getSession({ headers: c.req.raw.headers });
+    if ((current?.user as { role?: string } | undefined)?.role === "demo") {
+      return c.json({ error: "The shared demo account cannot change account settings" }, 403);
+    }
+  }
   const res = await auth.handler(c.req.raw);
   if (res.ok && c.req.method === "POST" && c.req.path.endsWith("/change-password")) {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });

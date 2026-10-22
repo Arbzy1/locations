@@ -7,7 +7,7 @@ import { drizzle } from "drizzle-orm/neon-http";
 import { eq } from "drizzle-orm";
 import * as schema from "./schema.js";
 import { user } from "./schema.js";
-import { ensureDataSource, importSourceData } from "./timeline-import.js";
+import { ensureDataSource, importSourceData, pruneTenantToSource } from "./timeline-import.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -135,6 +135,12 @@ async function main() {
   });
 
   console.log("Import complete.", result);
+
+  if (tenant === "demo") {
+    // The demo is one sample dataset; drop older demo sources so days are not doubled.
+    const pruned = await pruneTenantToSource(db, { tenant, sourceId: source.id });
+    console.log(`Demo tenant pruned to source ${source.label} (${pruned.days} days).`);
+  }
 }
 
 main().catch((err) => {
