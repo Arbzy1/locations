@@ -39,6 +39,7 @@ export function createServicesMock(overrides: Record<string, unknown> = {}) {
     getDays: vi.fn(async () => []),
     getDay: vi.fn(),
     getCacheDb: vi.fn(() => ({})),
+    closeDb: vi.fn(async () => undefined),
     loadDayRows: vi.fn(async () => null),
     buildDay: vi.fn(),
     getHeatmap: vi.fn(async () => []),

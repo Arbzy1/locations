@@ -46,6 +46,7 @@ import {
   loadDayRows,
   buildDay,
   getCacheDb,
+  closeDb,
   getDays,
   getDb,
   getHeatmap,
@@ -441,20 +442,31 @@ app.get("/api/day/:date", async (c) => {
           await write({ type: "error", error: "No data for this date" });
           return;
         }
-        const result = await buildDay(getCacheDb(c.env), tenant, date, rows, async (progress) => {
-          await write({ type: "progress", ...progress });
-        }, dayOpts);
-        await write({ type: "result", data: result });
+        const cacheDb = getCacheDb(c.env);
+        try {
+          const result = await buildDay(cacheDb, tenant, date, rows, async (progress) => {
+            await write({ type: "progress", ...progress });
+          }, dayOpts);
+          await write({ type: "result", data: result });
+        } finally {
+          await closeDb(cacheDb);
+        }
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        await write({ type: "error", error: message });
+        // Never send query text or coordinates to the client; log the kind only.
+        console.error(JSON.stringify({ kind: "day_build", ok: false, error: err instanceof Error ? err.name : "unknown" }));
+        await write({ type: "error", error: "Building this day failed. Try again in a moment." });
       }
     });
   }
 
   const rows = await loadRows();
   if (!rows) return c.json({ error: "No data for this date" }, 404);
-  return c.json(await buildDay(getCacheDb(c.env), tenant, date, rows, undefined, dayOpts));
+  const cacheDb = getCacheDb(c.env);
+  try {
+    return c.json(await buildDay(cacheDb, tenant, date, rows, undefined, dayOpts));
+  } finally {
+    await closeDb(cacheDb);
+  }
 });
 
 app.delete("/api/days", async (c) => {
