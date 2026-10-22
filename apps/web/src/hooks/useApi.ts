@@ -73,13 +73,16 @@ export type DayLoadProgress = {
   logs: string[];
 };
 
+const NO_DAY_DATA = 'No data for this date';
+export type DayMissing = { error: string };
+
 async function fetchDayStreaming(
   date: string,
   onProgress: (p: DayLoadProgress) => void,
   signal?: AbortSignal,
   sourceIds?: string[],
   compare?: boolean,
-): Promise<DayData> {
+): Promise<DayData | DayMissing> {
   const params = new URLSearchParams({ stream: '1' });
   if (sourceIds?.length) params.set('sources', sourceIds.join(','));
   if (compare) params.set('compare', '1');
@@ -144,9 +147,10 @@ async function fetchDayStreaming(
     }
   }
 
+  // An empty day is an answer, not a failure: no retries, no error state.
+  if (streamError === NO_DAY_DATA || (!streamError && !result)) return { error: NO_DAY_DATA };
   if (streamError) throw new Error(streamError);
-  if (!result) throw new Error('No data for this date');
-  return result;
+  return result!;
 }
 
 /** `compare` also loads the OSRM-predicted line for each journey (Day View toggle). */
@@ -156,7 +160,7 @@ export function useDayData(date: string, sourceIds?: string[], opts?: { compare?
   const sourceKey = sourceIds?.slice().sort().join(',') ?? '';
   const compare = Boolean(opts?.compare);
 
-  const query = useQuery<DayData>({
+  const query = useQuery<DayData | DayMissing>({
     queryKey: ['day', tenantKey, date, sourceKey, compare],
     queryFn: ({ signal }) => {
       setProgress({ stage: 'Starting', percent: 0, logs: ['Starting…'] });

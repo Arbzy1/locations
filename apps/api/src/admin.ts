@@ -35,6 +35,7 @@ import { clientIp, rateLimit } from "./rate-limit";
 type Variables = {
   user: { id: string; email: string; name: string; role: string } | null;
   tenant: string;
+  pools: { end: () => Promise<void> }[];
 };
 
 type AdminApp = Hono<{ Bindings: Env; Variables: Variables }>;

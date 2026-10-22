@@ -98,7 +98,15 @@ export default function DayView({ initialDate }: Props) {
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
   const { data: sources } = useSources();
   const [lineVariant, setLineVariant] = useState<LineVariant>('best');
-  const { data: dayData, isLoading, isFetching, progress } = useDayData(
+  const {
+    data: dayData,
+    isLoading,
+    isFetching,
+    progress,
+    isError: dayFailed,
+    error: dayError,
+    refetch: refetchDay,
+  } = useDayData(
     selectedDate,
     sourceFilter.length ? sourceFilter : undefined,
     { compare: lineVariant === 'predicted' },
@@ -573,6 +581,23 @@ export default function DayView({ initialDate }: Props) {
             onUnknownClick={handleUnknownOnMap}
             sourceColors={sourceColors}
           />
+        ) : dayFailed ? (
+          <div className="p-4 text-sm" role="alert">
+            <p className="font-medium text-text">This day did not load.</p>
+            <p className="mt-1 text-text-muted">
+              {dayError instanceof Error ? dayError.message : 'Something went wrong.'} Your data is
+              safe; routing or the connection may have been slow.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              className="mt-3"
+              title="Load this day again"
+              onClick={() => void refetchDay()}
+            >
+              Try again
+            </Button>
+          </div>
         ) : (
           <div className="p-4 text-sm text-text-muted">
             {selectedDate

@@ -17,12 +17,12 @@ Three read-only audits (UX/layout, product, performance/reliability) fed this pl
 
 ## Phase 2 - Speed and reliability
 
-- [ ] `getDay`: read rows in a short `withTenant`, then route/geocode outside the transaction; shared caches written with the HTTP driver; live `resolveCoords` capped and paced; abort on client disconnect.
-- [ ] Close the per-request Neon `Pool` (`waitUntil(pool.end())`).
-- [ ] Imports: stale `processing` jobs fail after 15 minutes; aggregates select only the columns they need (no `activities.path`).
-- [ ] Rewarm capped to a small batch per request.
-- [ ] Heatmap: cache settlement misses; no live geocoding on every load.
-- [ ] Day View error state with a retry, not "No data for this date".
+- [x] `getDay`: read rows in a short `withTenant`, then route/geocode outside the transaction; shared caches written with the HTTP driver; live `resolveCoords` capped and paced; abort on client disconnect.
+- [x] Close the per-request Neon `Pool` (`waitUntil(pool.end())`).
+- [x] Imports: stale `processing` jobs fail after 15 minutes; aggregates select only the columns they need (no `activities.path`).
+- [x] Rewarm capped to a small batch per request.
+- [x] Heatmap: cache settlement misses; no live geocoding on every load.
+- [x] Day View error state with a retry, not "No data for this date".
 
 ## Phase 3 - Data correctness
 

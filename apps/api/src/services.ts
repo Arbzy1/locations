@@ -149,6 +149,15 @@ export function getDb(env: Env) {
   return createDb(env.DATABASE_URL);
 }
 
+/**
+ * Stateless HTTP connection for the shared route/place caches. They have no RLS,
+ * so Day View routing can run outside the tenant transaction.
+ */
+export function getCacheDb(env: Env) {
+  // Same query builder surface for the select/insert calls the caches make.
+  return createHttpDb(env.DATABASE_URL) as unknown as ReturnType<typeof createDb>;
+}
+
 /** Worker liveness helper. Never logs the connection string or query errors. */
 export async function pingDatabase(env: Env): Promise<boolean> {
   if (!env.DATABASE_URL) return false;
@@ -481,15 +490,31 @@ function makeSettlementPlaceKey(lat: number, lon: number): string {
   return `settlement:${lat.toFixed(5)},${lon.toFixed(5)}`;
 }
 
+/**
+ * Live Nominatim lookups allowed per request, spaced to its 1 request/second policy.
+ * Misses past the cap stay unnamed this time and resolve on a later view.
+ */
+export type LiveLookupBudget = { live: number; lastAt?: number };
+const NOMINATIM_SPACING_MS = 1100;
+
 export async function resolveCoords(
   db: ReturnType<typeof createDb>,
   lat: number,
   lon: number,
+  budget?: LiveLookupBudget,
 ): Promise<{ name: string; address: string; data: Record<string, unknown> }> {
   const key = makeCoordPlaceKey(lat, lon);
   const cached = await db.select().from(placeCache).where(eq(placeCache.placeId, key)).limit(1);
   if (cached[0]) {
     return { name: cached[0].name, address: cached[0].address, data: cached[0].data };
+  }
+
+  if (budget) {
+    if (budget.live <= 0) return { name: "Unknown", address: "", data: {} };
+    budget.live -= 1;
+    const wait = budget.lastAt ? budget.lastAt + NOMINATIM_SPACING_MS - Date.now() : 0;
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    budget.lastAt = Date.now();
   }
 
   try {
@@ -527,6 +552,9 @@ export async function resolveCoords(
   }
 }
 
+/** place_cache name for a settlement lookup that found no town (negative cache). */
+const SETTLEMENT_MISS = "(none)";
+
 /**
  * Guess town / city / village for coordinates via Nominatim (cached).
  * Reuses street-level place_cache address details when present to avoid extra fetches.
@@ -545,6 +573,10 @@ export async function resolveSettlement(
     .from(placeCache)
     .where(eq(placeCache.placeId, settlementKey))
     .limit(1);
+  if (cachedSettlement[0]?.name === SETTLEMENT_MISS) {
+    // Nominatim already said there is no town here; do not ask again on every load.
+    return { settlement: null, fetched: false };
+  }
   if (cachedSettlement[0]?.name && cachedSettlement[0].name !== "Unknown") {
     return { settlement: cachedSettlement[0].name, fetched: false };
   }
@@ -590,7 +622,13 @@ export async function resolveSettlement(
       address?: Record<string, string>;
     };
     const settlement = settlementFromAddress(data.address);
-    if (!settlement) return { settlement: null, fetched: true };
+    if (!settlement) {
+      await db
+        .insert(placeCache)
+        .values({ placeId: settlementKey, name: SETTLEMENT_MISS, address: "", data: { source: "nominatim_settlement" } })
+        .onConflictDoNothing();
+      return { settlement: null, fetched: true };
+    }
     const address = data.display_name ?? "";
     await db
       .insert(placeCache)
@@ -796,7 +834,8 @@ export async function getHeatmap(
 
   // Enrich top hotspots with settlement names (cache first; limited live Nominatim).
   const TOP_SETTLEMENT = 20;
-  const MAX_LIVE_SETTLEMENT = 8;
+  // Misses are cached too, so repeat loads converge on zero live lookups.
+  const MAX_LIVE_SETTLEMENT = 4;
   let liveLookups = 0;
   for (const point of points.slice(0, TOP_SETTLEMENT)) {
     const { settlement, fetched } = await resolveSettlement(db, point.lat, point.lon, {
@@ -957,27 +996,26 @@ export async function placesAlongTrace(
   return via;
 }
 
-export async function getDay(
+/** Live place-name lookups per Day View request (see LiveLookupBudget). */
+const MAX_LIVE_PLACE_LOOKUPS = 10;
+
+/**
+ * Tenant rows for one day. Run this inside `withTenant`; it is quick, so the
+ * transaction closes before any routing or geocoding starts.
+ */
+export async function loadDayRows(
   db: ReturnType<typeof createDb>,
   tenant: TenantId,
   date: string,
-  onProgress?: (event: DayProgressEvent) => void | Promise<void>,
   sourceIds?: string[],
-  opts?: { compare?: boolean },
 ) {
-  const report = async (event: DayProgressEvent) => {
-    await onProgress?.(event);
-  };
-
-  await report({ stage: "Loading day records", detail: date, percent: 2 });
-
   const dayRows = await db
     .select()
     .from(dayStats)
     .where(and(eq(dayStats.tenant, tenant), eq(dayStats.date, date)))
     .limit(1);
   const day = dayRows[0];
-  if (!day) return { error: "No data for this date" };
+  if (!day) return null;
 
   const dayVisitsRaw = await db
     .select()
@@ -1006,6 +1044,27 @@ export async function getDay(
   const dayActivities = sourceIds?.length
     ? dayActivitiesRaw.filter((a) => a.sourceId && sourceIds.includes(a.sourceId))
     : dayActivitiesRaw;
+  return { day, visits: dayVisits, activities: dayActivities };
+}
+
+export type DayRows = NonNullable<Awaited<ReturnType<typeof loadDayRows>>>;
+
+/** Day View for already-loaded rows. Only touches the shared route and place caches. */
+export async function buildDay(
+  cacheDb: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  date: string,
+  rows: DayRows,
+  onProgress?: (event: DayProgressEvent) => void | Promise<void>,
+  opts?: { compare?: boolean; signal?: AbortSignal },
+) {
+  const db = cacheDb;
+  const report = async (event: DayProgressEvent) => {
+    // Stop routing and geocoding once the client has gone away.
+    opts?.signal?.throwIfAborted();
+    await onProgress?.(event);
+  };
+  const { day, visits: dayVisits, activities: dayActivities } = rows;
 
   await report({
     stage: "Building timeline",
@@ -1309,6 +1368,7 @@ export async function getDay(
   >();
   let placeDone = 0;
   const placeTotal = uniqueCoords.size;
+  const placeBudget: LiveLookupBudget = { live: MAX_LIVE_PLACE_LOOKUPS };
   for (const [key, [lat, lon]] of uniqueCoords) {
     placeDone += 1;
     await report({
@@ -1338,7 +1398,7 @@ export async function getDay(
         },
       });
     } else {
-      placeNames.set(key, await resolveCoords(db, lat, lon));
+      placeNames.set(key, await resolveCoords(db, lat, lon, placeBudget));
     }
   }
 
@@ -1432,6 +1492,21 @@ export async function getDay(
     modes: day.modes,
     clusters: day.clusters,
   };
+}
+
+/** Load and build a day on one connection (scripts and tests). */
+export async function getDay(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  date: string,
+  onProgress?: (event: DayProgressEvent) => void | Promise<void>,
+  sourceIds?: string[],
+  opts?: { compare?: boolean; signal?: AbortSignal },
+) {
+  await onProgress?.({ stage: "Loading day records", detail: date, percent: 2 });
+  const rows = await loadDayRows(db, tenant, date, sourceIds);
+  if (!rows) return { error: "No data for this date" };
+  return buildDay(db, tenant, date, rows, onProgress, opts);
 }
 
 export async function getSourceById(
@@ -1576,6 +1651,7 @@ export async function getImportStatus(
     .from(visits)
     .where(eq(visits.tenant, tenant));
 
+  await failStaleImportJobs(db, tenant);
   const jobs = await db
     .select()
     .from(importJobs)
@@ -1671,7 +1747,33 @@ export async function getImportJob(
   return rows[0] ?? null;
 }
 
+/** A Worker import cannot outlive this, so an older open job died without reporting. */
+export const STALE_IMPORT_MS = 15 * 60_000;
+
+/** Fail this tenant's pending/processing jobs that have not moved for STALE_IMPORT_MS. */
+export async function failStaleImportJobs(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  now = Date.now(),
+) {
+  await db
+    .update(importJobs)
+    .set({
+      status: "error",
+      error: "Import stopped without finishing. Upload the file again.",
+      updatedAt: new Date(now),
+    })
+    .where(
+      and(
+        eq(importJobs.tenant, tenant),
+        or(eq(importJobs.status, "pending"), eq(importJobs.status, "processing")),
+        lt(importJobs.updatedAt, new Date(now - STALE_IMPORT_MS)),
+      ),
+    );
+}
+
 export async function getActiveImportJob(db: ReturnType<typeof createDb>, tenant: TenantId) {
+  await failStaleImportJobs(db, tenant);
   const rows = await db
     .select()
     .from(importJobs)
