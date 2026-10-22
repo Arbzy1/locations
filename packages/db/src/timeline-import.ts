@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, lte, ne, or, sql } from "drizzle-orm";
 import type { NeonHttpDatabase } from "drizzle-orm/neon-http";
 import type { NeonDatabase } from "drizzle-orm/neon-serverless";
 import * as schema from "./schema.js";
@@ -663,6 +663,30 @@ export async function importSourceData(
     activityCount: activityRows.length,
     days,
   };
+}
+
+/**
+ * Keep only one source in a tenant: delete rows from every other source (and
+ * rows with no source), drop the other data_sources, then rebuild aggregates.
+ * Used for the demo tenant so a re-import cannot leave duplicate journeys.
+ */
+export async function pruneTenantToSource(
+  db: Db,
+  opts: { tenant: TenantId; sourceId: string },
+): Promise<{ days: number }> {
+  const { tenant, sourceId } = opts;
+  await db
+    .delete(visits)
+    .where(and(eq(visits.tenant, tenant), or(isNull(visits.sourceId), ne(visits.sourceId, sourceId))));
+  await db
+    .delete(activities)
+    .where(
+      and(eq(activities.tenant, tenant), or(isNull(activities.sourceId), ne(activities.sourceId, sourceId))),
+    );
+  await db
+    .delete(dataSources)
+    .where(and(eq(dataSources.tenant, tenant), ne(dataSources.id, sourceId)));
+  return rebuildTenantAggregates(db, tenant);
 }
 
 /** Delete a source and its rows, then rebuild tenant aggregates. */
