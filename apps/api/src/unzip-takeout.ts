@@ -21,6 +21,28 @@ function listNames(names: string[]): string {
   return names.map(basename).slice(0, 8).join(", ");
 }
 
+/** Older Takeout splits Semantic Location History into one file per month (2019_JANUARY.json). */
+function isLegacyMonth(name: string): boolean {
+  return /semantic location history/i.test(name) && /\d{4}_[a-z]+\.json$/i.test(name);
+}
+
+/** All monthly files as one `{ timelineObjects }` document, so no month is skipped. */
+function mergeLegacyMonths(files: Record<string, Uint8Array>, names: string[]): string {
+  const decoder = new TextDecoder();
+  const parts: string[] = [];
+  for (const name of [...names].sort()) {
+    let parsed: { timelineObjects?: unknown[] };
+    try {
+      parsed = JSON.parse(decoder.decode(files[name])) as { timelineObjects?: unknown[] };
+    } catch {
+      throw new Error(`${basename(name)} is not valid JSON.`);
+    }
+    const objects = parsed.timelineObjects;
+    if (Array.isArray(objects) && objects.length) parts.push(JSON.stringify(objects).slice(1, -1));
+  }
+  return `{"timelineObjects":[${parts.join(",")}]}`;
+}
+
 function pickPreferred(names: string[]): string | undefined {
   return (
     names.find((n) => /timeline\.json$/i.test(n)) ??
@@ -81,6 +103,16 @@ export async function extractTimelineJsonFromZip(
   for (const n of names) uncompressed += files[n].length;
   if (uncompressed > MAX_UNCOMPRESSED) {
     throw new Error("Uncompressed zip is too large.");
+  }
+
+  const hasTimeline = names.some((n) => /timeline\.json$/i.test(n));
+  const months = names.filter(isLegacyMonth);
+  if (!hasTimeline && months.length) {
+    return {
+      text: mergeLegacyMonths(files, months),
+      chosenPath: `Semantic Location History (${months.length} month${months.length === 1 ? "" : "s"})`,
+      candidates: names,
+    };
   }
 
   const preferred = pickPreferred(names);

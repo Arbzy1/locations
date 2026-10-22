@@ -311,9 +311,108 @@ export function normalizeTimelineInput(raw: unknown): RawTimelineRecord[] {
     return fromRecordsJson(obj.locations as Array<Record<string, unknown>>);
   }
 
+  if (Array.isArray(obj.timelineObjects)) {
+    return fromLegacyTimelineObjects(obj.timelineObjects as LegacyTimelineObject[]);
+  }
+
   throw new Error(
     "Timeline JSON must be a visit/activity array, a semanticSegments Timeline.json, a Timeline Edits export, or Records.json",
   );
+}
+
+type E7Point = { latitudeE7?: number; longitudeE7?: number; latE7?: number; lngE7?: number };
+type LegacyDuration = {
+  startTimestamp?: string;
+  endTimestamp?: string;
+  startTimestampMs?: string;
+  endTimestampMs?: string;
+};
+type LegacyPlaceVisit = {
+  location?: E7Point & { placeId?: string; semanticType?: string };
+  duration?: LegacyDuration;
+  childVisits?: LegacyPlaceVisit[];
+};
+type LegacyTimelineObject = {
+  placeVisit?: LegacyPlaceVisit;
+  activitySegment?: {
+    startLocation?: E7Point;
+    endLocation?: E7Point;
+    duration?: LegacyDuration;
+    distance?: number;
+    activityType?: string;
+    simplifiedRawPath?: { points?: Array<E7Point & { timestamp?: string; timestampMs?: string }> };
+  };
+};
+
+function legacyTime(ts: string | undefined, ms: string | undefined): string {
+  if (ts) return ts;
+  const n = Number(ms);
+  return Number.isFinite(n) && ms ? new Date(n).toISOString() : "";
+}
+
+function legacyCoords(p: E7Point | undefined): [number, number] | null {
+  const lat = p?.latitudeE7 ?? p?.latE7;
+  const lon = p?.longitudeE7 ?? p?.lngE7;
+  if (lat == null || lon == null) return null;
+  return [lat / 1e7, lon / 1e7];
+}
+
+/** Older Takeout "Semantic Location History" monthly files (`timelineObjects`). */
+function fromLegacyTimelineObjects(objects: LegacyTimelineObject[]): RawTimelineRecord[] {
+  const records: RawTimelineRecord[] = [];
+  const pushVisit = (pv: LegacyPlaceVisit, level: number) => {
+    const startTime = legacyTime(pv.duration?.startTimestamp, pv.duration?.startTimestampMs);
+    const endTime = legacyTime(pv.duration?.endTimestamp, pv.duration?.endTimestampMs);
+    const coords = legacyCoords(pv.location);
+    if (startTime && endTime && coords) {
+      records.push({
+        startTime,
+        endTime,
+        visit: {
+          hierarchyLevel: level,
+          topCandidate: {
+            placeLocation: toGeo(coords[0], coords[1]),
+            semanticType: titleCaseSemantic(pv.location?.semanticType?.replace(/^TYPE_/, "")),
+            placeID: pv.location?.placeId,
+          },
+        },
+      });
+    }
+    for (const child of pv.childVisits ?? []) pushVisit(child, level + 1);
+  };
+
+  for (const obj of objects) {
+    if (obj.placeVisit) {
+      pushVisit(obj.placeVisit, 0);
+      continue;
+    }
+    const seg = obj.activitySegment;
+    if (!seg) continue;
+    const startTime = legacyTime(seg.duration?.startTimestamp, seg.duration?.startTimestampMs);
+    const endTime = legacyTime(seg.duration?.endTimestamp, seg.duration?.endTimestampMs);
+    const from = legacyCoords(seg.startLocation);
+    const to = legacyCoords(seg.endLocation);
+    if (!startTime || !endTime || !from || !to) continue;
+    records.push({
+      startTime,
+      endTime,
+      activity: {
+        start: toGeo(from[0], from[1]),
+        end: toGeo(to[0], to[1]),
+        distanceMeters: seg.distance,
+        topCandidate: { type: seg.activityType },
+      },
+    });
+    const fixes: PathPoint[] = [];
+    for (const pt of seg.simplifiedRawPath?.points ?? []) {
+      const c = legacyCoords(pt);
+      const ms = Date.parse(legacyTime(pt.timestamp, pt.timestampMs));
+      if (c && Number.isFinite(ms)) fixes.push([round6(c[0]), round6(c[1]), Math.round(ms / 1000)]);
+    }
+    const path = pathRecord(fixes.sort((a, b) => a[2] - b[2]));
+    if (path) records.push(path);
+  }
+  return records;
 }
 
 function fromRecordsJson(locations: Array<Record<string, unknown>>): RawTimelineRecord[] {
@@ -602,7 +701,7 @@ export function parseTimelineJson(raw: unknown): ParsedTimeline {
   return parsed;
 }
 
-export type TimelineFormat = "classic" | "semantic" | "records" | "edits";
+export type TimelineFormat = "classic" | "semantic" | "records" | "edits" | "legacy";
 
 export function detectTimelineFormat(raw: unknown): TimelineFormat {
   if (raw === null || typeof raw !== "object") {
@@ -613,6 +712,7 @@ export function detectTimelineFormat(raw: unknown): TimelineFormat {
   if (Array.isArray(obj.semanticSegments)) return "semantic";
   if (Array.isArray(obj.timelineEdits)) return "edits";
   if (Array.isArray(obj.locations)) return "records";
+  if (Array.isArray(obj.timelineObjects)) return "legacy";
   throw new Error(
     "Timeline JSON must be a visit/activity array, a semanticSegments Timeline.json, a Timeline Edits export, or Records.json",
   );
@@ -623,7 +723,7 @@ export function countTimelineRecords(raw: unknown): number {
   if (Array.isArray(raw)) return raw.length;
   if (raw && typeof raw === "object") {
     const obj = raw as Record<string, unknown>;
-    for (const key of ["semanticSegments", "timelineEdits", "locations"]) {
+    for (const key of ["semanticSegments", "timelineEdits", "locations", "timelineObjects"]) {
       if (Array.isArray(obj[key])) return (obj[key] as unknown[]).length;
     }
   }
