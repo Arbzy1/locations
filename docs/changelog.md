@@ -8,6 +8,8 @@ Day View "Journey lines" toggle: Best (GPS snapped to roads), Recorded (straight
 
 Hotspots: tap a hotspot (zoomed in) or "Days I was here" on a listed place to see every day you were there with time spent, each with "New tab" (keeps the Hotspots page as it was) and "Open". The selected spot is kept in the URL (`?spot=`). Served by `GET /api/hotspots/days`.
 
+Day calendar (Day View and Routes day mode) has year and month menus to jump straight to any month; empty months are marked and picking a year lands on its nearest month with data.
+
 The demo tenant keeps a single source on import, so demo days no longer show each journey twice.
 
 Day View no longer crashes when a day loads. The playback marker was added to the map before it had a position, which threw inside MapLibre and blanked the page. The map also stops redrawing every line and marker on each playback frame.

@@ -99,6 +99,22 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
 
   const todayKey = format(new Date(), 'yyyy-MM-dd');
 
+  /** Months with data, for the year/month jump menus. */
+  const monthsWithData = useMemo(() => new Set(days.map((d) => d.date.slice(0, 7))), [days]);
+  const years = useMemo(() => [...new Set(days.map((d) => d.date.slice(0, 4)))], [days]);
+  const viewYear = format(viewMonth, 'yyyy');
+  const jumpTo = (year: string, month: number) => {
+    // Land on a month that has data when the exact one is empty.
+    let target = `${year}-${String(month).padStart(2, '0')}`;
+    if (!monthsWithData.has(target)) {
+      const inYear = [...monthsWithData].filter((m) => m.startsWith(year)).sort();
+      target = inYear.find((m) => m >= target) ?? inYear[inYear.length - 1] ?? target;
+    }
+    setViewMonth(startOfMonth(parseISO(`${target}-01`)));
+  };
+  const selectClass =
+    'h-9 min-w-0 flex-1 rounded border border-border bg-bg px-2 text-sm text-text transition-colors duration-ui-fast ease-ui hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40';
+
   return (
     <div className="mt-3">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -126,6 +142,41 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
           <ChevronRight size={16} />
         </button>
       </div>
+
+      {years.length > 0 && (
+        <div className="mb-2 flex gap-2">
+          <select
+            className={selectClass}
+            value={viewYear}
+            title="Jump to a year"
+            aria-label="Jump to a year"
+            onChange={(e) => jumpTo(e.target.value, viewMonth.getMonth() + 1)}
+          >
+            {years.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+          <select
+            className={selectClass}
+            value={viewMonth.getMonth() + 1}
+            title="Jump to a month"
+            aria-label="Jump to a month"
+            onChange={(e) => setViewMonth(startOfMonth(parseISO(`${viewYear}-${e.target.value.padStart(2, '0')}-01`)))}
+          >
+            {Array.from({ length: 12 }, (_, i) => {
+              const key = `${viewYear}-${String(i + 1).padStart(2, '0')}`;
+              return (
+                <option key={key} value={i + 1}>
+                  {format(parseISO(`${key}-01`), 'MMMM')}
+                  {monthsWithData.has(key) ? '' : ' (no data)'}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+      )}
 
       <div className="mb-1 grid grid-cols-7 gap-0.5 text-center text-[10px] text-text-muted">
         {WEEKDAYS.map((d) => (
