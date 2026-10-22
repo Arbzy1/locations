@@ -26,6 +26,8 @@ import { formatFunFact, isGridCluster, multiDayTripLabel } from '../../lib/explo
 import { corridorPath, placePath, tripPath } from '../../lib/nav/paths';
 import { downloadElementPng, downloadTextFile, insightsCsv } from '../../lib/explorer/insights-export';
 import { InsightsStory } from './InsightsStory';
+import RangeInsightsCard from './RangeInsightsCard';
+import OnThisDayCard from './OnThisDayCard';
 import { isStreaks } from '../../lib/explorer/year-review';
 import { Link } from 'react-router-dom';
 import type { ActivityGuessCount, BadgeSummary, FlightSummary } from '../../types';
@@ -261,6 +263,9 @@ export default function InsightsView() {
             </Button>
           </div>
         </div>
+
+        <RangeInsightsCard />
+        <OnThisDayCard />
 
         {/* Overview cards */}
         {overview && (

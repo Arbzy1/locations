@@ -12,6 +12,7 @@ export const TENANT_TABLES = [
   "subscriptions",
   "named_trips",
   "life_chapters",
+  "timeline_overrides",
 ] as const;
 
 export type TenantTable = (typeof TENANT_TABLES)[number];

@@ -16,12 +16,14 @@ import {
   desc,
   or,
   inArray,
+  lt,
   gte,
   lte,
   journeyTrace,
   thinTrace,
   haversineM,
   makeCoordPlaceKey,
+  rebuildTenantAggregates,
   METERS_TO_MILES,
   type TenantId,
 } from "@locations/db";
@@ -54,6 +56,7 @@ type PlaceGroup = {
   repLat: number;
   repLon: number;
   semanticType: string;
+  googleName: string | null;
 };
 
 /** Visits grouped by real place (or by region for older `cluster` keys). */
@@ -75,6 +78,7 @@ async function placeGroups(db: Db, tenant: TenantId, key?: string): Promise<Plac
       repLat: sql<number>`(array_agg(${visits.lat} order by ${visits.start} desc))[1]`,
       repLon: sql<number>`(array_agg(${visits.lon} order by ${visits.start} desc))[1]`,
       semanticType: sql<string>`mode() within group (order by ${visits.semanticType})`,
+      googleName: sql<string | null>`(array_agg(${visits.googleName} order by ${visits.start} desc) filter (where ${visits.googleName} is not null))[1]`,
     })
     .from(visits)
     .where(and(...filters))
@@ -90,8 +94,8 @@ async function placeGroups(db: Db, tenant: TenantId, key?: string): Promise<Plac
 }
 
 /**
- * Display names: the user's label, else the street-level name Day View cached for the
- * place, else Google's semantic type (Home, Work), else its coordinates. Cache only.
+ * Display names: the user's label, else Google's own name from the export, else the
+ * street-level name Day View cached, else Google's semantic type, else coordinates.
  */
 async function placeDisplayNames(db: Db, tenant: TenantId, groups: PlaceGroup[]) {
   const labels = await db
@@ -117,6 +121,7 @@ async function placeDisplayNames(db: Db, tenant: TenantId, groups: PlaceGroup[])
     names.set(
       g.key,
       labelByKey.get(g.key) ||
+        g.googleName ||
         cached.get(coordKey(g)) ||
         semantic ||
         `Near ${g.lat.toFixed(3)}, ${g.lon.toFixed(3)}`,
@@ -248,6 +253,244 @@ export async function listClusterVisits(
   return {
     visits: rows,
     cursor: rows.length === limit ? rows[rows.length - 1]?.start : null,
+  };
+}
+
+/** Journeys and GPS fixes this close to a deleted place go with it. */
+export const PLACE_DELETE_RADIUS_M = 200;
+
+/**
+ * Privacy: remove a place from history. Deletes its stays, journeys that start or end
+ * there, GPS fixes near it on other journeys, and its label; then rebuilds aggregates.
+ */
+export async function deletePlaceData(db: Db, tenant: TenantId, key: string) {
+  const placeKey = key.slice(0, 200);
+  if (!isRealPlaceKey(placeKey)) return { error: "Choose a single place to delete" as const, status: 400 as const };
+  const group = (await placeGroups(db, tenant, placeKey))[0];
+  if (!group) return { error: "Place not found" as const, status: 404 as const };
+  const near = (lat: number, lon: number) =>
+    haversineM(group.lat, group.lon, lat, lon) <= PLACE_DELETE_RADIUS_M;
+
+  const removedVisits = await db
+    .delete(visits)
+    .where(and(eq(visits.tenant, tenant), eq(visits.placeKey, placeKey)))
+    .returning({ id: visits.id });
+
+  const journeys = await db
+    .select({
+      id: activities.id,
+      startLat: activities.startLat,
+      startLon: activities.startLon,
+      endLat: activities.endLat,
+      endLon: activities.endLon,
+      path: activities.path,
+    })
+    .from(activities)
+    .where(eq(activities.tenant, tenant));
+  const dropIds: number[] = [];
+  let trimmedPaths = 0;
+  for (const j of journeys) {
+    if (near(j.startLat, j.startLon) || near(j.endLat, j.endLon)) {
+      dropIds.push(j.id);
+      continue;
+    }
+    if (!j.path?.some(([lat, lon]) => near(lat, lon))) continue;
+    const kept = j.path.filter(([lat, lon]) => !near(lat, lon));
+    await db
+      .update(activities)
+      .set({ path: kept.length ? kept : null })
+      .where(and(eq(activities.tenant, tenant), eq(activities.id, j.id)));
+    trimmedPaths += 1;
+  }
+  for (let i = 0; i < dropIds.length; i += 500) {
+    await db
+      .delete(activities)
+      .where(and(eq(activities.tenant, tenant), inArray(activities.id, dropIds.slice(i, i + 500))));
+  }
+  await db.delete(placeLabels).where(and(eq(placeLabels.tenant, tenant), eq(placeLabels.placeKey, placeKey)));
+  await rebuildTenantAggregates(db, tenant);
+  return { visitCount: removedVisits.length, activityCount: dropIds.length, trimmedPaths };
+}
+
+/** Longest period the range insights summarise. */
+export const INSIGHTS_RANGE_MAX_DAYS = 3660;
+
+/** The same dates one year earlier, clamped for 29 February. */
+export function sameRangeLastYear(from: string, to: string): { from: string; to: string } {
+  const shift = (d: string) => {
+    const [y, m, day] = d.split("-").map(Number);
+    const target = new Date(Date.UTC(y - 1, m - 1, day));
+    // 29 Feb has no twin: Date rolls to 1 Mar, so step back to 28 Feb.
+    if (target.getUTCMonth() !== m - 1) target.setUTCDate(0);
+    return target.toISOString().slice(0, 10);
+  };
+  return { from: shift(from), to: shift(to) };
+}
+
+async function periodSummary(db: Db, tenant: TenantId, from: string, to: string) {
+  const [days] = await db
+    .select({
+      days: sql<number>`count(*)::int`,
+      miles: sql<number>`coalesce(sum(${dayStats.totalDistanceMiles}), 0)`,
+    })
+    .from(dayStats)
+    .where(and(eq(dayStats.tenant, tenant), gte(dayStats.date, from), lte(dayStats.date, to)));
+  const modes = await db
+    .select({
+      mode: activities.mode,
+      journeys: sql<number>`count(*)::int`,
+      meters: sql<number>`coalesce(sum(${activities.distanceMeters}), 0)`,
+    })
+    .from(activities)
+    .where(and(eq(activities.tenant, tenant), gte(activities.date, from), lte(activities.date, to)))
+    .groupBy(activities.mode);
+  const [stays] = await db
+    .select({
+      visits: sql<number>`count(*)::int`,
+      places: sql<number>`count(distinct ${visits.placeKey})::int`,
+    })
+    .from(visits)
+    .where(and(eq(visits.tenant, tenant), gte(visits.date, from), lte(visits.date, to)));
+  const byMode: Record<string, { journeys: number; miles: number }> = {};
+  let journeys = 0;
+  for (const m of modes) {
+    journeys += m.journeys;
+    byMode[m.mode] = {
+      journeys: m.journeys,
+      miles: Math.round((Number(m.meters) * METERS_TO_MILES) * 10) / 10,
+    };
+  }
+  return {
+    from,
+    to,
+    days_with_data: days?.days ?? 0,
+    miles: Math.round(Number(days?.miles ?? 0) * 10) / 10,
+    journeys,
+    visits: stays?.visits ?? 0,
+    places: stays?.places ?? 0,
+    modes: byMode,
+  };
+}
+
+/**
+ * Insights for any period: totals, transport mix, top places by time, places visited
+ * for the first time, and the same summary for those dates a year earlier.
+ */
+export async function getRangeInsights(db: Db, tenant: TenantId, opts: { from: string; to: string }) {
+  const { from, to } = opts;
+  if (!ISO_DAY.test(from) || !ISO_DAY.test(to) || from > to) {
+    return { error: "from and to must be YYYY-MM-DD with from <= to" as const };
+  }
+  if (to > addDays(from, INSIGHTS_RANGE_MAX_DAYS - 1)) {
+    return { error: "Choose a period of up to ten years" as const };
+  }
+  const hidden = await hiddenPlaceKeySet(db, tenant);
+  const current = await periodSummary(db, tenant, from, to);
+  const last = sameRangeLastYear(from, to);
+  const previous = await periodSummary(db, tenant, last.from, last.to);
+
+  const placeRows = await db
+    .select({
+      key: sql<string>`${visits.placeKey}`,
+      minutes: sql<number>`coalesce(sum(${visits.durationMinutes}), 0)`,
+      visits: sql<number>`count(*)::int`,
+    })
+    .from(visits)
+    .where(
+      and(eq(visits.tenant, tenant), gte(visits.date, from), lte(visits.date, to), sql`${visits.placeKey} is not null`),
+    )
+    .groupBy(visits.placeKey)
+    .orderBy(desc(sql`coalesce(sum(${visits.durationMinutes}), 0)`))
+    .limit(12);
+  const topKeys = placeRows.map((r) => r.key).filter((k) => !hidden.has(k)).slice(0, 8);
+
+  // First visits: places whose earliest stay ever falls inside the period.
+  const firsts = await db
+    .select({ key: sql<string>`${visits.placeKey}`, first: sql<string>`min(${visits.date})` })
+    .from(visits)
+    .where(and(eq(visits.tenant, tenant), sql`${visits.placeKey} is not null`))
+    .groupBy(visits.placeKey)
+    .having(and(gte(sql`min(${visits.date})`, from), lte(sql`min(${visits.date})`, to)));
+  const newKeys = firsts.filter((f) => !hidden.has(f.key)).map((f) => f.key);
+
+  const groups = (await placeGroups(db, tenant)).filter((g) => topKeys.includes(g.key) || newKeys.slice(0, 8).includes(g.key));
+  const names = await placeDisplayNames(db, tenant, groups);
+  const byKey = new Map(placeRows.map((r) => [r.key, r]));
+
+  return {
+    current,
+    last_year: previous,
+    top_places: topKeys.map((key) => ({
+      key,
+      label: names.get(key) ?? key,
+      minutes: Math.round(Number(byKey.get(key)?.minutes ?? 0)),
+      visits: byKey.get(key)?.visits ?? 0,
+    })),
+    new_places: {
+      count: newKeys.length,
+      sample: newKeys.slice(0, 8).map((key) => ({ key, label: names.get(key) ?? key })),
+    },
+  };
+}
+
+/**
+ * "On this day": the same calendar day in earlier years, newest first, with distance,
+ * counts and the places where most time was spent. In-app only (never emailed).
+ */
+export async function getOnThisDay(db: Db, tenant: TenantId, opts: { date: string }) {
+  if (!ISO_DAY.test(opts.date)) return { error: "date must be YYYY-MM-DD" as const };
+  const monthDay = opts.date.slice(5);
+  const days = await db
+    .select({
+      date: dayStats.date,
+      miles: dayStats.totalDistanceMiles,
+      visits: dayStats.visitCount,
+      journeys: dayStats.activityCount,
+      modes: dayStats.modes,
+    })
+    .from(dayStats)
+    .where(
+      and(eq(dayStats.tenant, tenant), sql`substr(${dayStats.date}, 6, 5) = ${monthDay}`, lt(dayStats.date, opts.date)),
+    )
+    .orderBy(desc(dayStats.date))
+    .limit(25);
+  if (!days.length) return { date: opts.date, years: [] };
+
+  const hidden = await hiddenPlaceKeySet(db, tenant);
+  const stays = await db
+    .select({
+      date: visits.date,
+      key: sql<string>`${visits.placeKey}`,
+      minutes: sql<number>`coalesce(sum(${visits.durationMinutes}), 0)`,
+    })
+    .from(visits)
+    .where(
+      and(
+        eq(visits.tenant, tenant),
+        inArray(visits.date, days.map((d) => d.date)),
+        sql`${visits.placeKey} is not null`,
+      ),
+    )
+    .groupBy(visits.date, visits.placeKey);
+  const keys = [...new Set(stays.map((r) => r.key))].filter((k) => !hidden.has(k));
+  const groups = keys.length ? (await placeGroups(db, tenant)).filter((g) => keys.includes(g.key)) : [];
+  const names = await placeDisplayNames(db, tenant, groups);
+
+  return {
+    date: opts.date,
+    years: days.map((d) => ({
+      date: d.date,
+      years_ago: Number(opts.date.slice(0, 4)) - Number(d.date.slice(0, 4)),
+      miles: Math.round(d.miles * 10) / 10,
+      visits: d.visits,
+      journeys: d.journeys,
+      modes: d.modes,
+      places: stays
+        .filter((r) => r.date === d.date && !hidden.has(r.key))
+        .sort((a, b) => Number(b.minutes) - Number(a.minutes))
+        .slice(0, 3)
+        .map((r) => ({ key: r.key, label: names.get(r.key) ?? r.key })),
+    })),
   };
 }
 
@@ -503,6 +746,68 @@ const HOTSPOT_RADIUS_MAX_M = 2000;
 const HOTSPOT_DAYS_MAX = 400;
 
 /** Days with a stay near a point (a hotspot), newest first, with time spent. */
+/** Longest range a GPX or GeoJSON export covers (GPS paths make them large). */
+export const EXPORT_PATH_RANGE_MAX_DAYS = 366;
+
+/**
+ * Stays and journeys for an export. CSV (stays only) may span everything; formats with
+ * journey geometry need a range of at most a year.
+ */
+export async function getExportRows(
+  db: Db,
+  tenant: TenantId,
+  opts: { from?: string; to?: string; journeys: boolean },
+) {
+  const from = opts.from?.trim() || "";
+  const to = opts.to?.trim() || "";
+  if ((from && !ISO_DAY.test(from)) || (to && !ISO_DAY.test(to)) || (from && to && from > to)) {
+    return { error: "from and to must be YYYY-MM-DD with from <= to" as const };
+  }
+  if (opts.journeys) {
+    if (!from || !to) return { error: "Choose a date range for GPX or GeoJSON" as const };
+    if (to > addDays(from, EXPORT_PATH_RANGE_MAX_DAYS - 1)) {
+      return { error: "GPX and GeoJSON exports cover up to a year at a time" as const };
+    }
+  }
+  const visitFilters = [eq(visits.tenant, tenant)];
+  if (from) visitFilters.push(gte(visits.date, from));
+  if (to) visitFilters.push(lte(visits.date, to));
+  const visitRows = await db
+    .select({
+      start: visits.start,
+      end: visits.end,
+      date: visits.date,
+      lat: visits.lat,
+      lon: visits.lon,
+      durationMinutes: visits.durationMinutes,
+      semanticType: visits.semanticType,
+      placeKey: visits.placeKey,
+      cluster: visits.cluster,
+    })
+    .from(visits)
+    .where(and(...visitFilters))
+    .orderBy(visits.start);
+  if (!opts.journeys) return { visits: visitRows, journeys: [] };
+
+  const journeyRows = await db
+    .select({
+      start: activities.start,
+      end: activities.end,
+      date: activities.date,
+      startLat: activities.startLat,
+      startLon: activities.startLon,
+      endLat: activities.endLat,
+      endLon: activities.endLon,
+      mode: activities.mode,
+      distanceMeters: activities.distanceMeters,
+      path: activities.path,
+    })
+    .from(activities)
+    .where(and(eq(activities.tenant, tenant), gte(activities.date, from), lte(activities.date, to)))
+    .orderBy(activities.start);
+  return { visits: visitRows, journeys: journeyRows };
+}
+
 export async function getHotspotDays(
   db: Db,
   tenant: TenantId,

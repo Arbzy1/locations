@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import type { Visit, Activity, Connector } from '../../types';
+import TimelineItemEditor from './TimelineItemEditor';
+import { useSession } from '../../lib/auth';
 import { MODE_LABELS } from '../../types';
 import { formatTime, formatDuration, formatDistance } from '../../utils/format';
 import { useUnits } from '../../lib/units';
@@ -299,6 +301,9 @@ export default function Timeline({
   sourceColors,
 }: Props) {
   const { timezone, unit } = useUnits();
+  const { data: session } = useSession();
+  // The shared demo cannot write; everyone else can annotate their own day.
+  const editable = Boolean(session?.user) && (session?.user as { role?: string } | undefined)?.role !== 'demo';
   const sortedActivities = [...activities].sort((a, b) => a.start.localeCompare(b.start));
   const totalJourneys = sortedActivities.length;
   const events = buildTimelineEvents(visits, sortedActivities, connectors);
@@ -396,6 +401,7 @@ export default function Timeline({
                         )}
                       </div>
                     )}
+                    {v.note && <p className="mt-1 text-xs text-text whitespace-pre-line">{v.note}</p>}
                     {(v.arrived_by || v.departed_by) && (
                       <div className="mt-1 text-[11px] text-text-muted">
                         {v.arrived_by && (
@@ -409,6 +415,7 @@ export default function Timeline({
                     )}
                   </div>
                 </button>
+                {editable && <TimelineItemEditor kind="visit" start={v.start} note={v.note} />}
               </div>
             );
           }
@@ -508,8 +515,10 @@ export default function Timeline({
                     </div>
                     <div className="flex items-center gap-1 mt-0.5">
                       <span className="text-[11px] px-1 rounded font-mono"
-                        style={{ backgroundColor: tint(color, 13), color }}>
+                        style={{ backgroundColor: tint(color, 13), color }}
+                        title={a.mode_corrected ? `You corrected this from ${MODE_LABELS[a.google_mode ?? ''] || a.google_mode}` : undefined}>
                         {MODE_LABELS[a.mode] || a.mode}
+                        {a.mode_corrected ? ' (yours)' : ''}
                       </span>
                       <span className="text-[11px] text-text-muted">
                         {formatDistance(a.distance_meters, unit)} · {formatDuration(a.duration_minutes)}
@@ -550,10 +559,20 @@ export default function Timeline({
                         via {mainRoads.join(' → ')}
                       </div>
                     )}
+                    {a.note && <p className="mt-1 text-xs text-text whitespace-pre-line">{a.note}</p>}
                     <ActivitySteps activity={a} />
                   </div>
                 </div>
               </div>
+              {editable && (
+                <TimelineItemEditor
+                  kind="activity"
+                  start={a.start}
+                  note={a.note}
+                  mode={a.mode}
+                  googleMode={a.mode_corrected ? a.google_mode : null}
+                />
+              )}
             </div>
           );
         })}

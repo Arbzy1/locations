@@ -68,7 +68,13 @@ function dayDb(v: VisitRow[], a: ActivityRow[]) {
     return [];
   };
   const query = (rows: unknown[]) => {
-    const q = { where: () => q, orderBy: async () => rows, limit: async () => rows };
+    // Awaitable after where() too, like a Drizzle query builder.
+    const q = {
+      where: () => q,
+      orderBy: async () => rows,
+      limit: async () => rows,
+      then: (resolve: (r: unknown[]) => unknown) => resolve(rows),
+    };
     return q;
   };
   return {
@@ -148,6 +154,15 @@ describe("getDay journey lines and gaps", () => {
     const day = (await getDay(dayDb([homeFixed, work], []), "t1", DATE)) as DayResult;
     expect(day.visits[0]).toMatchObject({ lat: 40.7138, place_lat: 40.7128, fix_count: 4 });
     expect(day.visits[0].moved_m).toBeGreaterThan(100);
+  });
+
+  it("names a stay with Google's own name over the geocoded one", async () => {
+    const named = { ...home, googleName: "Grand Central Terminal" };
+    const day = (await getDay(dayDb([named, work], []), "t1", DATE)) as unknown as {
+      visits: Array<{ place_name: string }>;
+    };
+    expect(day.visits[0].place_name).toBe("Grand Central Terminal");
+    expect(day.visits[1].place_name).toBe("Place");
   });
 
   it("returns recorded and, with compare, predicted lines plus accuracy", async () => {

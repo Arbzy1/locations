@@ -192,6 +192,8 @@ export const visits = pgTable(
     fixCount: integer("fix_count"),
     /** The real place: `g:<Google placeId>`, else `c:<lat>,<lon>` snapped to ~100 m. */
     placeKey: text("place_key"),
+    /** Google's name for the place, when the export includes one (older Takeout). */
+    googleName: text("google_name"),
   },
   (t) => [
     index("visits_tenant_date_idx").on(t.tenant, t.date),
@@ -313,6 +315,25 @@ export const lifeChapters = pgTable(
   (t) => [index("life_chapters_tenant_idx").on(t.tenant)],
 );
 
+/**
+ * The user's notes and transport-mode fixes. Keyed by the item's start time, not its row
+ * id, so they still apply after the same export is imported again.
+ */
+export const timelineOverrides = pgTable(
+  "timeline_overrides",
+  {
+    tenant: text("tenant").notNull(),
+    kind: text("kind").notNull().$type<"visit" | "activity">(),
+    itemStart: text("item_start").notNull(),
+    note: text("note"),
+    mode: text("mode"),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tenant, t.kind, t.itemStart] })],
+);
+
+export type TimelineOverrideRow = typeof timelineOverrides.$inferSelect;
+
 /** Saved map camera (lng/lat, not lat/lon) for MapLibre jumpTo. */
 export type MapBookmark = {
   id: string;
@@ -333,6 +354,8 @@ export const userSettings = pgTable("user_settings", {
   mapBookmarks: jsonb("map_bookmarks").$type<MapBookmark[]>().notNull().default([]),
   mapTileDarkUrl: text("map_tile_dark_url"),
   mapTileLightUrl: text("map_tile_light_url"),
+  /** Delete location history older than this many years (null keeps everything). */
+  retentionYears: integer("retention_years"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

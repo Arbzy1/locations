@@ -11,6 +11,9 @@ import {
   routeCache,
   placeCache,
   placeLabels,
+  timelineOverrides,
+  TRANSPORT_MODE_MAP,
+  type TimelineOverrideRow,
   namedTrips,
   lifeChapters,
   userSettings,
@@ -1056,7 +1059,28 @@ export async function loadDayRows(
         .where(and(eq(placeLabels.tenant, tenant), inArray(placeLabels.placeKey, placeKeys)))
     : [];
   const placeLabelsByKey = new Map(labelRows.map((r) => [r.placeKey, r.label]));
-  return { day, visits: dayVisits, activities: dayActivities, placeLabels: placeLabelsByKey };
+
+  const starts = [...dayVisits.map((v) => v.start), ...dayActivities.map((a) => a.start)];
+  const overrideRows = starts.length
+    ? await db
+        .select()
+        .from(timelineOverrides)
+        .where(and(eq(timelineOverrides.tenant, tenant), inArray(timelineOverrides.itemStart, starts)))
+    : [];
+  const overrides = new Map(overrideRows.map((o) => [`${o.kind}|${o.itemStart}`, o]));
+  // A corrected mode replaces Google's guess before routing, so the line follows it too.
+  const correctedActivities = dayActivities.map((a) => {
+    const mode = overrides.get(`activity|${a.start}`)?.mode;
+    return mode && mode !== a.mode ? { ...a, mode } : a;
+  });
+  return {
+    day,
+    visits: dayVisits,
+    activities: correctedActivities,
+    placeLabels: placeLabelsByKey,
+    overrides,
+    originalModes: new Map(dayActivities.map((a) => [a.start, a.mode])),
+  };
 }
 
 export type DayRows = NonNullable<Awaited<ReturnType<typeof loadDayRows>>>;
@@ -1078,6 +1102,8 @@ export async function buildDay(
   };
   const { day, visits: dayVisits, activities: dayActivities } = rows;
   const userPlaceLabels = rows.placeLabels ?? new Map<string, string>();
+  const overrides = rows.overrides ?? new Map<string, TimelineOverrideRow>();
+  const originalModes = rows.originalModes ?? new Map<string, string>();
 
   await report({
     stage: "Building timeline",
@@ -1172,6 +1198,10 @@ export async function buildDay(
     };
     const route = await routeActivity(db, a, anchors);
     const d = activityToApi(a) as Record<string, unknown>;
+    d.note = overrides.get(`activity|${a.start}`)?.note ?? null;
+    const googleMode = originalModes.get(a.start);
+    d.mode_corrected = Boolean(googleMode && googleMode !== a.mode);
+    if (d.mode_corrected) d.google_mode = googleMode;
 
     const snapStart = snapTo(prevStop, anchors.start);
     const snapEnd = snapTo(nextStop, anchors.end);
@@ -1423,6 +1453,7 @@ export async function buildDay(
     if (ev.type !== "visit") continue;
     const v = ev.data;
     const vd = visitToApi(v) as Record<string, unknown>;
+    vd.note = overrides.get(`visit|${v.start}`)?.note ?? null;
 
     let prevMode: string | null = null;
     for (let j = idx - 1; j >= 0; j--) {
@@ -1451,7 +1482,8 @@ export async function buildDay(
     const coordKey = `${Math.round(v.lat * 1e5) / 1e5},${Math.round(v.lon * 1e5) / 1e5}`;
     const placeInfo = placeNames.get(coordKey) ?? { name: "", address: "", data: {} };
     const userLabel = v.placeKey ? userPlaceLabels.get(v.placeKey) : undefined;
-    vd.place_name = userLabel || placeInfo.name;
+    // The user's name first, then Google's own name from the export, then geocoding.
+    vd.place_name = userLabel || v.googleName || placeInfo.name;
     vd.place_address = placeInfo.address;
     if ("short" in placeInfo && placeInfo.short) {
       vd.place_short_address = placeInfo.short;
@@ -1974,9 +2006,31 @@ export async function getUserSettings(db: ReturnType<typeof createDb>, tenant: T
       mapBookmarks: [] as MapBookmark[],
       mapTileDarkUrl: null as string | null,
       mapTileLightUrl: null as string | null,
+      retentionYears: null as number | null,
       updatedAt: new Date(),
     }
   );
+}
+
+/** Choices offered for auto-delete; anything else is rejected. */
+export const RETENTION_YEAR_OPTIONS = [1, 2, 3, 5, 10] as const;
+
+/** First date kept when only the last `years` years are retained. */
+export function retentionCutoff(years: number, now = new Date()): string {
+  const d = new Date(Date.UTC(now.getUTCFullYear() - years, now.getUTCMonth(), now.getUTCDate()));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Delete this tenant's history from before its retention cutoff. */
+export async function applyRetention(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  years: number,
+  now = new Date(),
+) {
+  const cutoff = retentionCutoff(years, now);
+  const dayBefore = new Date(Date.parse(cutoff) - 86_400_000).toISOString().slice(0, 10);
+  return deleteDateRange(db, { tenant, from: "0001-01-01", to: dayBefore });
 }
 
 export async function upsertUserSettings(
@@ -1990,9 +2044,12 @@ export async function upsertUserSettings(
     mapBookmarks?: MapBookmark[];
     mapTileDarkUrl?: string | null;
     mapTileLightUrl?: string | null;
+    retentionYears?: number | null;
   },
 ) {
   const current = await getUserSettings(db, tenant);
+  const retentionYears =
+    patch.retentionYears === undefined ? (current.retentionYears ?? null) : patch.retentionYears;
   const distanceUnit = patch.distanceUnit ?? current.distanceUnit ?? "mi";
   const timezone = patch.timezone === undefined ? current.timezone : patch.timezone;
   const monthlyRecapEnabled =
@@ -2024,6 +2081,7 @@ export async function upsertUserSettings(
       mapBookmarks,
       mapTileDarkUrl,
       mapTileLightUrl,
+      retentionYears,
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
@@ -2036,6 +2094,7 @@ export async function upsertUserSettings(
         mapBookmarks,
         mapTileDarkUrl,
         mapTileLightUrl,
+        retentionYears,
         updatedAt: new Date(),
       },
     });
@@ -2051,7 +2110,66 @@ export async function upsertUserSettings(
     mapBookmarks,
     mapTileDarkUrl,
     mapTileLightUrl,
+    retentionYears,
   };
+}
+
+/** Modes a journey can be corrected to (the app's own mode names). */
+export const OVERRIDE_MODES = [...new Set(Object.values(TRANSPORT_MODE_MAP))].filter((m) => m !== "unknown");
+const OVERRIDE_NOTE_MAX = 500;
+
+/**
+ * Save or clear the user's note and mode fix for one stay or journey. Clearing both
+ * deletes the row. Validates against the tenant's own item so ids cannot be probed.
+ */
+export async function saveTimelineOverride(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  input: { kind: unknown; start: unknown; note?: unknown; mode?: unknown },
+) {
+  if (input.kind !== "visit" && input.kind !== "activity") return { error: "kind must be visit or activity" as const, status: 400 as const };
+  if (typeof input.start !== "string" || !input.start || input.start.length > 40) {
+    return { error: "start is required" as const, status: 400 as const };
+  }
+  if (input.note !== undefined && input.note !== null && typeof input.note !== "string") {
+    return { error: "note must be text" as const, status: 400 as const };
+  }
+  const note = typeof input.note === "string" ? input.note.trim().slice(0, OVERRIDE_NOTE_MAX) || null : null;
+  let mode: string | null = null;
+  if (input.mode !== undefined && input.mode !== null && input.mode !== "") {
+    if (input.kind !== "activity") return { error: "Only journeys have a mode" as const, status: 400 as const };
+    if (typeof input.mode !== "string" || !OVERRIDE_MODES.includes(input.mode)) {
+      return { error: "Unknown mode" as const, status: 400 as const };
+    }
+    mode = input.mode;
+  }
+  const kind = input.kind;
+  const start = input.start;
+  const table = kind === "visit" ? visits : activities;
+  const exists = await db
+    .select({ start: table.start })
+    .from(table)
+    .where(and(eq(table.tenant, tenant), eq(table.start, start)))
+    .limit(1);
+  if (!exists.length) return { error: "Not found" as const, status: 404 as const };
+
+  const where = and(
+    eq(timelineOverrides.tenant, tenant),
+    eq(timelineOverrides.kind, kind),
+    eq(timelineOverrides.itemStart, start),
+  );
+  if (!note && !mode) {
+    await db.delete(timelineOverrides).where(where);
+    return { kind, start, note: null, mode: null };
+  }
+  await db
+    .insert(timelineOverrides)
+    .values({ tenant, kind, itemStart: start, note, mode, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: [timelineOverrides.tenant, timelineOverrides.kind, timelineOverrides.itemStart],
+      set: { note, mode, updatedAt: new Date() },
+    });
+  return { kind, start, note, mode };
 }
 
 export function filterHiddenSearchPlaces<T extends { cluster?: string | null }>(
@@ -2358,6 +2476,10 @@ export {
   getTripRange,
   getRouteLines,
   getHotspotDays,
+  getExportRows,
+  deletePlaceData,
+  getRangeInsights,
+  getOnThisDay,
   listNamedTrips,
   upsertNamedTrip,
   deleteNamedTrip,

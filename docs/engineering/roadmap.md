@@ -31,7 +31,7 @@ Three read-only audits (UX/layout, product, performance/reliability) fed this pl
 - [x] Home/work, away nights, commute and moving history use the user's timezone.
 - [x] Real places: a `place_key` per visit (Google placeId, else a snapped coordinate key); places directory, labels, search and Day View use it; the 0.5 degree grid becomes a region rollup only.
 - [x] Legacy Takeout "Semantic Location History" (`timelineObjects`) parser, all monthly files merged.
-- [ ] Keep Google's place names from legacy exports per tenant (needs a tenant place-name table separate from user labels).
+- [x] Keep Google's place names from legacy exports per tenant (`visits.google_name`; user labels still win).
 
 ## Phase 4 - Layout
 
@@ -44,9 +44,9 @@ Three read-only audits (UX/layout, product, performance/reliability) fed this pl
 
 ## Phase 5 - Features
 
-- [ ] Insights for any date range, and this year vs last.
-- [ ] Privacy: delete everything at a place, auto-delete after N years, home blur in exports.
-- [ ] Visit notes and mode correction (tenant overrides applied in Day View).
-- [ ] GPX / GeoJSON / visits CSV export.
-- [ ] Use Timeline `timelineMemory` (seed named trips) and Google's own home/work.
-- [ ] "On this day" email instead of the monthly recap.
+- [x] Insights for any date range, and this year vs last.
+- [x] Privacy: delete everything at a place, auto-delete after N years, home blur in exports.
+- [x] Visit notes and mode correction (tenant overrides applied in Day View).
+- [x] GPX / GeoJSON / visits CSV export.
+- [x] Use Timeline `timelineMemory` (seed named trips) and Google's own home/work.
+- [x] "On this day" in the app (Insights). Not as an email: AGENTS.md forbids activity digests and place names in mail.

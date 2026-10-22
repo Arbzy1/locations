@@ -12,6 +12,7 @@ type MeResponse = {
     mapBookmarks?: MapBookmark[];
     mapTileDarkUrl?: string | null;
     mapTileLightUrl?: string | null;
+    retentionYears?: number | null;
   };
   entitlements?: { entitled: boolean; status: string; graceUntil: string | null };
   uploadLimitBytes?: number;
@@ -24,6 +25,7 @@ const UnitsContext = createContext<{
   mapBookmarks: MapBookmark[];
   mapTileDarkUrl: string | null;
   mapTileLightUrl: string | null;
+  retentionYears: number | null;
   entitlements: MeResponse['entitlements'] | undefined;
   uploadLimitBytes: number | null;
 }>({
@@ -33,6 +35,7 @@ const UnitsContext = createContext<{
   mapBookmarks: [],
   mapTileDarkUrl: null,
   mapTileLightUrl: null,
+  retentionYears: null,
   entitlements: undefined,
   uploadLimitBytes: null,
 });
@@ -58,6 +61,7 @@ export function UnitsProvider({ children }: { children: ReactNode }) {
       mapBookmarks: data?.settings?.mapBookmarks ?? [],
       mapTileDarkUrl: data?.settings?.mapTileDarkUrl ?? null,
       mapTileLightUrl: data?.settings?.mapTileLightUrl ?? null,
+      retentionYears: data?.settings?.retentionYears ?? null,
       entitlements: data?.entitlements,
       uploadLimitBytes: data?.uploadLimitBytes ?? null,
     }),

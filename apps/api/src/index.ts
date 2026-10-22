@@ -79,6 +79,13 @@ import {
   getTripRange,
   getRouteLines,
   getHotspotDays,
+  getExportRows,
+  deletePlaceData,
+  getRangeInsights,
+  getOnThisDay,
+  saveTimelineOverride,
+  applyRetention,
+  RETENTION_YEAR_OPTIONS,
   listNamedTrips,
   upsertNamedTrip,
   deleteNamedTrip,
@@ -95,8 +102,18 @@ import {
 import { billingEmailKind, sendProductEmail } from "./email";
 import { parsePlaceColor, sanitizePlaceTags } from "./place-labels";
 import { runMonthlyRecaps } from "./monthly-recap";
+import { runRetention } from "./retention";
 import { runExportPackJob } from "./export-pack-job";
 import { publicExportJob } from "./export-pack";
+import {
+  EXPORT_FORMATS,
+  blurHome,
+  guessHomePlace,
+  toGeoJson,
+  toGpx,
+  toVisitsCsv,
+  type ExportFormat,
+} from "./exports";
 
 type Variables = {
   user: { id: string; email: string; name: string; role: string } | null;
@@ -951,6 +968,89 @@ app.get("/api/routes", async (c) => {
   return c.json(result);
 });
 
+app.delete("/api/places/:key/data", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    deletePlaceData(tx, tenant, decodeURIComponent(c.req.param("key"))),
+  );
+  if ("error" in result) return c.json({ error: result.error }, result.status);
+  return c.json(result);
+});
+
+app.patch("/api/overrides", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body) return c.json({ error: "JSON body required" }, 400);
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  // Pick fields explicitly: never spread the request body into a write.
+  const result = await withTenant(db, tenant, (tx) =>
+    saveTimelineOverride(tx, tenant, { kind: body.kind, start: body.start, note: body.note, mode: body.mode }),
+  );
+  if ("error" in result) return c.json({ error: result.error }, result.status);
+  return c.json(result);
+});
+
+app.get("/api/on-this-day", async (c) => {
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  // The client sends its local date so "today" matches the user's calendar.
+  const date = (c.req.query("date") ?? new Date().toISOString().slice(0, 10)).trim();
+  const result = await withTenant(db, tenant, (tx) => getOnThisDay(tx, tenant, { date }));
+  if (isErrorResult(result)) return c.json(result, 400);
+  return c.json(result);
+});
+
+app.get("/api/insights/range", async (c) => {
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    getRangeInsights(tx, tenant, {
+      from: (c.req.query("from") ?? "").trim(),
+      to: (c.req.query("to") ?? "").trim(),
+    }),
+  );
+  if (isErrorResult(result)) return c.json(result, 400);
+  return c.json(result);
+});
+
+app.get("/api/export/:format", async (c) => {
+  const format = c.req.param("format") as ExportFormat;
+  if (!EXPORT_FORMATS.includes(format)) return c.json({ error: "Format must be gpx, geojson or csv" }, 400);
+  const db = requestDb(c);
+  const tenant = c.get("tenant");
+  const result = await withTenant(db, tenant, (tx) =>
+    getExportRows(tx, tenant, {
+      from: c.req.query("from"),
+      to: c.req.query("to"),
+      journeys: format !== "csv",
+    }),
+  );
+  if (isErrorResult(result)) return c.json(result, 400);
+  // Home is guessed from all of the range's stays, before anything is blurred.
+  const data =
+    c.req.query("blur_home") === "1" ? blurHome(result, guessHomePlace(result.visits)) : result;
+  const span = [c.req.query("from"), c.req.query("to")].filter(Boolean).join("_to_") || "all";
+  const name = `locations-${span}`;
+  if (format === "gpx") {
+    c.header("Content-Type", "application/gpx+xml; charset=utf-8");
+    c.header("Content-Disposition", `attachment; filename="${name}.gpx"`);
+    return c.body(toGpx(data));
+  }
+  if (format === "geojson") {
+    c.header("Content-Type", "application/geo+json; charset=utf-8");
+    c.header("Content-Disposition", `attachment; filename="${name}.geojson"`);
+    return c.body(JSON.stringify(toGeoJson(data)));
+  }
+  c.header("Content-Type", "text/csv; charset=utf-8");
+  c.header("Content-Disposition", `attachment; filename="${name}-stays.csv"`);
+  return c.body(toVisitsCsv(data.visits));
+});
+
 app.get("/api/hotspots/days", async (c) => {
   const db = requestDb(c);
   const tenant = c.get("tenant");
@@ -1147,7 +1247,16 @@ app.patch("/api/account/settings", async (c) => {
     mapBookmarks?: unknown;
     mapTileDarkUrl?: string | null;
     mapTileLightUrl?: string | null;
+    retentionYears?: number | null;
   } | null;
+  const retentionYears = body?.retentionYears;
+  if (
+    retentionYears !== undefined &&
+    retentionYears !== null &&
+    !(RETENTION_YEAR_OPTIONS as readonly number[]).includes(retentionYears)
+  ) {
+    return c.json({ error: `Keep history for ${RETENTION_YEAR_OPTIONS.join(", ")} years, or forever` }, 400);
+  }
   const allowedHosts = parseCustomTileHosts(c.env.MAP_CUSTOM_TILE_HOSTS);
   if (body?.mapTileDarkUrl != null && body.mapTileDarkUrl !== "") {
     const check = validateTileTemplate(body.mapTileDarkUrl, allowedHosts);
@@ -1172,8 +1281,22 @@ app.patch("/api/account/settings", async (c) => {
       mapBookmarks: Array.isArray(mapBookmarks) ? mapBookmarks : undefined,
       mapTileDarkUrl: body?.mapTileDarkUrl,
       mapTileLightUrl: body?.mapTileLightUrl,
+      retentionYears,
     }),
   );
+  if (typeof retentionYears === "number") {
+    // Apply the new limit now rather than waiting for the monthly run.
+    c.executionCtx.waitUntil(
+      (async () => {
+        const jobDb = getDb(c.env);
+        try {
+          await withTenant(jobDb, tenant, (tx) => applyRetention(tx, tenant, retentionYears));
+        } finally {
+          await (jobDb as { $client?: { end?: () => Promise<void> } }).$client?.end?.();
+        }
+      })(),
+    );
+  }
   return c.json(settings);
 });
 
@@ -1573,6 +1696,10 @@ export default {
     }
   },
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-    await runMonthlyRecaps(env);
+    // Independent jobs: one failing must not skip the other.
+    const results = await Promise.allSettled([runRetention(env), runMonthlyRecaps(env)]);
+    for (const [i, r] of results.entries()) {
+      if (r.status === "rejected") console.error(JSON.stringify({ kind: i === 0 ? "retention" : "monthly_recap", ok: false }));
+    }
   },
 };

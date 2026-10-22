@@ -15,6 +15,10 @@ vi.mock("@locations/api/services", async () => {
   return createServicesMock();
 });
 
+vi.mock("@locations/api/retention", () => ({
+  runRetention: vi.fn(async () => ({ trimmed: 0 })),
+}));
+
 vi.mock("@locations/api/monthly-recap", () => ({
   runMonthlyRecaps: (...args: unknown[]) => runMonthlyRecaps(...args),
 }));
