@@ -62,14 +62,18 @@ describe("isDemoBlockedAuthPath", () => {
       "/api/auth/update-user",
       "/api/auth/delete-user",
       "/api/auth/change-password/",
+      "/api/auth/revoke-session",
+      "/api/auth/revoke-other-sessions",
     ]) {
       expect(isDemoBlockedAuthPath("POST", path)).toBe(true);
     }
   });
 
-  it("leaves sign-in, sign-out, session reads, and session revoke alone", () => {
-    expect(isDemoBlockedAuthPath("POST", "/api/auth/revoke-session")).toBe(false);
-    expect(isDemoBlockedAuthPath("POST", "/api/auth/revoke-other-sessions")).toBe(false);
+  it("hides the shared session list", () => {
+    expect(isDemoBlockedAuthPath("GET", "/api/auth/list-sessions")).toBe(true);
+  });
+
+  it("leaves sign-in, sign-out, and the current session alone", () => {
     expect(isDemoBlockedAuthPath("POST", "/api/auth/sign-in/email")).toBe(false);
     expect(isDemoBlockedAuthPath("POST", "/api/auth/sign-out")).toBe(false);
     expect(isDemoBlockedAuthPath("GET", "/api/auth/get-session")).toBe(false);

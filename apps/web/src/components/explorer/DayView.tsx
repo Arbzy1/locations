@@ -586,7 +586,7 @@ export default function DayView({ initialDate }: Props) {
 
   const mapWithOverlay = (
     <div className="relative min-h-0 flex-1">
-      <MapView {...mapProps} />
+      <MapView {...mapProps} hideMiniMap={Boolean(!barInPanel && playbackBar)} />
       {!barInPanel && playbackBar && (
         <div className={`pointer-events-none absolute z-[1000] ${overlayClass}`}>
           <div className="pointer-events-auto">{playbackBar}</div>

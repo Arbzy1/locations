@@ -1152,6 +1152,10 @@ app.get("/api/account/export", async (c) => {
 
 app.post("/api/account/export-pack", async (c) => {
   const user = c.get("user")!;
+  // The demo tenant is shared sample data; a pack job per visitor is wasted work.
+  if (user.role === "demo") {
+    return c.json({ error: "The demo account cannot build export packs" }, 403);
+  }
   const tenant = c.get("tenant");
   const ip = clientIp(c.req.raw.headers);
   const limited = rateLimit({ key: `export-pack:${tenant}:${ip}`, limit: 3, windowMs: 10 * 60_000 });

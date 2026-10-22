@@ -68,6 +68,8 @@ import {
 import type { Env } from "./env";
 
 const OSRM_BASE_DEFAULT = "https://router.project-osrm.org/route/v1";
+/** OSRM and Nominatim calls give up after this, so one slow upstream cannot hang a request. */
+const EXTERNAL_FETCH_TIMEOUT_MS = 6000;
 const NOMINATIM_DEFAULT = "https://nominatim.openstreetmap.org/reverse";
 
 let OSRM_BASE = OSRM_BASE_DEFAULT;
@@ -183,7 +185,7 @@ export async function fetchRoute(
     `?overview=full&geometries=geojson&steps=true&annotations=duration,distance`;
 
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS) });
     if (!resp.ok) return fallback;
     const data = (await resp.json()) as {
       code?: string;
@@ -236,7 +238,7 @@ function osrmMatchBase(): string {
 
 async function osrmJson<T>(url: string): Promise<T | "error"> {
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS) });
     // OSRM answers 400 with a JSON code (NoMatch, NoRoute...) for definite failures.
     if (resp.status === 429 || resp.status >= 500) return "error";
     return (await resp.json()) as T;
@@ -494,6 +496,7 @@ export async function resolveCoords(
     const url = `${NOMINATIM}?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=18`;
     const resp = await fetch(url, {
       headers: { "User-Agent": NOMINATIM_UA },
+      signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS),
     });
     if (!resp.ok) return { name: "Unknown", address: "", data: {} };
     const data = (await resp.json()) as {
@@ -579,6 +582,7 @@ export async function resolveSettlement(
     const url = `${NOMINATIM}?lat=${lat}&lon=${lon}&format=json&addressdetails=1&zoom=14`;
     const resp = await fetch(url, {
       headers: { "User-Agent": NOMINATIM_UA },
+      signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS),
     });
     if (!resp.ok) return { settlement: null, fetched: true };
     const data = (await resp.json()) as {

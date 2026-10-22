@@ -4,16 +4,16 @@ Three read-only audits (UX/layout, product, performance/reliability) fed this pl
 
 ## Phase 1 - Quick wins
 
-- [ ] Day summary says "Stayed at X all day" on days with journeys (`Timeline.tsx`).
-- [ ] Import status says "1 records parsed" for Timeline.json, Edits and Records.json (`index.ts` parsedCount).
-- [ ] Route cache progress: same key logic as rewarm (trace keys for GPS journeys), distinct keys, tenant-only, fetched on Settings only.
-- [ ] Upload size limit shown before upload, checked client-side (`ImportDropZone.tsx`, `quotas.ts`).
-- [ ] Shared demo login: no session list/revoke (other visitors' IP and user agent), no export-pack jobs.
-- [ ] Bottom nav: distinct short labels ("Day" vs "Trips").
-- [ ] Timeouts on every OSRM and Nominatim fetch.
-- [ ] Refresh location queries when an import job reaches `ready`.
-- [ ] Hide the minimap while a bottom-left overlay (playback, Routes actions) is shown.
-- [ ] Demo tour no longer ends on a blank Settings page.
+- [x] Day summary says "Stayed at X all day" on days with journeys (`Timeline.tsx`).
+- [x] Import status says "1 records parsed" for Timeline.json, Edits and Records.json (`index.ts` parsedCount).
+- [x] Route cache progress: same key logic as rewarm (trace keys for GPS journeys), distinct keys, tenant-only, fetched on Settings only.
+- [x] Upload size limit shown before upload, checked client-side (`ImportDropZone.tsx`, `quotas.ts`).
+- [x] Shared demo login: no session list/revoke (other visitors' IP and user agent), no export-pack jobs.
+- [x] Bottom nav: distinct short labels ("Day" vs "Trips").
+- [x] Timeouts on every OSRM and Nominatim fetch.
+- [x] Refresh location queries when an import job reaches `ready`.
+- [x] Hide the minimap while a bottom-left overlay (playback, Routes actions) is shown.
+- [x] Demo tour no longer ends on a blank Settings page.
 
 ## Phase 2 - Speed and reliability
 

@@ -96,7 +96,7 @@ export const API_ROUTE_CATALOG: ApiRoute[] = [
   ...ANALYTICS_LOOP_KEYS.map((key) => analytics(`/api/analytics/${key}`)),
   { method: "PATCH", path: "/api/account/settings", samplePath: "/api/account/settings", auth: "session", demo: "denyWrite", idScope: "none", rateLimited: false },
   { method: "GET", path: "/api/account/export", samplePath: "/api/account/export", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
-  { method: "POST", path: "/api/account/export-pack", samplePath: "/api/account/export-pack", auth: "session", demo: "allow", idScope: "none", rateLimited: true },
+  { method: "POST", path: "/api/account/export-pack", samplePath: "/api/account/export-pack", auth: "session", demo: "denyWrite", idScope: "none", rateLimited: true },
   { method: "GET", path: "/api/account/export-pack/:jobId/file", samplePath: "/api/account/export-pack/other-tenant-id/file", auth: "session", demo: "allow", idScope: "job", rateLimited: false },
   { method: "GET", path: "/api/account/export-pack/:jobId", samplePath: "/api/account/export-pack/other-tenant-id", auth: "session", demo: "allow", idScope: "job", rateLimited: false },
   { method: "GET", path: "/api/places/labels", samplePath: "/api/places/labels", auth: "session", demo: "allow", idScope: "none", rateLimited: false },

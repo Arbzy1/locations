@@ -5,6 +5,7 @@ import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate,
 import type { TabId } from './types';
 import {
   useImportStatus,
+  useInvalidateLocationQueries,
   useOverview,
   usePublicConfig,
 } from './hooks/useApi';
@@ -74,6 +75,16 @@ const TAB_LABELS: Record<TabId, string> = {
   day: 'Day View',
   routes: 'Routes',
   trips: 'Day Trips',
+  insights: 'Insights',
+  settings: 'Settings',
+};
+
+/** Bottom-nav labels; the first word alone would show "Day" twice. */
+const TAB_SHORT_LABELS: Record<TabId, string> = {
+  hotspots: 'Hotspots',
+  day: 'Day',
+  routes: 'Routes',
+  trips: 'Trips',
   insights: 'Insights',
   settings: 'Settings',
 };
@@ -197,7 +208,7 @@ function NavTabButton({
       {...motionProps}
     >
       {tab.icon}
-      {compact && <span className="truncate">{tab.label.split(' ')[0]}</span>}
+      {compact && <span className="truncate">{TAB_SHORT_LABELS[tab.id]}</span>}
       <RailLabel show={!!expanded}>{tab.label}</RailLabel>
     </motion.button>
   );
@@ -221,6 +232,7 @@ function AppContent() {
   const { data: importStatus } = useImportStatus({
     poll: true,
   });
+  const invalidateLocation = useInvalidateLocationQueries();
   const { data: session } = useSession();
   const { moodName } = useTheme();
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
@@ -268,8 +280,17 @@ function AppContent() {
     if (shouldFireImportCutIn(cutInPrev.current, snapshot) && latest && !isDemo) {
       setCutInJob(latest);
     }
+    // Cached location queries never go stale on their own; reload them once new data lands.
+    const prev = cutInPrev.current;
+    if (
+      latest?.status === 'ready' &&
+      prev?.id === latest.id &&
+      (prev.status === 'pending' || prev.status === 'processing')
+    ) {
+      invalidateLocation();
+    }
     cutInPrev.current = snapshot;
-  }, [importStatus, isDemo, sessionUserId]);
+  }, [importStatus, isDemo, sessionUserId, invalidateLocation]);
 
   useEffect(() => {
     if (isDemo || overviewLoading || importing || hasData) return;
