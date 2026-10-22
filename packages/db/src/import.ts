@@ -102,7 +102,8 @@ async function main() {
 
   let dataPath: string;
   if (args.path) {
-    dataPath = resolve(process.cwd(), args.path);
+    // npm workspaces run this from packages/db; resolve against where the user ran npm.
+    dataPath = resolve(process.env.INIT_CWD || process.cwd(), args.path);
   } else if (process.env.DATA_PATH) {
     dataPath = resolve(root, process.env.DATA_PATH);
   } else if (tenant === "demo") {
