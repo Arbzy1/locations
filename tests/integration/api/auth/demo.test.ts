@@ -5,16 +5,23 @@ import { resetRateLimits } from "@locations/api/rate-limit";
 import type { Env } from "@locations/api/env";
 
 const signInEmail = vi.fn(async () => new Response("ok", { status: 200 }));
+const authHandler = vi.fn(async () => new Response("auth"));
+const getSession = vi.fn(async (): Promise<unknown> => null);
 
 vi.mock("@locations/api/auth", () => ({
   createAuth: () => ({
-    handler: async () => new Response("auth"),
+    handler: (...args: unknown[]) => authHandler(...args),
     api: {
-      getSession: async () => null,
+      getSession: (...args: unknown[]) => getSession(...args),
       signInEmail: (...args: unknown[]) => signInEmail(...args),
     },
   }),
 }));
+
+const sessionAs = (role: string) => ({
+  session: { id: "s1", userId: "u1" },
+  user: { id: "u1", email: `${role}@example.com`, name: role, role },
+});
 
 vi.mock("@locations/api/services", async () => {
   const { createServicesMock } = await import("@tests/helpers/api-app");
@@ -85,5 +92,49 @@ describe("POST /api/auth/demo", () => {
     const blocked = await request("/api/auth/demo", { method: "POST", headers }, env);
     expect(blocked.status).toBe(429);
     expect(signInEmail).toHaveBeenCalledTimes(10);
+  });
+});
+
+describe("Better Auth account routes for the shared demo login", () => {
+  beforeEach(() => {
+    resetRateLimits();
+    authHandler.mockClear();
+    getSession.mockReset();
+    getSession.mockResolvedValue(null);
+  });
+
+  it("refuses password, email, and profile changes for the demo role", async () => {
+    getSession.mockResolvedValue(sessionAs("demo"));
+    for (const path of [
+      "/api/auth/change-password",
+      "/api/auth/change-email",
+      "/api/auth/update-user",
+      "/api/auth/delete-user",
+    ]) {
+      const res = await request(path, { method: "POST", body: "{}" });
+      expect(res.status, path).toBe(403);
+    }
+    expect(authHandler).not.toHaveBeenCalled();
+  });
+
+  it("lets regular users change their own account", async () => {
+    getSession.mockResolvedValue(sessionAs("user"));
+    const res = await request("/api/auth/update-user", { method: "POST", body: "{}" });
+    expect(res.status).toBe(200);
+    expect(authHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it("still lets the demo revoke sessions (documented behaviour)", async () => {
+    getSession.mockResolvedValue(sessionAs("demo"));
+    const res = await request("/api/auth/revoke-other-sessions", { method: "POST", body: "{}" });
+    expect(res.status).toBe(200);
+    expect(authHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not look up the session for sign-in or session reads", async () => {
+    await request("/api/auth/sign-in/email", { method: "POST", body: "{}" });
+    await request("/api/auth/get-session");
+    expect(getSession).not.toHaveBeenCalled();
+    expect(authHandler).toHaveBeenCalledTimes(2);
   });
 });

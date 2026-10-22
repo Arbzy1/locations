@@ -20,7 +20,13 @@ Sign-in is a full-page redirect, not a popup, so `Cross-Origin-Opener-Policy: sa
 
 Forgot-password links go to `/reset-password`. Settings can change password (other sessions revoked), change email (confirm current inbox, then verify the new inbox; other sessions revoked), resend verification, list sessions, and revoke a device or all other sessions. Password reset also revokes existing sessions (`revokeSessionsOnPasswordReset`). Stored email OTPs are hashed.
 
-Demo: `POST /api/auth/demo` signs in with server-side `DEMO_EMAIL` / `DEMO_PASSWORD`. The client must not embed the demo password. Demo never receives email. Demo may list/revoke its own sessions and download the sample GDPR pack.
+Demo: `POST /api/auth/demo` signs in with server-side `DEMO_EMAIL` / `DEMO_PASSWORD`. The client must not embed the demo password. Demo never receives email. Demo may list/revoke its own sessions and download the sample GDPR pack. Because the login is shared, Better Auth's change-password, change-email, update-user, delete-user, and link/unlink routes return 403 for the demo role (`isDemoBlockedAuthPath`).
+
+Set up or reset the demo for an env (owner `DATABASE_URL` in `.env.<env>`):
+
+1. `npm run auth:create-demo -- --env production` creates the `demo` role user, or resets its password and sessions, with a random password it prints once.
+2. `npm run db:import-demo -- --env production` loads `data/sample-location-history.json` into the `demo` tenant (replaces the `demo` source).
+3. `npx wrangler secret put DEMO_EMAIL --env production` and `npx wrangler secret put DEMO_PASSWORD --env production` with the printed values, and keep both in `.env.production` so `cf:sync` / `deploy:prod` carry them.
 
 Staff (`admin`, `developer`) skip the Stripe import gate on their **own** tenant. They also get `/api/admin/*` for accounts and ops. `admin` may mutate flags (including reset-to-env), invite `user`/`developer`, send password reset, verify/unverify, revoke sessions, fail stuck jobs, email a self-test to their own inbox, and wipe (email confirm). `developer` is read-only on those routes (404 on PATCH/POST). Non-staff gets **404**, not 403. Location reads still use `withTenant(tenantForUser(target))` for counts only. No impersonation and no admin map of another user’s Timeline.
 
