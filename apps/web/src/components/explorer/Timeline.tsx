@@ -12,6 +12,7 @@ import {
 } from '../../lib/explorer/dayPlayback';
 import { cn } from '../../lib/utils';
 import ModeDetectionChip from './ModeDetectionChip';
+import { journeyColor, useJourneyColoring } from '../../lib/map/journeyColors';
 import {
   MapPin,
   Footprints,
@@ -38,19 +39,6 @@ import {
   CornerDownRight,
   Clock,
 } from 'lucide-react';
-
-// Chronological palette (same as Map.tsx)
-const JOURNEY_PALETTE = [
-  '#58a6ff', '#56d4dd', '#3fb950', '#56d364', '#a3d977',
-  '#d29922', '#e8a030', '#f47067', '#f778ba', '#bc8cff',
-  '#79c0ff', '#a5d6ff',
-];
-
-function getJourneyColor(index: number, total: number): string {
-  if (total <= 1) return JOURNEY_PALETTE[0];
-  const pos = (index / (total - 1)) * (JOURNEY_PALETTE.length - 1);
-  return JOURNEY_PALETTE[Math.round(pos)];
-}
 
 const MODE_ICONS: Record<string, React.ReactNode> = {
   walking: <Footprints size={12} />,
@@ -304,6 +292,7 @@ export default function Timeline({
   const { timezone, unit } = useUnits();
   const { data: session } = useSession();
   // The shared demo cannot write; everyone else can annotate their own day.
+  const [coloring] = useJourneyColoring();
   const editable = Boolean(session?.user) && (session?.user as { role?: string } | undefined)?.role !== 'demo';
   const sortedActivities = [...activities].sort((a, b) => a.start.localeCompare(b.start));
   const totalJourneys = sortedActivities.length;
@@ -467,9 +456,8 @@ export default function Timeline({
           }
 
           const a = event.data;
-          const color =
-            (a.source_id && sourceColors?.[a.source_id]) ||
-            getJourneyColor(event.journeyIndex, totalJourneys);
+          // Same colour and number as the line on the map.
+          const color = journeyColor(a, event.journeyIndex, totalJourneys, coloring, sourceColors);
           const mainRoads = a.steps?.filter((s) => s.name && s.distance_meters > 100).slice(0, 3).map((s) => s.name).filter(Boolean);
 
           return (
@@ -508,6 +496,13 @@ export default function Timeline({
                 <div className="flex-1 min-w-0 py-1.5">
                   <div className="rounded-lg px-2.5 py-1.5" style={{ backgroundColor: tint(color, 3), borderLeft: `3px solid ${tint(color, 33)}` }}>
                     <div className="flex items-center gap-2">
+                      <span
+                        className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-bold text-on-accent"
+                        style={{ backgroundColor: color }}
+                        title={`Journey ${event.journeyIndex + 1}, numbered the same on the map`}
+                      >
+                        {event.journeyIndex + 1}
+                      </span>
                       <span className="text-xs font-semibold" style={{ color }}>
                         {a.from_place && a.to_place
                           ? `${a.from_place} → ${a.to_place}`

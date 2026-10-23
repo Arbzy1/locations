@@ -32,14 +32,16 @@ import {
   resolveRasterTemplate,
   type BasemapId,
 } from '../../lib/map/mapStyle';
-import { dashClass, extendBounds, getArrowPoints, lineCoords, toLngLat } from '../../lib/map/mapGeometry';
-import { activityPopupHtml, connectorPopupHtml, getJourneyColor, routeLinePopupHtml, visitPopupHtml } from '../../lib/map/mapPopups';
+import { dashClass, extendBounds, getArrowPoints, lineCoords, pointAlong, toLngLat } from '../../lib/map/mapGeometry';
+import { journeyColor, resolveCssColor, useJourneyColoring } from '../../lib/map/journeyColors';
+import { activityPopupHtml, connectorPopupHtml, routeLinePopupHtml, visitPopupHtml } from '../../lib/map/mapPopups';
 import { pathLengthMeters } from '../../lib/map/mapMeasure';
 import { spiderfyOffsets } from '../../lib/map/mapSpiderfy';
 import { lookaroundLinksHtml } from '../../lib/map/mapLinks';
 import type { MapBookmark } from '../../lib/map/mapBookmarks';
 import { MAX_MAP_BOOKMARKS } from '../../lib/map/mapBookmarks';
 import MapChrome from './MapChrome';
+import DayModeLegend from './DayModeLegend';
 
 type FC = {
   type: 'FeatureCollection';
@@ -101,8 +103,7 @@ function cssToken(name: string, fallback: string): string {
 
 /** MapLibre paint (and `${hex}22` suffixes) need a literal colour, not `var(--token)`. */
 function literalColor(value: string): string {
-  const token = /^var\((--[\w-]+)\)$/.exec(value.trim());
-  return token ? cssToken(token[1], cssToken('--accent', '#58a6ff')) : value;
+  return resolveCssColor(value, cssToken('--accent', '#58a6ff'));
 }
 
 function heatColorStops(token?: string | null): (number | string)[] {
@@ -157,6 +158,9 @@ interface MapProps {
   /** Hotspots: called when a hotspot cell is tapped (zoomed in). */
   onHotspotSelect?: (point: HeatmapPoint) => void;
   selectedHotspot?: { lat: number; lon: number } | null;
+  /** Day View: the journey in focus (its start time); the others fade back. */
+  focusedJourney?: string | null;
+  onFocusJourney?: (start: string | null) => void;
 }
 
 const MapView = forwardRef<MapHandle, MapProps>(function MapView(
@@ -185,6 +189,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     hiddenModes = NO_MODES,
     onHotspotSelect,
     selectedHotspot = null,
+    focusedJourney = null,
+    onFocusJourney,
   },
   ref,
 ) {
@@ -266,6 +272,14 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   const [bookmarkName, setBookmarkName] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(zoom);
+  const [coloring, setColoring] = useJourneyColoring();
+  // Hidden modes belong to one day: keyed by date so a new day starts clean.
+  const [hiddenDay, setHiddenDay] = useState<{ day?: string; modes: string[] }>({ modes: [] });
+  const hiddenDayModes = useMemo(() => (hiddenDay.day === dayDate ? hiddenDay.modes : []), [hiddenDay, dayDate]);
+  const focusedStart = focusedJourney ?? null;
+  const focusJourney = useCallback((start: string | null) => onFocusJourney?.(start), [onFocusJourney]);
+  const focusJourneyRef = useRef(focusJourney);
+  focusJourneyRef.current = focusJourney;
 
   measureRef.current = measuring;
   const isNarrow = !isDesktop;
@@ -376,7 +390,12 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       const drive = cssToken('--drive', '#f778ba');
       const muted = cssToken('--text-muted', '#8b949e');
       const colorForActivity = (a: Activity, i: number) =>
-        literalColor((a.source_id && sourceColors?.[a.source_id]) || getJourneyColor(i, totalJourneys));
+        literalColor(journeyColor(a, i, totalJourneys, coloring, sourceColors));
+      // One journey in focus: it stays bright and a little thicker, the rest fade back.
+      const lineOpacity = (a: Activity) => {
+        if (focusedStart) return a.start === focusedStart ? 0.95 : 0.12;
+        return a.route_source && !a.route_source.startsWith('gps') ? 0.5 : 0.85;
+      };
       const colorForVisit = (v: Visit) =>
         literalColor((v.source_id && sourceColors?.[v.source_id]) || visitColor);
 
@@ -497,7 +516,11 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         },
       });
 
-      const actFeatures = (pointsMode ? [] : sortedActivities).map((a, i) => {
+      // Numbering follows the whole day, so hiding a mode does not renumber the rest.
+      const shownActivities = sortedActivities
+        .map((a, i) => ({ a, i }))
+        .filter(({ a }) => !hiddenDayModes.includes(a.mode));
+      const actFeatures = (pointsMode ? [] : shownActivities).map(({ a, i }) => {
         const positions: [number, number][] = a.route_geometry?.length
           ? a.route_geometry.map((c) => [c[0], c[1]])
           : [
@@ -505,14 +528,17 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
               [a.end_lat, a.end_lon],
             ];
         const color = colorForActivity(a, i);
+        const solid = dashClass(a.mode) === 'solid';
         return {
           type: 'Feature' as const,
           id: i,
           properties: {
             dash: dashClass(a.mode),
             color,
-            // Lines not backed by recorded GPS points are guesses: draw them fainter.
-            estimated: Boolean(a.route_source && !a.route_source.startsWith('gps')),
+            start: a.start,
+            // Lines not backed by recorded GPS points are guesses: drawn fainter.
+            op: lineOpacity(a),
+            w: (solid ? 4 : 3) + (focusedStart === a.start ? 2 : 0),
             html: activityPopupHtml(a, i, totalJourneys, color, unit),
           },
           geometry: { type: 'LineString' as const, coordinates: lineCoords(positions) },
@@ -537,8 +563,11 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           layout: { 'line-cap': 'round', 'line-join': 'round' },
           paint: {
             'line-color': ['get', 'color'],
-            'line-width': spec.dash === 'solid' ? 4 : 3,
-            'line-opacity': ['case', ['get', 'estimated'], 0.5, 0.85],
+            'line-width': ['get', 'w'],
+            'line-opacity': ['get', 'op'],
+            // Each line sits slightly to the right of its direction of travel, like lanes,
+            // so a trip out and back along the same road shows as two lines.
+            'line-offset': ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 2, 16, 4],
             ...(spec.dasharray ? { 'line-dasharray': spec.dasharray } : {}),
           },
         });
@@ -806,8 +835,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         });
       }
 
-      if (z >= 15 && !pointsMode) {
-        sortedActivities.forEach((a, i) => {
+      if (z >= 13 && !pointsMode) {
+        shownActivities.forEach(({ a, i }) => {
           const positions: [number, number][] = a.route_geometry?.length
             ? a.route_geometry.map((c) => [c[0], c[1]])
             : [
@@ -816,14 +845,45 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
               ];
           const color = colorForActivity(a, i);
           const arrowCount = positions.length > 10 ? 3 : positions.length > 4 ? 2 : 1;
+          const arrowOpacity = focusedStart && focusedStart !== a.start ? 0.15 : 0.9;
           getArrowPoints(positions, arrowCount).forEach((pt) => {
             const marker = htmlMarker(
-              `<div style="width:12px;height:12px;display:flex;align-items:center;justify-content:center;transform:rotate(${pt.angle - 90}deg);color:${color};font-size:14px;font-weight:700;text-shadow:0 0 3px rgba(0,0,0,0.8);opacity:0.9">&#9654;</div>`,
+              `<div style="width:12px;height:12px;display:flex;align-items:center;justify-content:center;transform:rotate(${pt.angle - 90}deg);color:${color};font-size:14px;font-weight:700;text-shadow:0 0 3px rgba(0,0,0,0.8);opacity:${arrowOpacity}">&#9654;</div>`,
             );
             marker.setLngLat(toLngLat(pt.lat, pt.lon));
             marker.addTo(map);
             markersRef.current.push(marker);
           });
+        });
+      }
+
+      if (!pointsMode && !compact) {
+        shownActivities.forEach(({ a, i }) => {
+          const positions: [number, number][] = a.route_geometry?.length
+            ? a.route_geometry.map((c) => [c[0], c[1]])
+            : [
+                [a.start_lat, a.start_lon],
+                [a.end_lat, a.end_lon],
+              ];
+          // 40% along: a trip back over the same road puts its badge elsewhere.
+          const at = pointAlong(positions, 0.4);
+          if (!at) return;
+          const color = colorForActivity(a, i);
+          const dim = focusedStart && focusedStart !== a.start;
+          const label = `Journey ${i + 1}: ${MODE_LABELS[a.mode] || a.mode} at ${formatTime(a.start)}`;
+          const marker = htmlMarker(
+            `<button type="button" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" style="all:unset;cursor:pointer;display:flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 4px;box-sizing:border-box;border-radius:10px;background:${color};color:${onAccent};font:700 11px/1 system-ui,sans-serif;border:2px solid ${surface};box-shadow:0 1px 4px rgba(0,0,0,.35);opacity:${dim ? 0.35 : 1}">${i + 1}</button>`,
+          );
+          marker.setLngLat(toLngLat(at[0], at[1]));
+          const el = marker.getElement();
+          el.style.pointerEvents = 'auto';
+          el.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            focusJourneyRef.current(focusedStart === a.start ? null : a.start);
+            showPopup(toLngLat(at[0], at[1]), activityPopupHtml(a, i, totalJourneys, color, unit));
+          });
+          marker.addTo(map);
+          markersRef.current.push(marker);
         });
       }
 
@@ -840,7 +900,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           marker.addTo(map);
           markersRef.current.push(marker);
         });
-        sortedActivities.forEach((a, i) => {
+        shownActivities.forEach(({ a, i }) => {
           if (a.duration_minutes < 3) return;
           const positions: [number, number][] = a.route_geometry?.length
             ? a.route_geometry.map((c) => [c[0], c[1]])
@@ -866,6 +926,10 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     },
     [
       pointsMode,
+      compact,
+      coloring,
+      focusedStart,
+      hiddenDayModes,
       areaMarkers,
       corridorLines,
       connectors,
@@ -909,7 +973,17 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         const f = e.features?.[0];
         const html = f?.properties?.html as string | undefined;
         if (html) showPopup([e.lngLat.lng, e.lngLat.lat], html);
+        const start = f?.properties?.start as string | undefined;
+        if (start) focusJourneyRef.current(start);
       };
+      const journeyLayers = ['loc-act-solid', 'loc-act-walk', 'loc-act-cycle', 'loc-act-bus', 'loc-act-rail', 'loc-act-fly', 'loc-act-unknown'];
+      map.on('click', (e) => {
+        if (measureRef.current) return;
+        const present = journeyLayers.filter((id) => map.getLayer(id));
+        if (present.length && !map.queryRenderedFeatures(e.point, { layers: present }).length) {
+          focusJourneyRef.current(null);
+        }
+      });
       const layers = [
         'loc-areas',
         'loc-corridors',
@@ -1231,6 +1305,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     flyToActivity: (a: Activity) => {
       const map = mapRef.current;
       if (!map) return;
+      focusJourney(a.start);
       if (a.route_geometry && a.route_geometry.length > 1) {
         const b = extendBounds(a.route_geometry.map((c) => [c[0], c[1]]));
         if (b) {
@@ -1311,6 +1386,17 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   };
 
   const showLegend = totalJourneys > 0 && zoomLevel >= 13 && !compact;
+  const dayModes = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const a of sortedActivities) counts.set(a.mode, (counts.get(a.mode) ?? 0) + 1);
+    return [...counts.entries()].sort((x, y) => y[1] - x[1]);
+  }, [sortedActivities]);
+  const focusedIndex = focusedStart ? sortedActivities.findIndex((a) => a.start === focusedStart) : -1;
+  const toggleDayMode = (mode: string) =>
+    setHiddenDay({
+      day: dayDate,
+      modes: hiddenDayModes.includes(mode) ? hiddenDayModes.filter((m) => m !== mode) : [...hiddenDayModes, mode],
+    });
 
   return (
     <div className="relative h-full w-full">
@@ -1346,6 +1432,19 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           }}
           onGoBookmark={goBookmark}
           onDeleteBookmark={(id) => void deleteBookmark(id)}
+          showJourneyColoring={totalJourneys > 0}
+          journeyColoring={coloring}
+          onJourneyColoring={setColoring}
+        />
+      )}
+      {!compact && totalJourneys > 0 && (
+        <DayModeLegend
+          modes={dayModes}
+          hidden={hiddenDayModes}
+          onToggle={toggleDayMode}
+          coloring={coloring}
+          focused={focusedIndex >= 0 ? { n: focusedIndex + 1, mode: sortedActivities[focusedIndex].mode } : null}
+          onClearFocus={() => focusJourney(null)}
         />
       )}
       {!compact && !hideMiniMap && isDesktop && (
@@ -1391,8 +1490,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
             ...sortedActivities.map((a, i) => ({
               time: a.start,
               type: 'journey' as const,
-              label: `${MODE_LABELS[a.mode] || a.mode} - ${formatDistance(a.distance_meters, unit)}`,
-              color: (a.source_id && sourceColors?.[a.source_id]) || getJourneyColor(i, totalJourneys),
+              label: `${i + 1}. ${MODE_LABELS[a.mode] || a.mode} - ${formatDistance(a.distance_meters, unit)}`,
+              color: journeyColor(a, i, totalJourneys, coloring, sourceColors),
               sub: formatTime(a.start),
             })),
           ]
