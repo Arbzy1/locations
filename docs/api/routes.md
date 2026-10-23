@@ -58,6 +58,13 @@ All other `/api/*` require a session.
 | GET | `/api/import/status` | includes `chosenFile`, `timezoneWarning` |
 | POST | `/api/import/preview` | not demo; entitlement; no R2 |
 | POST | `/api/import` | not demo; entitlement; `merge`, `skipOverlappingDays`; 409 if an import is already running |
+| GET | `/api/import/existing` | not demo; days and stay count already stored for `sourceId` (404 if not the tenant's) |
+| POST | `/api/import/start` | not demo; verified; entitlement; row and source quotas; opens a browser import job; 409 if one is running |
+| POST | `/api/import/:jobId/rows` | not demo; validated batch of up to 250 rows / 256 KB; 404 unless the tenant's open job |
+| POST | `/api/import/:jobId/finish` | not demo; Timeline trips; marks aggregates stale and the job ready |
+| GET | `/api/aggregates/status` | `{ stale }` |
+| GET | `/api/aggregates/input` | `table=visits\|activities&after=`; 500 rows, no GPS paths |
+| POST | `/api/aggregates` | not demo; browser-computed `dayStats` / `analytics` chunks; `reset`, `done` |
 | POST | `/api/billing/checkout` | `{ interval: monthly\|yearly }`; rate-limited |
 | POST | `/api/billing/portal` | rate-limited |
 | POST | `/api/account/delete` | GDPR wipe inside `withTenant`; R2 prefixes paged |

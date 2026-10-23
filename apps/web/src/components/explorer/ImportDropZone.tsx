@@ -7,36 +7,20 @@ import { Button } from '../ui/button';
 import { AlertDialog, AlertDialogContent } from '../ui/alert-dialog';
 import { useInvalidateLocationQueries } from '../../hooks/useApi';
 import { useUnits } from '../../lib/units';
+import {
+  prepareImport,
+  runImport,
+  type ImportPreview,
+  type ImportProgress,
+  type PreparedImport,
+} from '../../lib/import/browser-import';
 
 const formatMb = (bytes: number) => `${Math.round(bytes / 1024 / 1024)} MB`;
 
-export type ImportPreview = {
-  chosenPath: string | null;
-  candidates: string[];
-  format: string;
-  visitCount: number;
-  activityCount: number;
-  dateMin: string | null;
-  dateMax: string | null;
-  overlappingDays: number;
-  newDays: number;
-  existingDays: number;
-  overlappingSample: string[];
-  replaceWouldRemoveVisits: number;
-  mergeWouldAppendVisits: number;
-  skipOverlapWouldAppendVisits: number;
-  timezoneWarning: { warn: boolean; skewedShare: number; sampleCount: number };
-};
+export type { ImportPreview } from '../../lib/import/browser-import';
 
 export const TIMEZONE_SKEW_COPY =
   'Some visit dates may sit on a different local day than UTC. This is a guess; stored dates are not rewritten.';
-
-async function postForm(path: string, form: FormData) {
-  const res = await fetch(path, { method: 'POST', credentials: 'include', body: form });
-  const body = (await res.json().catch(() => ({}))) as { error?: string } & ImportPreview;
-  if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
-  return body;
-}
 
 export default function ImportDropZone({
   sourceId,
@@ -54,13 +38,14 @@ export default function ImportDropZone({
   onError?: (message: string) => void;
 }) {
   const reduce = useReducedMotion();
-  const { uploadLimitBytes } = useUnits();
+  const { uploadLimitBytes, timezone } = useUnits();
   const invalidate = useInvalidateLocationQueries();
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [prepared, setPrepared] = useState<PreparedImport | null>(null);
+  const preview: ImportPreview | null = prepared?.preview ?? null;
+  const [progress, setProgress] = useState<ImportProgress | null>(null);
 
   const fail = (message: string) => {
     onError?.(message);
@@ -78,43 +63,36 @@ export default function ImportDropZone({
     }
     setBusy(true);
     onError?.('');
+    setProgress({ stage: 'Reading your file', done: 0, total: 0 });
     try {
-      const form = new FormData();
-      form.append('file', next);
-      if (sourceId) form.append('sourceId', sourceId);
-      const body = await postForm('/api/import/preview', form);
-      setFile(next);
-      setPreview(body);
+      // Parsed on this device: the server's free plan cannot afford the CPU.
+      setPrepared(await prepareImport(next, { sourceId, timezone }));
     } catch (err) {
       fail(err instanceof Error ? err.message : String(err));
-      setFile(null);
-      setPreview(null);
+      setPrepared(null);
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
   const confirm = async (policy: 'replace' | 'merge' | 'skip-overlap') => {
-    if (!file) return;
+    if (!prepared) return;
     setBusy(true);
     onError?.('');
     try {
-      const form = new FormData();
-      form.append('file', file);
-      if (sourceId) form.append('sourceId', sourceId);
-      else if (label?.trim()) form.append('label', label.trim());
-      if (policy === 'merge' || policy === 'skip-overlap') form.append('merge', '1');
-      if (policy === 'skip-overlap') form.append('skipOverlappingDays', '1');
-      await postForm('/api/import', form);
-      setPreview(null);
-      setFile(null);
-      if (fileRef.current) fileRef.current.value = '';
       onStarted?.();
+      await runImport(prepared, { policy, sourceId, label, timezone, onProgress: setProgress });
+      setPrepared(null);
+      if (fileRef.current) fileRef.current.value = '';
       invalidate();
     } catch (err) {
-      fail(err instanceof Error ? err.message : String(err));
+      fail(
+        `${err instanceof Error ? err.message : String(err)} Keep this tab open while importing; you can safely start again.`,
+      );
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
@@ -151,6 +129,25 @@ export default function ImportDropZone({
           have a directory of files.{uploadLimitBytes ? ` Up to ${formatMb(uploadLimitBytes)}.` : ''}
         </p>
         {disabledReason && <p className="mb-3 text-sm text-text-muted">{disabledReason}</p>}
+        {!preview && progress && (
+          <div className="mt-3 space-y-1" aria-live="polite">
+            <div className="flex justify-between text-xs text-text-muted">
+              <span>{progress.stage}</span>
+              {progress.total > 0 && (
+                <span>
+                  {progress.done.toLocaleString()} of {progress.total.toLocaleString()}
+                </span>
+              )}
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-border">
+              <div
+                className="h-full rounded-full bg-accent transition-[width] duration-ui-progress ease-ui"
+                style={{ width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 15}%` }}
+              />
+            </div>
+            <p className="text-xs text-text-muted">Keep this tab open until it finishes.</p>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <input
             ref={fileRef}
@@ -177,7 +174,7 @@ export default function ImportDropZone({
         </div>
       </motion.div>
 
-      <AlertDialog open={Boolean(preview)} onOpenChange={(open) => !open && !busy && setPreview(null)}>
+      <AlertDialog open={Boolean(preview)} onOpenChange={(open) => !open && !busy && setPrepared(null)}>
         <AlertDialogContent title="Import preview">
           <h2 className="text-lg font-semibold">What this import would change</h2>
           {preview && (
@@ -208,13 +205,32 @@ export default function ImportDropZone({
               )}
             </div>
           )}
+          {progress && (
+            <div className="mt-3 space-y-1" aria-live="polite">
+              <div className="flex justify-between text-xs text-text-muted">
+                <span>{progress.stage}</span>
+                {progress.total > 0 && (
+                  <span>
+                    {progress.done.toLocaleString()} of {progress.total.toLocaleString()}
+                  </span>
+                )}
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-border">
+                <div
+                  className="h-full rounded-full bg-accent transition-[width] duration-ui-progress ease-ui"
+                  style={{ width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 15}%` }}
+                />
+              </div>
+              <p className="text-xs text-text-muted">Keep this tab open until it finishes.</p>
+            </div>
+          )}
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
             <Button
               type="button"
               variant="outline"
               title="Cancel this import"
               disabled={busy}
-              onClick={() => setPreview(null)}
+              onClick={() => setPrepared(null)}
             >
               Cancel
             </Button>

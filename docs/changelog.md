@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Imports of any size work on Cloudflare's free plan: your browser reads the export and works out the statistics, and the site saves them in small checked batches with a live progress bar. Statistics also update in the browser after deleting a place or a date range, changing the history limit or timezone.
+
 Day View "Points" line option: only the GPS points your phone recorded, with no lines, coloured by journey. The panel counts the points, how many journeys had none, and the longest gap between points; tap a point for its time.
 
 Older Takeout exports keep Google's own place names: Day View, the place directory and Insights show them unless you have renamed the place. Migration `0019_visit_google_name`; re-import to fill it.

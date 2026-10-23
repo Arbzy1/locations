@@ -28,3 +28,4 @@ export * from "./with-tenant.js";
 export * from "./entitlements.js";
 export * from "./quotas.js";
 export { and, eq, sql, asc, desc, or, ilike, inArray, gte, gt, lte, lt } from "drizzle-orm";
+export * from "./takeout-zip.js";

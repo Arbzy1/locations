@@ -5,6 +5,8 @@ import { defineConfig } from "vitest/config";
 const root = path.dirname(fileURLToPath(import.meta.url));
 
 const alias = {
+  // Browser-safe entry; listed first so it wins over the "@locations/db" prefix.
+  "@locations/db/pure": path.resolve(root, "packages/db/src/pure.ts"),
   "@locations/db": path.resolve(root, "packages/db/src/index.ts"),
   "@locations/api": path.resolve(root, "apps/api/src"),
   "@locations/web": path.resolve(root, "apps/web/src"),

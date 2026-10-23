@@ -1,6 +1,6 @@
 import { haversineM } from "./geo.js";
 import type { PathPoint } from "./schema.js";
-import type { RawTimelineRecord } from "./timeline-import.js";
+import type { RawTimelineRecord } from "./timeline-parse.js";
 
 /** Fixes within this distance of a stay's centre belong to it. */
 const STAY_RADIUS_M = 200;

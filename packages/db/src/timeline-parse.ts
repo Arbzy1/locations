@@ -770,7 +770,6 @@ export function datesFromParsed(parsed: ParsedTimeline): string[] {
 
 export function importDayDiff(incoming: string[], existing: string[]) {
   const exist = new Set(existing);
-  const incomingSet = new Set(incoming);
   const overlapping = incoming.filter((d) => exist.has(d));
   const newDays = incoming.filter((d) => !exist.has(d));
   return {
