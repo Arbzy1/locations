@@ -259,12 +259,21 @@ export default function DayView({ initialDate }: Props) {
     setMapFocus(focusTargetForVisit(v));
   }, []);
 
+  // The journey in focus on the map (others fade back), per day.
+  const [journeyFocus, setJourneyFocus] = useState<{ date: string; start: string } | null>(null);
+  const focusedJourney = journeyFocus && journeyFocus.date === selectedDate ? journeyFocus.start : null;
+  const focusJourney = useCallback(
+    (start: string | null) => setJourneyFocus(start && selectedDate ? { date: selectedDate, start } : null),
+    [selectedDate],
+  );
+
   const handleActivityOnMap = useCallback((a: Activity) => {
     setPlaying(false);
     setFollowPlayhead(false);
     setPlayTime(Date.parse(a.start));
     setMapFocus(focusTargetForActivity(a));
-  }, []);
+    focusJourney(a.start);
+  }, [focusJourney]);
 
   const handleUnknownOnMap = useCallback((connector: Connector | null, startIso: string) => {
     setPlaying(false);
@@ -386,6 +395,8 @@ export default function DayView({ initialDate }: Props) {
     followPlayhead,
     dayDate: selectedDate || undefined,
     sourceColors,
+    focusedJourney,
+    onFocusJourney: focusJourney,
   };
 
   const sourceChips =
@@ -517,7 +528,7 @@ export default function DayView({ initialDate }: Props) {
                   key={mode}
                   className="rounded-full px-2 py-0.5 text-xs"
                   style={{
-                    backgroundColor: `${MODE_COLORS[mode] || 'var(--text-muted)'}22`,
+                    backgroundColor: `color-mix(in srgb, ${MODE_COLORS[mode] || 'var(--text-muted)'} 13%, transparent)`,
                     color: MODE_COLORS[mode] || 'var(--text-muted)',
                   }}
                 >

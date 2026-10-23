@@ -336,15 +336,19 @@ export type MapFocusTarget =
   | { bounds: [number, number][] }
   | { lat: number; lon: number; zoom?: number };
 
+/**
+ * Transport mode colours as theme tokens (index.css, both themes). Canvas, chart and
+ * MapLibre code needs a literal colour: resolve with `resolveCssColor`.
+ */
 export const MODE_COLORS: Record<string, string> = {
-  walking: '#3fb950',
-  car: '#f778ba',
-  bus: '#d29922',
-  train: '#f47067',
-  cycling: '#56d364',
-  subway: '#f47067',
-  flying: '#79c0ff',
-  unknown: '#8b949e',
+  walking: 'var(--mode-walking)',
+  car: 'var(--mode-car)',
+  bus: 'var(--mode-bus)',
+  train: 'var(--mode-train)',
+  cycling: 'var(--mode-cycling)',
+  subway: 'var(--mode-subway)',
+  flying: 'var(--mode-flying)',
+  unknown: 'var(--mode-unknown)',
 };
 
 export const MODE_LABELS: Record<string, string> = {

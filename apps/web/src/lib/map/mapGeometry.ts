@@ -83,3 +83,29 @@ export function extendBounds(
   }
   return { west, south, east, north };
 }
+
+/** The point `frac` (0..1) of the way along a [lat, lon] line, or null for an empty line. */
+export function pointAlong(positions: [number, number][], frac: number): [number, number] | null {
+  if (!positions.length) return null;
+  if (positions.length === 1) return positions[0];
+  const seg: number[] = [];
+  let total = 0;
+  for (let i = 1; i < positions.length; i++) {
+    const d = Math.hypot(positions[i][0] - positions[i - 1][0], positions[i][1] - positions[i - 1][1]);
+    seg.push(d);
+    total += d;
+  }
+  if (total === 0) return positions[0];
+  let target = Math.max(0, Math.min(1, frac)) * total;
+  for (let i = 0; i < seg.length; i++) {
+    if (target <= seg[i] || i === seg.length - 1) {
+      const t = seg[i] === 0 ? 0 : Math.min(1, target / seg[i]);
+      return [
+        positions[i][0] + t * (positions[i + 1][0] - positions[i][0]),
+        positions[i][1] + t * (positions[i + 1][1] - positions[i][1]),
+      ];
+    }
+    target -= seg[i];
+  }
+  return positions[positions.length - 1];
+}

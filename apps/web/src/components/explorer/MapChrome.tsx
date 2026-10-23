@@ -14,6 +14,7 @@ import {
 } from '../ui/dropdown-menu';
 import type { BasemapId } from '../../lib/map/mapStyle';
 import type { MapBookmark } from '../../lib/map/mapBookmarks';
+import type { JourneyColoring } from '../../lib/map/journeyColors';
 
 export type MapChromeProps = {
   isNarrow: boolean;
@@ -39,6 +40,10 @@ export type MapChromeProps = {
   onSaveView: () => void;
   onGoBookmark: (b: MapBookmark) => void;
   onDeleteBookmark: (id: string) => void;
+  /** Day View: colour journey lines by transport mode or by journey. */
+  showJourneyColoring?: boolean;
+  journeyColoring?: JourneyColoring;
+  onJourneyColoring?: (next: JourneyColoring) => void;
 };
 
 function ChromeFields(props: MapChromeProps) {
@@ -116,6 +121,31 @@ function ChromeFields(props: MapChromeProps) {
               title="Heatmap colour strength"
               className="h-2 w-full cursor-pointer accent-accent disabled:cursor-not-allowed"
             />
+          </div>
+        </div>
+      )}
+
+      {props.showJourneyColoring && props.onJourneyColoring && (
+        <div>
+          <div className="mb-1.5 text-sm">Colour lines by</div>
+          <div className="grid grid-cols-2 gap-2" role="group" aria-label="Colour lines by">
+            {(
+              [
+                ['mode', 'Transport', 'Each transport mode has its own colour'],
+                ['journey', 'Journey', 'Each journey of the day has its own colour'],
+              ] as const
+            ).map(([id, label, title]) => (
+              <Button
+                key={id}
+                type="button"
+                variant={props.journeyColoring === id ? 'default' : 'outline'}
+                aria-pressed={props.journeyColoring === id}
+                title={title}
+                onClick={() => props.onJourneyColoring?.(id)}
+              >
+                {label}
+              </Button>
+            ))}
           </div>
         </div>
       )}
