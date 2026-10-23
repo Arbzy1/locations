@@ -20,13 +20,16 @@ export default function TimelineItemEditor({
   note,
   mode,
   googleMode,
+  detected = false,
 }: {
   kind: 'visit' | 'activity';
   start: string;
   note?: string | null;
   mode?: string;
-  /** Google's original guess when the user has corrected it. */
+  /** Google's original guess when the user or GPS detection changed it. */
   googleMode?: string | null;
+  /** The mode came from GPS detection: save the choice explicitly so it sticks. */
+  detected?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -46,8 +49,9 @@ export default function TimelineItemEditor({
         kind,
         start,
         note: draftNote,
-        // Choosing Google's own guess again clears the correction.
-        mode: kind === 'activity' && draftMode && draftMode !== original ? draftMode : null,
+        // Choosing Google's own guess again clears the correction. After GPS detection the
+        // choice is always saved, so "it really was a car" is not detected again later.
+        mode: kind === 'activity' && draftMode && (detected || draftMode !== original) ? draftMode : null,
       }),
     });
     setBusy(false);
@@ -58,6 +62,8 @@ export default function TimelineItemEditor({
     }
     setOpen(false);
     void queryClient.invalidateQueries({ queryKey: ['day'] });
+    // A mode change rewrites mileage by mode and Routes: rebuild statistics.
+    void queryClient.invalidateQueries({ queryKey: ['aggregates-status'] });
     toast.success('Saved.');
   };
 

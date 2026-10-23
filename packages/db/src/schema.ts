@@ -11,6 +11,7 @@ import {
   uniqueIndex,
   primaryKey,
 } from "drizzle-orm/pg-core";
+import type { ModeDetection } from "./rail.js";
 
 /** Tenant id: `"demo"` for the public demo, otherwise the Better Auth user id. */
 export type TenantId = string;
@@ -221,6 +222,12 @@ export const activities = pgTable(
     distanceMeters: real("distance_meters").notNull(),
     durationMinutes: real("duration_minutes").notNull(),
     path: jsonb("path").$type<PathPoint[]>(),
+    /** Google's label when GPS detection changed `mode` (null when it did not). */
+    googleMode: text("google_mode"),
+    /** Why `mode` was changed, or a "might be a train" hint when `confidence` is medium. */
+    modeDetail: jsonb("mode_detail").$type<ModeDetection>(),
+    /** Line along the railway between the fixes, for detected or labelled trains. */
+    railGeometry: jsonb("rail_geometry").$type<[number, number][]>(),
   },
   (t) => [
     index("activities_tenant_date_idx").on(t.tenant, t.date),

@@ -16,5 +16,8 @@ export async function createImportSessionMock() {
     aggregatesStale: vi.fn(async () => false),
     aggregateInputPage: vi.fn(async () => []),
     writeAggregates: vi.fn(async () => undefined),
+    modeDetectInputPage: vi.fn(async () => []),
+    modeDetectionVersion: vi.fn(async () => null),
+    applyModeUpdates: vi.fn(async () => 0),
   };
 }
