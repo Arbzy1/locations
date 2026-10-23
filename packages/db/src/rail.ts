@@ -23,7 +23,7 @@ export type RailCoverage = {
 };
 
 /** Bump when detection rules change so stored results are recomputed. */
-export const MODE_DETECTOR_VERSION = 1;
+export const MODE_DETECTOR_VERSION = 2;
 /**
  * A fix this close to a rail line counts as on the tracks. Phone GPS on trains is rough:
  * on the user's real export only about half of train fixes fell within 40 m, most within 80 m.
@@ -232,6 +232,8 @@ function segmentSpeeds(trace: PathPoint[]): number[] {
 }
 
 const RAIL_CANDIDATES = new Set(["car", "bus", "unknown"]);
+/** Labelled on foot or by bike, but faster than anyone walks or cycles for a whole journey. */
+const HUMAN_POWERED = new Set(["walking", "cycling"]);
 
 /**
  * What the GPS fixes say the journey really was, or null when they agree with Google
@@ -252,7 +254,11 @@ export function detectJourneyMode(a: DetectableJourney, rail: RailIndex | null):
   // Thresholds tuned on a real export (London area): with 75% of fixes within 80 m of a
   // railway, a median distance of 50 m or less and over 20 km/h, 50 of 69 Google-labelled
   // trains matched against 4 of 1,425 cars and 5 of 264 buses (likely mislabelled trains).
-  if (rail && RAIL_CANDIDATES.has(a.mode) && fixes.length >= 4 && lengthM >= 3000) {
+  // The fixes must really travel: GPS noise around a home next to the tracks can sit
+  // "on the railway" at absurd speeds without going anywhere.
+  const spreadM = Math.max(...fixes.map((f) => haversineM(fixes[0][0], fixes[0][1], f[0], f[1])), 0);
+  const railCandidate = RAIL_CANDIDATES.has(a.mode) || (HUMAN_POWERED.has(a.mode) && avgKmh > 30);
+  if (rail && railCandidate && fixes.length >= 4 && lengthM >= 3000 && spreadM >= 3000) {
     const covered = fixes.filter((f) => rail.covers(f[0], f[1])).length;
     if (covered >= fixes.length * 0.9) {
       const kinds: Record<RailKind, number> = { rail: 0, subway: 0, tram: 0 };
