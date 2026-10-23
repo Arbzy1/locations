@@ -20,6 +20,10 @@ Paid plans are billed by Stripe. If import fails because of our software, contac
 
 The software is provided as a hosted service. Map snapping and place names can be wrong.
 
+## Data credits
+
+Rail data © OpenStreetMap contributors, ODbL. See [Data credits](credits.md).
+
 ## Termination
 
 We may suspend accounts that abuse the service. You may delete your account in Settings; we wipe tenant data, uploads, and billing customer records as described in the Privacy Policy.
