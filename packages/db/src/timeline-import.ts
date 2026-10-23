@@ -31,6 +31,42 @@ import { namedTripsFromMemories, parseTimelineJson } from "./timeline-parse.js";
 import { computeTenantAggregates } from "./aggregates.js";
 
 /** Rebuild day_stats + analytics_cache for a tenant from all sources. */
+/**
+ * How a data change updates day_stats and analytics_cache. "rebuild" recomputes them
+ * here (CLI, tests). "mark-stale" only flags them: the Worker free plan cannot afford
+ * the CPU for a large timeline, so the signed-in browser recomputes and uploads them.
+ */
+export type AggregateMode = "rebuild" | "mark-stale";
+
+/** analytics_cache key that flags a tenant's aggregates as out of date. */
+export const AGGREGATES_STALE_KEY = "_aggregates_stale";
+
+export async function markAggregatesStale(db: Db, tenant: TenantId): Promise<void> {
+  const data = { since: new Date().toISOString() };
+  await db
+    .insert(analyticsCache)
+    .values({ tenant, key: AGGREGATES_STALE_KEY, data })
+    .onConflictDoUpdate({
+      target: [analyticsCache.tenant, analyticsCache.key],
+      set: { data, updatedAt: new Date() },
+    });
+}
+
+/** Days that still have data, for callers that no longer rebuild day_stats inline. */
+async function countDaysWithData(db: Db, tenant: TenantId): Promise<number> {
+  const [row] = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from (select date from visits where tenant = ${tenant} union select date from activities where tenant = ${tenant}) d`,
+  ).then((r) => ("rows" in r ? (r.rows as { n: number }[]) : (r as unknown as { n: number }[])));
+  return Number(row?.n ?? 0);
+}
+
+/** Apply the chosen aggregate mode after rows changed. */
+async function afterDataChange(db: Db, tenant: TenantId, mode: AggregateMode): Promise<{ days: number }> {
+  if (mode === "rebuild") return rebuildTenantAggregates(db, tenant);
+  await markAggregatesStale(db, tenant);
+  return { days: await countDaysWithData(db, tenant) };
+}
+
 export async function rebuildTenantAggregates(
   db: Db,
   tenant: TenantId,
@@ -121,6 +157,7 @@ export async function importSourceData(
     records: unknown;
     merge?: boolean;
     skipOverlappingDays?: boolean;
+    aggregates?: AggregateMode;
   },
 ): Promise<{ visitCount: number; activityCount: number; days: number }> {
   const { tenant, sourceId } = opts;
@@ -185,7 +222,7 @@ export async function importSourceData(
       .onConflictDoNothing();
   }
 
-  const { days } = await rebuildTenantAggregates(db, tenant);
+  const { days } = await afterDataChange(db, tenant, opts.aggregates ?? "rebuild");
 
   return {
     visitCount: visitRows.length,
@@ -201,7 +238,7 @@ export async function importSourceData(
  */
 export async function pruneTenantToSource(
   db: Db,
-  opts: { tenant: TenantId; sourceId: string },
+  opts: { tenant: TenantId; sourceId: string; aggregates?: AggregateMode },
 ): Promise<{ days: number }> {
   const { tenant, sourceId } = opts;
   await db
@@ -215,13 +252,13 @@ export async function pruneTenantToSource(
   await db
     .delete(dataSources)
     .where(and(eq(dataSources.tenant, tenant), ne(dataSources.id, sourceId)));
-  return rebuildTenantAggregates(db, tenant);
+  return afterDataChange(db, tenant, opts.aggregates ?? "rebuild");
 }
 
-/** Delete a source and its rows, then rebuild tenant aggregates. */
+/** Delete a source and its rows, then update tenant aggregates. */
 export async function deleteSourceData(
   db: Db,
-  opts: { tenant: TenantId; sourceId: string },
+  opts: { tenant: TenantId; sourceId: string; aggregates?: AggregateMode },
 ): Promise<{ days: number }> {
   const { tenant, sourceId } = opts;
   await db
@@ -233,13 +270,13 @@ export async function deleteSourceData(
   await db
     .delete(dataSources)
     .where(and(eq(dataSources.tenant, tenant), eq(dataSources.id, sourceId)));
-  return rebuildTenantAggregates(db, tenant);
+  return afterDataChange(db, tenant, opts.aggregates ?? "rebuild");
 }
 
 /** Delete visits and activities in an inclusive date window, then rebuild aggregates. */
 export async function deleteDateRange(
   db: Db,
-  opts: { tenant: TenantId; from: string; to: string; sourceId?: string },
+  opts: { tenant: TenantId; from: string; to: string; sourceId?: string; aggregates?: AggregateMode },
 ): Promise<{ visitCount: number; activityCount: number; days: number }> {
   const { tenant, from, to, sourceId } = opts;
   const visitFilters = [eq(visits.tenant, tenant), gte(visits.date, from), lte(visits.date, to)];
@@ -262,7 +299,7 @@ export async function deleteDateRange(
     .where(and(...activityFilters));
   await db.delete(visits).where(and(...visitFilters));
   await db.delete(activities).where(and(...activityFilters));
-  const { days } = await rebuildTenantAggregates(db, tenant);
+  const { days } = await afterDataChange(db, tenant, opts.aggregates ?? "rebuild");
   return {
     visitCount: visitCountRow?.count ?? 0,
     activityCount: activityCountRow?.count ?? 0,

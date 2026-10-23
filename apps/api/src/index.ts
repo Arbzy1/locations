@@ -8,6 +8,7 @@ import {
   isStaffRole,
   quotaForEntitled,
   countTimelineRecords,
+  PLAN_QUOTAS,
   type TenantId,
   type PlaceColorToken,
 } from "@locations/db";
@@ -107,6 +108,22 @@ import { parsePlaceColor, sanitizePlaceTags } from "./place-labels";
 import { runMonthlyRecaps } from "./monthly-recap";
 import { runRetention } from "./retention";
 import { isProbePath, probeNotFound } from "./probe-paths";
+import {
+  AGGREGATE_INPUT_PAGE,
+  IMPORT_BATCH_ROWS,
+  aggregateInputPage,
+  aggregatesStale,
+  appendImportRows,
+  checkAggregateWrite,
+  checkMemories,
+  checkRowBatch,
+  existingImportDays,
+  readBatchBody,
+  startImportJob,
+  finishImportJob,
+  openImportJob,
+  writeAggregates,
+} from "./import-session";
 import { runExportPackJob } from "./export-pack-job";
 import { publicExportJob } from "./export-pack";
 import {
@@ -696,6 +713,158 @@ app.get("/api/import/status", async (c) => {
   const db = requestDb(c);
   const tenant = c.get("tenant");
   return c.json(await withTenant(db, tenant, (tx) => getImportStatus(tx, tenant)));
+});
+
+// ---- Browser-driven import (Workers free plan: the browser parses, these store batches) ----
+
+/** Days already stored for one source, so the browser can preview overlap and skip days. */
+app.get("/api/import/existing", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const tenant = c.get("tenant");
+  const sourceId = (c.req.query("sourceId") ?? "").trim();
+  const db = requestDb(c);
+  const result = await withTenant(db, tenant, (tx) => existingImportDays(tx, tenant, sourceId || undefined));
+  if (!result) return c.json({ error: "Source not found" }, 404);
+  return c.json(result);
+});
+
+app.post("/api/import/start", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const user = c.get("user")!;
+  const tenant = c.get("tenant");
+  const ip = clientIp(c.req.raw.headers);
+  const limited = rateLimit({ key: `import:${user.id}:${ip}`, limit: 5, windowMs: 60 * 60_000 });
+  if (!limited.ok) {
+    c.header("Retry-After", String(limited.retryAfterSec));
+    return c.json({ error: "Too many import requests. Try again later." }, 429);
+  }
+  const verified = Boolean(
+    (await createAuth(c.env).api.getSession({ headers: c.req.raw.headers }))?.user?.emailVerified,
+  );
+  if (!verified) return c.json({ error: "Verify your email before importing Timeline data" }, 403);
+
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body) return c.json({ error: "JSON body required" }, 400);
+  const visitCount = Number(body.visitCount);
+  const activityCount = Number(body.activityCount);
+  const parsedCount = Number(body.parsedCount);
+  if (![visitCount, activityCount, parsedCount].every((n) => Number.isInteger(n) && n >= 0)) {
+    return c.json({ error: "visitCount, activityCount and parsedCount must be whole numbers" }, 400);
+  }
+  if (visitCount + activityCount === 0) return c.json({ error: "No stays or journeys found in this file" }, 400);
+  const merge = body.merge === true;
+  const sourceIdField = typeof body.sourceId === "string" ? body.sourceId.trim().slice(0, 64) : "";
+  const labelField = typeof body.label === "string" ? body.label.trim().slice(0, 80) : "";
+  const chosenFile = typeof body.chosenFile === "string" ? body.chosenFile.slice(0, 200) : null;
+
+  const db = requestDb(c);
+  const sub = await withTenant(db, tenant, (tx) => getSubscription(tx, tenant));
+  const entitled = isEntitled(sub, { isDemo: false }) || isStaffRole(user.role);
+  if (c.env.STRIPE_SECRET_KEY && !entitled) {
+    return c.json({ error: "An active subscription is required to import" }, 402);
+  }
+  const quota = quotaForEntitled(Boolean(c.env.STRIPE_SECRET_KEY) ? entitled : true);
+  if (visitCount + activityCount > quota.maxImportRows) {
+    return c.json({ error: `This plan stores up to ${quota.maxImportRows.toLocaleString("en-GB")} stays and journeys per import` }, 413);
+  }
+
+  const started = await withTenant(db, tenant, (tx) =>
+    startImportJob(tx, tenant, {
+      userId: user.id,
+      sourceId: sourceIdField || undefined,
+      label: labelField,
+      merge,
+      chosenFile,
+      parsedCount,
+      maxSources: quota.maxSources,
+    }),
+  );
+  if (started.status === 409) return c.json({ error: "An import is already running" }, 409);
+  if (started.status === 404) return c.json({ error: "Source not found" }, 404);
+  if (started.status === 403) return c.json({ error: "Source limit reached for this plan" }, 403);
+  if (started.status !== 200) return c.json({ error: "Could not start import" }, 500);
+  return c.json({ jobId: started.jobId, sourceId: started.sourceId, label: started.label, batchRows: IMPORT_BATCH_ROWS });
+});
+
+app.post("/api/import/:jobId/rows", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const tenant = c.get("tenant");
+  const body = await readBatchBody(c.req.raw);
+  if (!body.ok) return c.json({ error: body.status === 413 ? "Batch too large" : "JSON body required" }, body.status);
+  const db = requestDb(c);
+  const result = await withTenant(db, tenant, async (tx) => {
+    // Ownership first: another tenant's or unknown job is 404 whatever the body says.
+    const job = await openImportJob(tx, tenant, c.req.param("jobId"));
+    if (!job) return null;
+    const checked = checkRowBatch(body.value);
+    if (!checked.ok) return { invalid: checked.error };
+    const stored = (job.visitCount ?? 0) + (job.activityCount ?? 0);
+    const incoming = checked.value.visits.length + checked.value.activities.length;
+    if (stored + incoming > PLAN_QUOTAS.pro.maxImportRows) return { tooMany: true as const };
+    await appendImportRows(tx, tenant, job, checked.value);
+    return { stored: stored + incoming };
+  });
+  if (!result) return c.json({ error: "Import not found" }, 404);
+  if ("invalid" in result) return c.json({ error: result.invalid }, 400);
+  if ("tooMany" in result) return c.json({ error: "Import is larger than allowed" }, 413);
+  return c.json(result);
+});
+
+app.post("/api/import/:jobId/finish", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const tenant = c.get("tenant");
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown> | null;
+  const db = requestDb(c);
+  const jobId = c.req.param("jobId");
+  const done = await withTenant(db, tenant, async (tx) => {
+    const job = await openImportJob(tx, tenant, jobId);
+    if (!job) return null;
+    const memories = checkMemories(body?.memories);
+    if (!memories.ok) return { invalid: memories.error };
+    await finishImportJob(tx, tenant, job, memories.value);
+    return job.id;
+  });
+  if (!done) return c.json({ error: "Import not found" }, 404);
+  if (typeof done !== "string") return c.json({ error: done.invalid }, 400);
+  c.executionCtx.waitUntil(notifyImportJob(c.env, getDb(c.env), tenant, done).catch(() => undefined));
+  return c.json({ jobId: done, status: "ready", aggregatesStale: true });
+});
+
+// ---- Aggregates the browser recomputes (day_stats, analytics_cache) ----
+
+app.get("/api/aggregates/status", async (c) => {
+  const tenant = c.get("tenant");
+  const db = requestDb(c);
+  return c.json({ stale: await withTenant(db, tenant, (tx) => aggregatesStale(tx, tenant)) });
+});
+
+app.get("/api/aggregates/input", async (c) => {
+  const tenant = c.get("tenant");
+  const table = c.req.query("table");
+  if (table !== "visits" && table !== "activities") return c.json({ error: "table must be visits or activities" }, 400);
+  const after = Number(c.req.query("after") ?? 0);
+  if (!Number.isInteger(after) || after < 0) return c.json({ error: "after must be a row id" }, 400);
+  const db = requestDb(c);
+  const rows = await withTenant(db, tenant, (tx) => aggregateInputPage(tx, tenant, table, after));
+  const last = rows.at(-1);
+  return c.json({ rows, next: rows.length === AGGREGATE_INPUT_PAGE && last ? last.id : null });
+});
+
+app.post("/api/aggregates", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const tenant = c.get("tenant");
+  const body = await readBatchBody(c.req.raw);
+  if (!body.ok) return c.json({ error: body.status === 413 ? "Chunk too large" : "JSON body required" }, body.status);
+  const checked = checkAggregateWrite(body.value);
+  if (!checked.ok) return c.json({ error: checked.error }, 400);
+  const db = requestDb(c);
+  await withTenant(db, tenant, (tx) => writeAggregates(tx, tenant, checked.value));
+  return c.json({ ok: true, days: checked.value.dayStats.length, keys: checked.value.analytics.length, done: checked.value.done });
 });
 
 app.post("/api/import/preview", async (c) => {
@@ -1650,7 +1819,7 @@ async function runImportJob(env: Env, message: ImportQueueMessage): Promise<void
       updateImportJob(tx, jobId, { status: "processing", parsedCount }, tenant),
     );
     const result = await withTenant(jobDb, tenant, (tx) =>
-      importSourceData(tx, { tenant, sourceId, records, merge, skipOverlappingDays }),
+      importSourceData(tx, { tenant, sourceId, records, merge, skipOverlappingDays, aggregates: "mark-stale" }),
     );
     await withTenant(jobDb, tenant, (tx) =>
       updateImportJob(

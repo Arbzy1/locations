@@ -23,7 +23,7 @@ import {
   thinTrace,
   haversineM,
   makeCoordPlaceKey,
-  rebuildTenantAggregates,
+  markAggregatesStale,
   METERS_TO_MILES,
   type TenantId,
 } from "@locations/db";
@@ -308,7 +308,7 @@ export async function deletePlaceData(db: Db, tenant: TenantId, key: string) {
       .where(and(eq(activities.tenant, tenant), inArray(activities.id, dropIds.slice(i, i + 500))));
   }
   await db.delete(placeLabels).where(and(eq(placeLabels.tenant, tenant), eq(placeLabels.placeKey, placeKey)));
-  await rebuildTenantAggregates(db, tenant);
+  await markAggregatesStale(db, tenant);
   return { visitCount: removedVisits.length, activityCount: dropIds.length, trimmedPaths };
 }
 
