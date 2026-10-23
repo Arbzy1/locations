@@ -48,7 +48,7 @@ import {
   datesFromParsed,
   importDayDiff,
   timezoneSkewWarning,
-  rebuildHourOfWeekCache,
+  markAggregatesStale,
   and,
   eq,
   sql,
@@ -1719,7 +1719,7 @@ export async function removeSource(
     .where(and(eq(dataSources.tenant, tenant), eq(dataSources.id, sourceId)))
     .limit(1);
   if (!existing[0]) return { error: "Source not found" as const };
-  await deleteSourceData(db, { tenant, sourceId });
+  await deleteSourceData(db, { tenant, sourceId, aggregates: "mark-stale" });
   return { ok: true as const };
 }
 
@@ -1794,7 +1794,8 @@ export async function createImportJob(
     tenant: TenantId;
     sourceId: string;
     userId: string;
-    r2Key: string;
+    /** Null for browser imports, which never upload the file. */
+    r2Key: string | null;
     status?: ImportJobStatus;
     merge?: boolean;
     chosenFile?: string | null;
@@ -2065,7 +2066,7 @@ export async function applyRetention(
 ) {
   const cutoff = retentionCutoff(years, now);
   const dayBefore = new Date(Date.parse(cutoff) - 86_400_000).toISOString().slice(0, 10);
-  return deleteDateRange(db, { tenant, from: "0001-01-01", to: dayBefore });
+  return deleteDateRange(db, { tenant, from: "0001-01-01", to: dayBefore, aggregates: "mark-stale" });
 }
 
 export async function upsertUserSettings(
@@ -2134,7 +2135,8 @@ export async function upsertUserSettings(
       },
     });
   if (timezoneChanged) {
-    await rebuildHourOfWeekCache(db, tenant, timezone);
+    // Local-time analytics are recomputed by the browser (Worker CPU limit).
+    await markAggregatesStale(db, tenant);
   }
   return {
     tenant,
@@ -2385,7 +2387,7 @@ export async function deleteTenantDateRange(
     const existing = await getSourceById(db, tenant, opts.sourceId);
     if (!existing) return { error: "Source not found" as const };
   }
-  return deleteDateRange(db, { tenant, ...opts });
+  return deleteDateRange(db, { tenant, ...opts, aggregates: "mark-stale" });
 }
 
 /** Journeys per rewarm request; a GPS journey can take up to five OSRM calls. */
