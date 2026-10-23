@@ -1,4 +1,4 @@
-import { eq, opsFlags } from "@locations/db";
+import { createHttpDb, eq, opsFlags } from "@locations/db";
 import type { Env } from "./env";
 import { getDb } from "./services";
 
@@ -59,24 +59,33 @@ export function clearOpsFlagCache(): void {
   rowCache = null;
 }
 
-function dbQueryable(db: unknown): db is {
-  select: (...args: never[]) => unknown;
-  delete: (...args: never[]) => unknown;
-} {
+function dbQueryable(db: unknown): db is ReturnType<typeof getDb> {
   return typeof (db as { select?: unknown })?.select === "function";
 }
 
+async function withFlagsDb<T>(
+  env: Env,
+  fn: (db: ReturnType<typeof createHttpDb>) => Promise<T>,
+): Promise<T | undefined> {
+  const probe = getDb(env);
+  const usable = dbQueryable(probe);
+  await (probe as { $client?: { end?: () => Promise<void> } }).$client?.end?.().catch(() => undefined);
+  if (!usable || !env.DATABASE_URL) return undefined;
+  return fn(createHttpDb(env.DATABASE_URL));
+}
+
 export async function loadFlagRows(env: Env): Promise<FlagRow[]> {
-  const db = getDb(env);
-  if (!dbQueryable(db)) return [];
-  const rows = await db
-    .select({
-      key: opsFlags.key,
-      value: opsFlags.value,
-      updatedBy: opsFlags.updatedBy,
-      updatedAt: opsFlags.updatedAt,
-    })
-    .from(opsFlags);
+  const rows = await withFlagsDb(env, (db) =>
+    db
+      .select({
+        key: opsFlags.key,
+        value: opsFlags.value,
+        updatedBy: opsFlags.updatedBy,
+        updatedAt: opsFlags.updatedAt,
+      })
+      .from(opsFlags),
+  );
+  if (!rows) return [];
   return rows.map((r) => ({
     key: r.key,
     value: r.value,
@@ -140,9 +149,7 @@ export async function listToggleFlags(env: Env): Promise<{
 }
 
 export async function deleteOpsFlag(env: Env, key: OpsFlagKey): Promise<void> {
-  const db = getDb(env);
-  if (!dbQueryable(db)) return;
-  await db.delete(opsFlags).where(eq(opsFlags.key, key));
+  await withFlagsDb(env, (db) => db.delete(opsFlags).where(eq(opsFlags.key, key)));
   clearOpsFlagCache();
 }
 
@@ -152,37 +159,37 @@ export async function upsertOpsFlag(
   value: "true" | "false",
   updatedBy: string,
 ): Promise<void> {
-  const db = getDb(env);
-  if (!dbQueryable(db)) return;
-  await db
-    .insert(opsFlags)
-    .values({ key, value, updatedAt: new Date(), updatedBy })
-    .onConflictDoUpdate({
-      target: opsFlags.key,
-      set: { value, updatedAt: new Date(), updatedBy },
-    });
+  await withFlagsDb(env, (db) =>
+    db
+      .insert(opsFlags)
+      .values({ key, value, updatedAt: new Date(), updatedBy })
+      .onConflictDoUpdate({
+        target: opsFlags.key,
+        set: { value, updatedAt: new Date(), updatedBy },
+      }),
+  );
   clearOpsFlagCache();
 }
 
 export async function readInternalFlag(env: Env, key: string): Promise<string | null> {
-  const db = getDb(env);
-  if (!dbQueryable(db)) return null;
-  const rows = await db
-    .select({ value: opsFlags.value })
-    .from(opsFlags)
-    .where(eq(opsFlags.key, key))
-    .limit(1);
-  return rows[0]?.value ?? null;
+  const rows = await withFlagsDb(env, (db) =>
+    db
+      .select({ value: opsFlags.value })
+      .from(opsFlags)
+      .where(eq(opsFlags.key, key))
+      .limit(1),
+  );
+  return rows?.[0]?.value ?? null;
 }
 
 export async function writeInternalFlag(env: Env, key: string, value: string): Promise<void> {
-  const db = getDb(env);
-  if (!dbQueryable(db)) return;
-  await db
-    .insert(opsFlags)
-    .values({ key, value, updatedAt: new Date(), updatedBy: "system" })
-    .onConflictDoUpdate({
-      target: opsFlags.key,
-      set: { value, updatedAt: new Date(), updatedBy: "system" },
-    });
+  await withFlagsDb(env, (db) =>
+    db
+      .insert(opsFlags)
+      .values({ key, value, updatedAt: new Date(), updatedBy: "system" })
+      .onConflictDoUpdate({
+        target: opsFlags.key,
+        set: { value, updatedAt: new Date(), updatedBy: "system" },
+      }),
+  );
 }

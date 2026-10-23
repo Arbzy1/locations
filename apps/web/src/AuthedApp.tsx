@@ -11,23 +11,20 @@ import {
 } from './hooks/useApi';
 import { useSession, signOut } from './lib/auth';
 import { UnitsProvider, useUnits } from './lib/units';
-import { detectJourneyModes, MODE_DETECTOR_VERSION, rebuildAggregates } from './lib/import/browser-import';
+import { MODE_DETECTOR_VERSION } from '@locations/db/rail';
 import { toast } from 'sonner';
 import { useTheme } from './lib/theme';
 import { loadNavExpanded, saveNavExpanded } from './lib/nav/nav-memory';
 import { interactiveMotion, reducedInteractiveMotion } from './lib/motion';
 import { cn } from './lib/utils';
-import DemoTour from './components/shell/DemoTour';
 import ThemeToggle from './components/shell/ThemeToggle';
 import CommandPalette from './components/shell/CommandPalette';
 import { AppVersion } from './components/shell/AppVersion';
 import { Button } from './components/ui/button';
 import { Sheet, SheetContent } from './components/ui/sheet';
-import GetStarted from './components/shell/GetStarted';
 import ExploreMenu from './components/shell/ExploreMenu';
 import MapModeSwitch from './components/shell/MapModeSwitch';
 import { loadMapMode, mapModePath, saveMapMode, type MapMode } from './lib/nav/map-mode';
-import ImportCutIn from './components/ImportCutIn';
 import { isCatalogPath, catalogTitle } from './lib/nav/paths';
 import { shouldFireImportCutIn, type ImportCutInJob } from './lib/explorer/import-cut-in';
 import { adminPageLabel } from './components/admin/adminNav';
@@ -47,14 +44,29 @@ import {
   Shield,
 } from 'lucide-react';
 
-const HotspotsView = lazy(() => import('./components/explorer/HotspotsView'));
-const DayView = lazy(() => import('./components/explorer/DayView'));
-const RoutesView = lazy(() => import('./components/explorer/RoutesView'));
-const DayTripsView = lazy(() => import('./components/explorer/DayTripsView'));
-const InsightsView = lazy(() => import('./components/explorer/InsightsView'));
-const SettingsView = lazy(() => import('./components/settings/SettingsView'));
-const CatalogRouter = lazy(() => import('./components/catalog/CatalogRouter'));
-const JourneyCostView = lazy(() => import('./components/brim/JourneyCostView'));
+const loadHotspotsView = () => import('./components/explorer/HotspotsView');
+const loadDayView = () => import('./components/explorer/DayView');
+const loadRoutesView = () => import('./components/explorer/RoutesView');
+const loadDayTripsView = () => import('./components/explorer/DayTripsView');
+const loadInsightsView = () => import('./components/explorer/InsightsView');
+const loadSettingsView = () => import('./components/settings/SettingsView');
+const loadCatalogRouter = () => import('./components/catalog/CatalogRouter');
+const loadJourneyCostView = () => import('./components/brim/JourneyCostView');
+const loadGetStarted = () => import('./components/shell/GetStarted');
+const loadImportCutIn = () => import('./components/ImportCutIn');
+const loadDemoTour = () => import('./components/shell/DemoTour');
+
+const HotspotsView = lazy(loadHotspotsView);
+const DayView = lazy(loadDayView);
+const RoutesView = lazy(loadRoutesView);
+const DayTripsView = lazy(loadDayTripsView);
+const InsightsView = lazy(loadInsightsView);
+const SettingsView = lazy(loadSettingsView);
+const CatalogRouter = lazy(loadCatalogRouter);
+const JourneyCostView = lazy(loadJourneyCostView);
+const GetStarted = lazy(loadGetStarted);
+const ImportCutIn = lazy(loadImportCutIn);
+const DemoTour = lazy(loadDemoTour);
 
 function ViewFallback() {
   return (
@@ -239,6 +251,30 @@ function AppContent() {
     (overview?.total_activities ?? 0) > 0;
 
   useEffect(() => {
+    if (exploring) {
+      void loadCatalogRouter();
+      return;
+    }
+    if (activeTab === 'journey-cost') {
+      void loadJourneyCostView();
+      return;
+    }
+    if (activeTab === 'settings') {
+      void loadSettingsView();
+      return;
+    }
+    if (activeTab === 'hotspots') void loadHotspotsView();
+    else if (activeTab === 'day') void loadDayView();
+    else if (activeTab === 'routes') void loadRoutesView();
+    else if (activeTab === 'trips') void loadDayTripsView();
+    else if (activeTab === 'insights') void loadInsightsView();
+  }, [activeTab, exploring]);
+
+  useEffect(() => {
+    if (!overviewLoading && !hasData && !importing) void loadGetStarted();
+  }, [overviewLoading, hasData, importing]);
+
+  useEffect(() => {
     cutInPrimed.current = false;
     cutInPrev.current = null;
   }, [sessionUserId]);
@@ -277,7 +313,8 @@ function AppContent() {
     if (!modesOutdated || isDemo || importing) return;
     let cancelled = false;
     const id = toast.loading('Checking your journeys for trains…');
-    detectJourneyModes()
+    void import('./lib/import/browser-import')
+      .then((m) => m.detectJourneyModes())
       .then(({ changed }) => {
         if (cancelled) return;
         if (changed) {
@@ -295,7 +332,8 @@ function AppContent() {
     if (!aggregates?.stale || modesOutdated || isDemo || importing) return;
     let cancelled = false;
     const id = toast.loading('Updating your statistics…');
-    rebuildAggregates({ timezone: userTimezone })
+    void import('./lib/import/browser-import')
+      .then((m) => m.rebuildAggregates({ timezone: userTimezone }))
       .then(() => {
         if (cancelled) return;
         toast.success('Statistics up to date.', { id });
@@ -358,14 +396,18 @@ function AppContent() {
 
   return (
     <div className="relative flex h-dvh w-screen flex-col overflow-hidden bg-bg safe-pt safe-px">
-      <ImportCutIn
-        job={cutInJob}
-        onHostSplit={setHostSplit}
-        onDone={() => {
-          setCutInJob(null);
-          setHostSplit(false);
-        }}
-      />
+      {cutInJob ? (
+        <Suspense fallback={null}>
+          <ImportCutIn
+            job={cutInJob}
+            onHostSplit={setHostSplit}
+            onDone={() => {
+              setCutInJob(null);
+              setHostSplit(false);
+            }}
+          />
+        </Suspense>
+      ) : null}
       {isDemo && (
         <div className="flex shrink-0 flex-col gap-2 border-b border-accent/30 bg-accent/10 px-4 py-2 text-xs text-accent sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <span>
@@ -656,10 +698,21 @@ function AppContent() {
   );
 }
 
+function DemoTourGate() {
+  const { data: session } = useSession();
+  const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
+  if (!isDemo) return null;
+  return (
+    <Suspense fallback={null}>
+      <DemoTour />
+    </Suspense>
+  );
+}
+
 export default function AuthedApp() {
   return (
     <UnitsProvider>
-      <DemoTour />
+      <DemoTourGate />
       <Routes>
         <Route path="/" element={<Navigate to="/hotspots" replace />} />
         <Route path="/hotspots" element={<AppContent />} />

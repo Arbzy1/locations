@@ -53,6 +53,7 @@ import {
   getDays,
   getDb,
   getHeatmap,
+  enrichHeatmapSettlements,
   getImportStatus,
   getOverview,
   getRouteProgress,
@@ -518,15 +519,19 @@ app.get("/api/heatmap", async (c) => {
   const db = requestDb(c);
   const tenant = c.get("tenant");
   const sources = c.req.query("sources");
-  return c.json(
-    await withTenant(db, tenant, (tx) =>
-      getHeatmap(tx, tenant, {
-        sourceIds: sources ? sources.split(",").filter(Boolean) : undefined,
-        from: c.req.query("from") || undefined,
-        to: c.req.query("to") || undefined,
-      }),
-    ),
+  const points = await withTenant(db, tenant, (tx) =>
+    getHeatmap(tx, tenant, {
+      sourceIds: sources ? sources.split(",").filter(Boolean) : undefined,
+      from: c.req.query("from") || undefined,
+      to: c.req.query("to") || undefined,
+    }),
   );
+  const cacheDb = getCacheDb(c.env);
+  try {
+    return c.json(await enrichHeatmapSettlements(cacheDb, points));
+  } finally {
+    await closeDb(cacheDb);
+  }
 });
 
 app.get("/api/analytics/monthly", async (c) => {

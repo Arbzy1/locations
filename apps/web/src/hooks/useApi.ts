@@ -54,13 +54,13 @@ export function useOverview() {
   });
 }
 
-export function useDays() {
+export function useDays(opts?: { enabled?: boolean }) {
   const tenantKey = useTenantKey();
   return useQuery<DaySummary[]>({
     queryKey: ['days', tenantKey],
     queryFn: () => fetchJson('/api/days'),
     staleTime: Infinity,
-    enabled: tenantKey !== 'anon',
+    enabled: tenantKey !== 'anon' && (opts?.enabled ?? true),
   });
 }
 
@@ -315,7 +315,7 @@ export function useSearch(q: string) {
   });
 }
 
-export function usePlaceLabels() {
+export function usePlaceLabels(opts?: { enabled?: boolean }) {
   const tenantKey = useTenantKey();
   return useQuery<{
     placeKey: string;
@@ -327,7 +327,7 @@ export function usePlaceLabels() {
   }[]>({
     queryKey: ['place-labels', tenantKey],
     queryFn: () => fetchJson('/api/places/labels'),
-    enabled: tenantKey !== 'anon',
+    enabled: tenantKey !== 'anon' && (opts?.enabled ?? true),
   });
 }
 
@@ -666,18 +666,23 @@ export function usePersonality() {
   return useCachedAnalytics<PersonalityTag[] | []>('personality');
 }
 
+export type PublicConfig = {
+  signupDisabled?: boolean;
+  googleAuth?: boolean;
+  globe?: boolean;
+  billingConfigured?: boolean;
+  customTiles?: boolean;
+  customTileHosts?: string[];
+  mapTileDark?: string;
+  mapTileLight?: string;
+  mapAttr?: string;
+  mapStyleDark?: string | null;
+  mapStyleLight?: string | null;
+  flags?: { globe?: boolean; demoTour?: boolean; landing?: boolean };
+};
+
 export function usePublicConfig() {
-  return useQuery<{
-    signupDisabled?: boolean;
-    googleAuth?: boolean;
-    globe?: boolean;
-    billingConfigured?: boolean;
-    customTiles?: boolean;
-    customTileHosts?: string[];
-    mapStyleDark?: string | null;
-    mapStyleLight?: string | null;
-    flags?: { globe?: boolean; demoTour?: boolean; landing?: boolean };
-  }>({
+  return useQuery<PublicConfig>({
     queryKey: ['public-config'],
     queryFn: () => fetchJson('/api/config'),
     staleTime: 60_000,

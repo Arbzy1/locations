@@ -41,6 +41,14 @@ function AuthGate() {
   const { data: config, isPending: configPending } = usePublicConfig();
   const landing = config?.flags?.landing !== false;
 
+  // Only the first session check shows the spinner. Better Auth re-checks the session
+  // after sign-up and sign-in requests; swapping the page out then threw away the
+  // sign-up and login forms (their "enter the code" step) so the page looked like it
+  // refreshed and lost what was typed.
+  const [sessionLoadedOnce, setSessionLoadedOnce] = useState(false);
+  if (!isPending && !sessionLoadedOnce) setSessionLoadedOnce(true);
+  const firstLoad = !sessionLoadedOnce;
+
   useEffect(() => {
     if (isPending || configPending) {
       document.title = 'Locations';
@@ -49,13 +57,9 @@ function AuthGate() {
     }
   }, [isPending, configPending, session?.user, landing]);
 
-  // Only the first session check shows the spinner. Better Auth re-checks the session
-  // after sign-up and sign-in requests; swapping the page out then threw away the
-  // sign-up and login forms (their "enter the code" step) so the page looked like it
-  // refreshed and lost what was typed.
-  const [sessionLoadedOnce, setSessionLoadedOnce] = useState(false);
-  if (!isPending && !sessionLoadedOnce) setSessionLoadedOnce(true);
-  const firstLoad = !sessionLoadedOnce;
+  useEffect(() => {
+    if (firstLoad || session?.user) void import('./AuthedApp');
+  }, [firstLoad, session?.user]);
 
   if ((firstLoad && isPending) || (!session?.user && configPending)) {
     return bootFallback();
