@@ -314,6 +314,40 @@ Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_s
 - Initial map viewport and clusters are derived from the tenant’s data, not hardcoded UK points.
 - Escape untrusted place names in Leaflet `divIcon` / popup HTML.
 
+### Performance
+
+Keep local start, first authed paint, and later tab switches fast. Do not trade Motion, map fidelity, or empty-state UX for a smaller spinner.
+
+**Local `dev:all`**
+
+- Vite HMR on :5173 plus Wrangler on :8787. No `tsc` / `vite build` on that path. Wrangler may serve a stub `apps/web/dist` from `ensure-web-dist.mjs`.
+- Production SPA on :8787 is `dev:e2e` (Playwright, OAuth, Stripe returns).
+- Vite `strictPort: true` on 5173. Leftover listeners: `dev:kill`.
+- Warm `AuthedApp`, `HotspotsView`, and `Map` in `vite.config.ts` `server.warmup.clientFiles`. Keep `optimizeDeps.exclude: ['maplibre-gl']`.
+
+**First authed paint**
+
+- Overlap work. Prefetch the lazy view that is about to render (Hotspots on `/hotspots`) while `/api/overview` runs. Do not start the MapLibre import only after overview returns.
+- Keep [`AuthedApp.tsx`](apps/web/src/AuthedApp.tsx) thin: no static `browser-import` / `@locations/db/pure` / GetStarted on the authed shell. Dynamic-import those in the effects or empty-state that need them. `MODE_DETECTOR_VERSION` comes from `@locations/db/rail`.
+- Do not un-lazy AuthedApp (that puts the explorer on the landing bundle). Do not lazy-split `Map.tsx` out of `HotspotsView` (that adds another full-pane spinner).
+- Closed UI must not contend with heatmap: Command Palette `useDays` / `usePlaceLabels` stay `enabled: open`. Share React Query keys for the same endpoint (`['public-config']` for `/api/config`, not a second `['map-config']`).
+- Nested `lazy()` for Admin, Globe, and Year Review so `/places` does not download them.
+
+**API and Worker**
+
+- Independent SQL in `Promise.all`. Overview date range is `min` / `max` / `count`, not every `day_stats` row. Source counts are `GROUP BY`, not 1+2N.
+- `withTenant` is for tenant rows only. Geocode, Nominatim, and OSRM run after commit (heatmap settlements, Day View routing). Batch `place_cache` reads.
+- Do not open a Neon WebSocket pool for ops-flag / `/api/config` reads. HTTP drizzle (`createHttpDb`) for those tiny lookups; close any probe pool. `requestDb` still ends its pool after the response.
+- Do not cap heatmap cells or change clustering to “go faster”. Payload shape and map density stay as they are.
+
+**Do not**
+
+- Production-build the SPA inside `dev:all`.
+- Fetch a full history table for a closed search box.
+- Hold an RLS transaction across live Nominatim.
+- Add heavy static imports to `apps/api/src/index.ts` when a request-time `import()` will do (Stripe is already lazy).
+- Strip Motion springs or restyle spinners as a performance shortcut.
+
 ### Testing
 
 All tests live under [`tests/`](tests/README.md). Do not colocate `*.test.ts` / `*.spec.ts` next to source.
@@ -428,3 +462,4 @@ Non-negotiables:
 - Do not ship interactive chrome without hover/active/release Motion springs.
 - Do not colocate `*.test.ts` / `*.spec.ts` next to source; do not put Playwright under `tests/unit/` or Vitest under `tests/e2e/`. See [`tests/README.md`](tests/README.md).
 - Do not put user-edited place names in global `place_cache`.
+- Do not production-build the SPA in `dev:all`; do not serialize a lazy map chunk behind `/api/overview`; do not hold `withTenant` across Nominatim or OSRM; do not fetch closed-UI data (command palette) on authed mount. See **Performance** above.
