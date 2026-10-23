@@ -60,6 +60,13 @@ export function computeTenantAggregates(
   activityRows: ActivityRow[],
   timezone?: string | null,
 ): { dayStats: DayStatsRow[]; analytics: Record<string, unknown> } {
+  // Rows arrive in whatever order the database returns them; lists in the output (a
+  // day's regions, a trip's places) follow input order, so sort first. The browser
+  // and the CLI then produce identical aggregates.
+  const byTime = <T extends { start: string; id?: number }>(a: T, b: T) =>
+    a.start < b.start ? -1 : a.start > b.start ? 1 : (a.id ?? 0) - (b.id ?? 0);
+  visitRows = [...visitRows].sort(byTime);
+  activityRows = [...activityRows].sort(byTime);
   const dayStats = buildDayStatRows(tenant, visitRows, activityRows);
   const store = buildStore(visitRows, activityRows, dayStats);
   const all = computeAllAnalytics(store, { timezone });

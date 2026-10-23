@@ -404,6 +404,18 @@ export function useLowMovementDays() {
   });
 }
 
+/** Whether the server has flagged this account's statistics for a browser rebuild. */
+export function useAggregatesStatus(enabled: boolean) {
+  const tenantKey = useTenantKey();
+  return useQuery<{ stale: boolean }>({
+    queryKey: ['aggregates-status', tenantKey],
+    queryFn: () => fetchJson('/api/aggregates/status'),
+    enabled: enabled && tenantKey !== 'anon',
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
 export function useInvalidateLocationQueries() {
   const queryClient = useQueryClient();
   const tenantKey = useTenantKey();

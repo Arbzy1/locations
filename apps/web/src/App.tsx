@@ -6,11 +6,14 @@ import type { TabId } from './types';
 import {
   useImportStatus,
   useInvalidateLocationQueries,
+  useAggregatesStatus,
   useOverview,
   usePublicConfig,
 } from './hooks/useApi';
 import { useSession, signOut } from './lib/auth';
-import { UnitsProvider } from './lib/units';
+import { UnitsProvider, useUnits } from './lib/units';
+import { rebuildAggregates } from './lib/import/browser-import';
+import { toast } from 'sonner';
 import { useTheme } from './lib/theme';
 import { loadNavExpanded, saveNavExpanded } from './lib/nav/nav-memory';
 import { interactiveMotion, reducedInteractiveMotion } from './lib/motion';
@@ -199,6 +202,7 @@ function AppContent() {
     poll: true,
   });
   const invalidateLocation = useInvalidateLocationQueries();
+  const { timezone: userTimezone } = useUnits();
   const { data: session } = useSession();
   const { moodName } = useTheme();
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
@@ -275,6 +279,26 @@ function AppContent() {
     }
     cutInPrev.current = snapshot;
   }, [importStatus, isDemo, sessionUserId, invalidateLocation]);
+
+  // Statistics are computed in the browser (Worker free-plan CPU limit). When the server
+  // flags them out of date (after an import, a delete or a timezone change), rebuild here.
+  const { data: aggregates, refetch: refetchAggregates } = useAggregatesStatus(!isDemo && !importing);
+  useEffect(() => {
+    if (!aggregates?.stale || isDemo || importing) return;
+    let cancelled = false;
+    const id = toast.loading('Updating your statistics…');
+    rebuildAggregates({ timezone: userTimezone })
+      .then(() => {
+        if (cancelled) return;
+        toast.success('Statistics up to date.', { id });
+        invalidateLocation();
+        void refetchAggregates();
+      })
+      .catch(() => toast.error('Could not update statistics. They will retry next time.', { id }));
+    return () => {
+      cancelled = true;
+    };
+  }, [aggregates?.stale, isDemo, importing, userTimezone, invalidateLocation, refetchAggregates]);
 
   useEffect(() => {
     if (isDemo || overviewLoading || importing || hasData) return;
