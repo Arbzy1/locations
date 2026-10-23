@@ -257,6 +257,18 @@ export async function startImportJob(
     maxSources: number;
   },
 ): Promise<{ status: 200; jobId: string; sourceId: string; label: string } | { status: 403 | 404 | 409 }> {
+  // A job that has not moved for 15 minutes died (e.g. an old upload killed by the CPU
+  // limit, or a closed tab); fail it so it cannot block a new import forever.
+  await db
+    .update(importJobs)
+    .set({ status: "error", error: "Import stopped without finishing. Upload the file again.", updatedAt: new Date() })
+    .where(
+      and(
+        eq(importJobs.tenant, tenant),
+        sql`${importJobs.status} in ('pending', 'processing')`,
+        sql`${importJobs.updatedAt} < now() - interval '15 minutes'`,
+      ),
+    );
   const [active] = await db
     .select({ id: importJobs.id })
     .from(importJobs)
