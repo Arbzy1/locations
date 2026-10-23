@@ -92,6 +92,8 @@ export const API_ROUTE_CATALOG: ApiRoute[] = [
   { method: "GET", path: "/api/aggregates/status", samplePath: "/api/aggregates/status", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
   { method: "GET", path: "/api/aggregates/input", samplePath: "/api/aggregates/input?table=visits", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
   { method: "POST", path: "/api/aggregates", samplePath: "/api/aggregates", auth: "session", demo: "denyWrite", idScope: "none", rateLimited: false },
+  { method: "GET", path: "/api/journeys/detect-input", samplePath: "/api/journeys/detect-input", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
+  { method: "POST", path: "/api/journeys/modes", samplePath: "/api/journeys/modes", auth: "session", demo: "denyWrite", idScope: "none", rateLimited: false },
   { method: "GET", path: "/api/on-this-day", samplePath: "/api/on-this-day?date=2024-06-01", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
   { method: "PATCH", path: "/api/overrides", samplePath: "/api/overrides", auth: "session", demo: "denyWrite", idScope: "none", rateLimited: false },
   { method: "DELETE", path: "/api/places/:key/data", samplePath: "/api/places/g%3Aother/data", auth: "session", demo: "denyWrite", idScope: "none", rateLimited: false },

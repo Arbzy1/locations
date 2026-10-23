@@ -28,6 +28,7 @@ import {
   verification,
   makeRouteCacheKey,
   makeCoordPlaceKey,
+  cleanTrace,
   makeRailArc,
   makeTraceCacheKey,
   snapGeometry,
@@ -248,13 +249,14 @@ const SNAP_MAX_M = 500;
 
 /**
  * How a journey line was drawn, from most to least trustworthy:
+ * - `gps-rail`: recorded GPS fixes followed along the railway (computed in the browser)
  * - `gps-road`: recorded GPS fixes snapped onto roads (OSRM map matching / via points)
  * - `gps`: straight lines between recorded GPS fixes
  * - `road-estimate`: no fixes; fastest road route between start and end
  * - `rail-arc`: no fixes; drawn curve between stations
  * - `straight`: no fixes and no road route
  */
-export type RouteSource = "gps-road" | "gps" | "road-estimate" | "rail-arc" | "straight";
+export type RouteSource = "gps-rail" | "gps-road" | "gps" | "road-estimate" | "rail-arc" | "straight";
 
 type RoutedLine = { geometry: [number, number][]; steps: RouteStep[] };
 type RouteAttempt = RoutedLine | "rejected" | "error";
@@ -459,15 +461,21 @@ export async function routeActivity(
   budget?: LiveLookupBudget,
 ): Promise<RoutedLine & { source: RouteSource; gpsPoints: number }> {
   const gpsPoints = a.path?.length ?? 0;
-  const trace = journeyTrace(
+  const rail = a.mode === "train" || a.mode === "subway";
+  if (rail && a.railGeometry && a.railGeometry.length >= 2) {
+    return { geometry: a.railGeometry, steps: [], source: "gps-rail", gpsPoints };
+  }
+  const raw = journeyTrace(
     anchors
       ? { ...a, startLat: anchors.start[0], startLon: anchors.start[1], endLat: anchors.end[0], endLon: anchors.end[1] }
       : a,
   );
+  // GPS spikes would drag a matched road line (and a raw trace) kilometres off course.
+  const trace = raw ? cleanTrace(raw) : null;
   if (trace && trace.length >= 3) {
     if (!RAW_TRACE_MODES.has(a.mode)) {
       const road = await fetchTraceRoute(db, trace, a.mode, a.distanceMeters, budget);
-      if (road) return { ...road, source: "gps-road", gpsPoints };
+      if (road && roadFollowsFixes(trace.slice(1, -1), road.geometry)) return { ...road, source: "gps-road", gpsPoints };
     }
     return {
       geometry: trace.map((p) => [p[0], p[1]] as [number, number]),
@@ -485,6 +493,16 @@ export async function routeActivity(
     source: estimate.steps.length ? "road-estimate" : "straight",
     gpsPoints,
   };
+}
+
+/**
+ * A matched road line is only drawn when it stays with the GPS fixes. A train labelled
+ * as driving, or a match onto the wrong road, strays far from them; then the fixes
+ * themselves are the better line.
+ */
+export function roadFollowsFixes(fixes: ReadonlyArray<readonly [number, number, ...number[]]>, line: [number, number][]): boolean {
+  const dev = traceDeviation(fixes, line);
+  return !dev || (dev.medianM <= 80 && dev.within100Pct >= 70);
 }
 
 /** Routing mode for a gap with no recorded journey, guessed from implied speed. */
@@ -1230,9 +1248,21 @@ export async function buildDay(
     const route = await routeActivity(db, a, anchors, routeBudget);
     const d = activityToApi(a) as Record<string, unknown>;
     d.note = overrides.get(`activity|${a.start}`)?.note ?? null;
-    const googleMode = originalModes.get(a.start);
-    d.mode_corrected = Boolean(googleMode && googleMode !== a.mode);
+    // Google's label: kept on the row once detection or a correction changed its mode.
+    const googleMode = a.googleMode ?? originalModes.get(a.start);
+    const userMode = overrides.get(`activity|${a.start}`)?.mode;
+    d.mode_corrected = Boolean(userMode && googleMode && googleMode !== a.mode);
     if (d.mode_corrected) d.google_mode = googleMode;
+    // Changed from Google's label by GPS detection (not by the user): badge plus undo.
+    else if (!userMode && a.googleMode && a.googleMode !== a.mode) {
+      d.mode_detected = true;
+      d.google_mode = a.googleMode;
+    }
+    if (a.modeDetail) d.mode_by = a.modeDetail.by;
+    // "Might be a train": a medium-confidence detection the user can accept.
+    if (a.modeDetail?.confidence === "medium" && a.modeDetail.mode !== a.mode && !d.mode_corrected) {
+      d.mode_hint = a.modeDetail.mode;
+    }
 
     const snapStart = snapTo(prevStop, anchors.start);
     const snapEnd = snapTo(nextStop, anchors.end);
@@ -2159,6 +2189,27 @@ const OVERRIDE_NOTE_MAX = 500;
  * Save or clear the user's note and mode fix for one stay or journey. Clearing both
  * deletes the row. Validates against the tenant's own item so ids cannot be probed.
  */
+/**
+ * Write a journey's corrected mode into its row as well, so mileage by mode, Routes and
+ * statistics follow it (not only Day View). No correction means Google's label again;
+ * `google_mode` keeps that label whenever the row's mode differs from it.
+ */
+async function syncJourneyMode(db: ReturnType<typeof createDb>, tenant: TenantId, start: string, mode: string | null) {
+  const where = and(eq(activities.tenant, tenant), eq(activities.start, start));
+  const rows = await db.select({ mode: activities.mode, googleMode: activities.googleMode }).from(activities).where(where);
+  const changes = rows.some((r) => r.mode !== (mode ?? r.googleMode ?? r.mode));
+  if (!changes) return;
+  await db
+    .update(activities)
+    .set(
+      mode
+        ? { mode, googleMode: sql`coalesce(${activities.googleMode}, ${activities.mode})` }
+        : { mode: sql`coalesce(${activities.googleMode}, ${activities.mode})`, googleMode: null, modeDetail: null },
+    )
+    .where(where);
+  await markAggregatesStale(db, tenant);
+}
+
 export async function saveTimelineOverride(
   db: ReturnType<typeof createDb>,
   tenant: TenantId,
@@ -2189,6 +2240,7 @@ export async function saveTimelineOverride(
     .where(and(eq(table.tenant, tenant), eq(table.start, start)))
     .limit(1);
   if (!exists.length) return { error: "Not found" as const, status: 404 as const };
+  if (kind === "activity") await syncJourneyMode(db, tenant, start, mode);
 
   const where = and(
     eq(timelineOverrides.tenant, tenant),

@@ -51,7 +51,7 @@ export interface Activity {
   has_osrm_route?: boolean;
   is_rail?: boolean;
   /** How the line was drawn; see `RouteSource` in apps/api/src/services.ts. */
-  route_source?: 'gps-road' | 'gps' | 'road-estimate' | 'rail-arc' | 'straight';
+  route_source?: 'gps-rail' | 'gps-road' | 'gps' | 'road-estimate' | 'rail-arc' | 'straight';
   /** Recorded GPS fixes behind this journey (Timeline `timelinePath`). */
   gps_points?: number;
   /** Start, recorded GPS fixes, end, joined to the same stops as `route_geometry`. */
@@ -72,7 +72,14 @@ export interface Activity {
   note?: string | null;
   /** True when the user corrected Google's transport mode. */
   mode_corrected?: boolean;
+  /** True when GPS detection changed Google's mode (e.g. a train labelled as driving). */
+  mode_detected?: boolean;
+  /** Google's label, when corrected or detected. */
   google_mode?: string;
+  /** A mode the GPS points suggest but not strongly enough to change it ("Might be a train"). */
+  mode_hint?: string;
+  /** What the detection went on: GPS points on a railway, or their speed. */
+  mode_by?: 'rail' | 'speed';
 }
 
 export interface Connector {

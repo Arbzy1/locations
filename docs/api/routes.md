@@ -62,9 +62,11 @@ All other `/api/*` require a session.
 | POST | `/api/import/start` | not demo; verified; entitlement; row and source quotas; opens a browser import job; 409 if one is running |
 | POST | `/api/import/:jobId/rows` | not demo; validated batch of up to 250 rows / 256 KB; 404 unless the tenant's open job |
 | POST | `/api/import/:jobId/finish` | not demo; Timeline trips; marks aggregates stale and the job ready |
-| GET | `/api/aggregates/status` | `{ stale }` |
+| GET | `/api/aggregates/status` | `{ stale, modeVersion }` (detector version last applied, or null) |
 | GET | `/api/aggregates/input` | `table=visits\|activities&after=`; 500 rows, no GPS paths |
 | POST | `/api/aggregates` | not demo; browser-computed `dayStats` / `analytics` chunks; `reset`, `done` |
+| GET | `/api/journeys/detect-input` | `after=`; 200 journeys with GPS paths, `googleMode`, `hasDetail`, `hasRail`, `overridden`; `version` on the first page |
+| POST | `/api/journeys/modes` | not demo; at most 250 `{ id, mode, googleMode, modeDetail, railGeometry }` (validated, rail line at most 300 points), optional `doneVersion`; returns `{ changed }` |
 | POST | `/api/billing/checkout` | `{ interval: monthly\|yearly }`; rate-limited |
 | POST | `/api/billing/portal` | rate-limited |
 | POST | `/api/account/delete` | GDPR wipe inside `withTenant`; R2 prefixes paged |

@@ -30,6 +30,7 @@
     "db:import": "npm run import -w @locations/db --",
     "db:import-demo": "node scripts/import-demo.mjs",
     "db:warm-routes": "npm run warm-routes -w @locations/db --",
+    "rail:build": "node scripts/rail/build-rail-tiles.mjs",
     "brim:check": "tsx scripts/brim/check.mjs",
     "brim:load-zones": "tsx scripts/brim/load-zones.mjs",
     "brim:verify-zones": "tsx scripts/brim/verify-zones.mjs",

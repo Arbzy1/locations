@@ -407,7 +407,7 @@ export function useLowMovementDays() {
 /** Whether the server has flagged this account's statistics for a browser rebuild. */
 export function useAggregatesStatus(enabled: boolean) {
   const tenantKey = useTenantKey();
-  return useQuery<{ stale: boolean }>({
+  return useQuery<{ stale: boolean; modeVersion: number | null }>({
     queryKey: ['aggregates-status', tenantKey],
     queryFn: () => fetchJson('/api/aggregates/status'),
     enabled: enabled && tenantKey !== 'anon',

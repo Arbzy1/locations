@@ -2,8 +2,8 @@
  * Browser-driven import for the Workers free plan (10 ms CPU per request): the export is
  * parsed and aggregated in a Web Worker, and the server only stores small batches.
  */
-import { importDayDiff, timezoneSkewWarning } from '@locations/db/pure';
-import type { ParsedExport, WorkerRequest, WorkerResponse } from './import-types';
+import { MODE_DETECTOR_VERSION, importDayDiff, timezoneSkewWarning } from '@locations/db/pure';
+import type { DetectInputRow, ParsedExport, WorkerRequest, WorkerResponse } from './import-types';
 
 /** Target request size. Long GPS paths make bytes, not rows, the server's CPU cost. */
 const BATCH_TARGET_BYTES = 120 * 1024;
@@ -268,4 +268,42 @@ export function rebuildAggregates(opts: {
     rebuilding = null;
   });
   return rebuilding;
+}
+
+let detecting: Promise<{ checked: number; changed: number }> | null = null;
+
+/**
+ * Check every stored GPS journey for trains Google labelled as driving (and similar
+ * mislabels) in the browser, then write back only the rows that change. Safe to rerun:
+ * detection always starts from Google's label. Flags aggregates stale when modes change.
+ */
+export function detectJourneyModes(opts?: { onProgress?: (p: ImportProgress) => void }): Promise<{ checked: number; changed: number }> {
+  if (detecting) return detecting;
+  detecting = (async () => {
+    const progress = opts?.onProgress ?? (() => undefined);
+    let after = 0;
+    let checked = 0;
+    let changed = 0;
+    for (;;) {
+      const page = await api<{ rows: DetectInputRow[]; next: number | null }>(`/api/journeys/detect-input?after=${after}`);
+      const result = (await runInWorker({ type: 'detect', rows: page.rows })) as Extract<WorkerResponse, { type: 'detected' }>;
+      checked += result.checked;
+      // Rail lines make some rows a few KB: batch by bytes like the import does.
+      for (const batch of planBatches([], result.updates)) {
+        const res = await api<{ changed: number }>('/api/journeys/modes', {
+          method: 'POST',
+          body: JSON.stringify({ updates: batch.activities }),
+        });
+        changed += res.changed;
+      }
+      progress({ stage: 'Checking your journeys for trains', done: checked, total: 0 });
+      if (page.next === null) break;
+      after = page.next;
+    }
+    await api('/api/journeys/modes', { method: 'POST', body: JSON.stringify({ doneVersion: MODE_DETECTOR_VERSION }) });
+    return { checked, changed };
+  })().finally(() => {
+    detecting = null;
+  });
+  return detecting;
 }

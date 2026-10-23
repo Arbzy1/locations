@@ -28,6 +28,7 @@ const BATCH = 500;
 export * from "./timeline-parse.js";
 export { buildDayStatRows, computeTenantAggregates } from "./aggregates.js";
 import { namedTripsFromMemories, parseTimelineJson } from "./timeline-parse.js";
+import { applyModeDetection, type RailIndex } from "./rail.js";
 import { computeTenantAggregates } from "./aggregates.js";
 
 /** Rebuild day_stats + analytics_cache for a tenant from all sources. */
@@ -158,6 +159,11 @@ export async function importSourceData(
     merge?: boolean;
     skipOverlappingDays?: boolean;
     aggregates?: AggregateMode;
+    /**
+     * Run GPS mode detection (trains labelled as driving etc.). A RailIndex adds rail
+     * matching; null runs the speed checks only. Omitted: keep Google's labels.
+     */
+    rail?: RailIndex | null;
   },
 ): Promise<{ visitCount: number; activityCount: number; days: number }> {
   const { tenant, sourceId } = opts;
@@ -195,6 +201,7 @@ export async function importSourceData(
     tenant,
     sourceId,
   }));
+  if (opts.rail !== undefined) activityDrafts = applyModeDetection(activityDrafts, opts.rail);
   const activityRows = activityDrafts.map((a) => ({
     ...a,
     tenant,
