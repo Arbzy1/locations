@@ -42,6 +42,8 @@ import { handleChargesForRoute, handleVehicleCompliance, handleZones } from "./c
 type Variables = {
   user: { id: string; email: string; name: string; role: string } | null;
   tenant: string;
+  /** Neon pools opened by the request, closed after the response (index.ts). */
+  pools: { end: () => Promise<void> }[];
 };
 
 type BrimApp = Hono<{ Bindings: Env; Variables: Variables }>;
