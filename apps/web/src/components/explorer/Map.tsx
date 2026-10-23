@@ -1014,6 +1014,14 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       touchPitch: !compact,
     });
     mapRef.current = map;
+    // Debug aid for browser tests: localStorage.debugMap = '1' exposes the map instance.
+    try {
+      if (window.localStorage.getItem('debugMap') === '1') {
+        (window as unknown as { __locMap?: MLMap }).__locMap = map;
+      }
+    } catch {
+      /* storage blocked */
+    }
     if (!compact) {
       // Corners: Layers top-right, zoom bottom-right on desktop (bottom sheets cover it on
       // phones, so it stays top-left there), playback and page actions bottom-left.
@@ -1063,11 +1071,26 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     map.setStyle(styleSpec);
   }, [styleKey, styleSpec]);
 
+  const syncPending = useRef(false);
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !overlayReady.current && !map.isStyleLoaded()) return;
-    if (!map.isStyleLoaded()) return;
-    syncOverlays(map);
+    if (!map) return;
+    if (map.isStyleLoaded()) {
+      syncOverlays(map);
+      return;
+    }
+    // isStyleLoaded() is also false while tiles are still downloading, after style.load
+    // has fired, so a skipped update (heatmap data arriving on a cold visit) was lost
+    // until a reload. Retry on the first frame the style reports loaded.
+    if (syncPending.current) return;
+    syncPending.current = true;
+    const retry = () => {
+      if (!map.isStyleLoaded()) return;
+      map.off('render', retry);
+      syncPending.current = false;
+      syncOverlaysRef.current(map);
+    };
+    map.on('render', retry);
   }, [syncOverlays]);
 
   useEffect(() => {

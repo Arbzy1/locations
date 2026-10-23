@@ -316,7 +316,7 @@ export default function HotspotsView() {
     setParams(out);
     if (point) setPanelOpen(true);
   };
-  const { data: heatmapPoints, isLoading } = useHeatmap({
+  const { data: heatmapPoints, isLoading, isError, refetch } = useHeatmap({
     from: from || undefined,
     to: to || undefined,
     sources: sourceIds.length ? sourceIds : undefined,
@@ -462,7 +462,11 @@ export default function HotspotsView() {
         Hotspots
       </h2>
       <p className="mt-1 text-sm text-text-muted">
-        {heatmapPoints ? `${filteredAreas.length} of ${heatmapPoints.length} locations` : 'Loading...'}
+        {heatmapPoints
+          ? `${filteredAreas.length} of ${heatmapPoints.length} locations`
+          : isError
+            ? 'Heatmap did not load.'
+            : 'Loading...'}
       </p>
       <p className="mt-2 text-xs leading-relaxed text-text-muted">
         Tap a row for details and to zoom the map. Tags mark top spots on the map.
@@ -640,7 +644,14 @@ export default function HotspotsView() {
 
   const listBody = (
     <>
-      {isLoading ? (
+      {isError && !heatmapPoints ? (
+        <div className="flex flex-col items-start gap-3 p-4 text-sm text-text-muted">
+          <p>The heatmap did not load. Your data is safe; this is usually a brief server hiccup.</p>
+          <Button size="sm" title="Try loading the heatmap again" onClick={() => void refetch()}>
+            Try again
+          </Button>
+        </div>
+      ) : isLoading ? (
         <div className="p-4 text-sm text-text-muted">Loading heatmap data...</div>
       ) : (
         <div className="p-2">
