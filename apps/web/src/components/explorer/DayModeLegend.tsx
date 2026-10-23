@@ -2,9 +2,12 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
-import { enterMotion, reducedEnterMotion } from '../../lib/motion';
+import { enterMotion } from '../../lib/motion';
 import { modeColorVar, type JourneyColoring } from '../../lib/map/journeyColors';
 import { MODE_LABELS } from '../../types';
+
+/** prefers-reduced-motion: opacity only, about 80 ms. */
+const reducedFade = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.08 } };
 
 /** Same dash patterns as the map's journey layers (Map.tsx `dashLayers`), in SVG units. */
 const DASH: Record<string, string | undefined> = {
@@ -38,7 +41,7 @@ export default function DayModeLegend({
   onClearFocus: () => void;
 }) {
   const reduce = useReducedMotion();
-  const motionProps = reduce ? reducedEnterMotion : enterMotion;
+  const motionProps = reduce ? reducedFade : enterMotion;
   if (!modes.length) return null;
   return (
     <div
