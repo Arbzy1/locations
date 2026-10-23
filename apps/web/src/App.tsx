@@ -12,7 +12,8 @@ import {
 } from './hooks/useApi';
 import { useSession, signOut } from './lib/auth';
 import { UnitsProvider, useUnits } from './lib/units';
-import { rebuildAggregates } from './lib/import/browser-import';
+import { detectJourneyModes, rebuildAggregates } from './lib/import/browser-import';
+import { MODE_DETECTOR_VERSION } from '@locations/db/pure';
 import { toast } from 'sonner';
 import { useTheme } from './lib/theme';
 import { loadNavExpanded, saveNavExpanded } from './lib/nav/nav-memory';
@@ -277,8 +278,29 @@ function AppContent() {
   // Statistics are computed in the browser (Worker free-plan CPU limit). When the server
   // flags them out of date (after an import, a delete or a timezone change), rebuild here.
   const { data: aggregates, refetch: refetchAggregates } = useAggregatesStatus(!isDemo && !importing);
+  // Journeys are checked once per detector version for trains Google labelled as driving
+  // (and similar). It runs before the statistics rebuild, which picks up the new modes.
+  const modesOutdated = Boolean(aggregates) && aggregates?.modeVersion !== MODE_DETECTOR_VERSION;
   useEffect(() => {
-    if (!aggregates?.stale || isDemo || importing) return;
+    if (!modesOutdated || isDemo || importing) return;
+    let cancelled = false;
+    const id = toast.loading('Checking your journeys for trains…');
+    detectJourneyModes()
+      .then(({ changed }) => {
+        if (cancelled) return;
+        if (changed) {
+          toast.success(`Fixed the transport mode of ${changed} ${changed === 1 ? 'journey' : 'journeys'} from your GPS points.`, { id });
+          invalidateLocation();
+        } else toast.dismiss(id);
+        void refetchAggregates();
+      })
+      .catch(() => toast.error('Could not check your journeys. It will retry next time.', { id }));
+    return () => {
+      cancelled = true;
+    };
+  }, [modesOutdated, isDemo, importing, invalidateLocation, refetchAggregates]);
+  useEffect(() => {
+    if (!aggregates?.stale || modesOutdated || isDemo || importing) return;
     let cancelled = false;
     const id = toast.loading('Updating your statistics…');
     rebuildAggregates({ timezone: userTimezone })
@@ -292,7 +314,7 @@ function AppContent() {
     return () => {
       cancelled = true;
     };
-  }, [aggregates?.stale, isDemo, importing, userTimezone, invalidateLocation, refetchAggregates]);
+  }, [aggregates?.stale, modesOutdated, isDemo, importing, userTimezone, invalidateLocation, refetchAggregates]);
 
   useEffect(() => {
     if (isDemo || overviewLoading || importing || hasData) return;

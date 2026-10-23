@@ -11,6 +11,7 @@ import {
   UNKNOWN_MOVEMENT_HINT,
 } from '../../lib/explorer/dayPlayback';
 import { cn } from '../../lib/utils';
+import ModeDetectionChip from './ModeDetectionChip';
 import {
   MapPin,
   Footprints,
@@ -559,6 +560,7 @@ export default function Timeline({
                         via {mainRoads.join(' → ')}
                       </div>
                     )}
+                    <ModeDetectionChip activity={a} editable={editable} />
                     {a.note && <p className="mt-1 text-xs text-text whitespace-pre-line">{a.note}</p>}
                     <ActivitySteps activity={a} />
                   </div>
@@ -570,7 +572,8 @@ export default function Timeline({
                   start={a.start}
                   note={a.note}
                   mode={a.mode}
-                  googleMode={a.mode_corrected ? a.google_mode : null}
+                  googleMode={a.mode_corrected || a.mode_detected ? a.google_mode : null}
+                  detected={a.mode_detected}
                 />
               )}
             </div>

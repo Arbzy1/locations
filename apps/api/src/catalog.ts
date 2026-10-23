@@ -25,6 +25,7 @@ import {
   makeCoordPlaceKey,
   markAggregatesStale,
   METERS_TO_MILES,
+  type PathPoint,
   type TenantId,
 } from "@locations/db";
 
@@ -693,6 +694,7 @@ export async function getRouteLines(
       distanceMeters: activities.distanceMeters,
       sourceId: activities.sourceId,
       path: activities.path,
+      railGeometry: activities.railGeometry,
     })
     .from(activities)
     .where(and(eq(activities.tenant, tenant), gte(activities.date, from), lte(activities.date, to)))
@@ -711,7 +713,12 @@ export async function getRouteLines(
     const m = (modes[a.mode] ??= { count: 0, miles: 0 });
     m.count += 1;
     m.miles += miles;
-    const trace = journeyTrace(a);
+    // Trains follow the tracks when the browser has worked out the rail line.
+    const railLine =
+      (a.mode === "train" || a.mode === "subway") && a.railGeometry && a.railGeometry.length >= 2
+        ? a.railGeometry.map(([lat, lon]) => [lat, lon, 0] as PathPoint)
+        : null;
+    const trace = railLine ?? journeyTrace(a);
     const pts = trace
       ? thinTrace(trace, { minSpacingM, maxPoints: 200 })
       : [

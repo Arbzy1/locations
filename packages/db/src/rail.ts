@@ -76,7 +76,10 @@ export class RailIndex {
   private readonly buckets = new Map<string, number[]>();
   private readonly stations = new Map<string, [number, number][]>();
 
-  constructor(tiles: Iterable<RailTile>, readonly coverage: RailCoverage | null = null) {
+  readonly coverage: RailCoverage | null;
+
+  constructor(tiles: Iterable<RailTile>, coverage: RailCoverage | null = null) {
+    this.coverage = coverage;
     for (const tile of tiles) {
       for (const line of tile.lines) {
         for (let i = 1; i < line.c.length; i++) {
@@ -486,4 +489,47 @@ export function snapTraceToRail(trace: PathPoint[], rail: RailIndex): [number, n
   if (followed < legs * 0.6) return null;
   const thinned = thinTrace(out, { minSpacingM: 10, maxPoints: MAX_RAIL_GEOMETRY_POINTS });
   return thinned.map((p) => [Math.round(p[0] * 1e5) / 1e5, Math.round(p[1] * 1e5) / 1e5]);
+}
+
+export type JourneyModeFields = {
+  mode: string;
+  googleMode: string | null;
+  modeDetail: ModeDetection | null;
+  railGeometry: [number, number][] | null;
+};
+
+const RAIL_MODES = new Set(["train", "subway"]);
+
+/**
+ * Final mode fields for one journey. Starts from Google's label (`googleMode` when an
+ * earlier run changed it), so running it again with a newer detector is safe.
+ */
+export function detectedModeFields(
+  row: DetectableJourney & { googleMode?: string | null },
+  rail: RailIndex | null,
+): JourneyModeFields {
+  const original = row.googleMode ?? row.mode;
+  const d = detectJourneyMode({ ...row, mode: original }, rail);
+  const mode = d?.confidence === "high" ? d.mode : original;
+  const trace = rail && RAIL_MODES.has(mode) ? journeyTrace(row) : null;
+  return {
+    mode,
+    googleMode: mode !== original ? original : null,
+    modeDetail: d,
+    railGeometry: trace && trace.length >= 3 ? snapTraceToRail(trace, rail!) : null,
+  };
+}
+
+/** Every point a set of journeys touches, for picking which rail tiles to load. */
+export function* journeyPoints(rows: Iterable<DetectableJourney>): Generator<[number, number]> {
+  for (const r of rows) {
+    yield [r.startLat, r.startLon];
+    for (const p of r.path ?? []) yield [p[0], p[1]];
+    yield [r.endLat, r.endLon];
+  }
+}
+
+/** Detect modes for freshly parsed journeys; returns new rows with the mode fields set. */
+export function applyModeDetection<T extends DetectableJourney>(rows: T[], rail: RailIndex | null): (T & JourneyModeFields)[] {
+  return rows.map((r) => ({ ...r, ...detectedModeFields(r, rail) }));
 }

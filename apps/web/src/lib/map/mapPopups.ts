@@ -70,7 +70,9 @@ export function activityPopupHtml(
   const fixes = a.gps_points ?? 0;
   const fixText = `${fixes} recorded GPS point${fixes === 1 ? '' : 's'}`;
   let routeNote: string;
-  if (a.route_source === 'gps-road') {
+  if (a.route_source === 'gps-rail') {
+    routeNote = `<strong>Rail route</strong>: Follows the railway between your ${fixText}.`;
+  } else if (a.route_source === 'gps-road') {
     routeNote = `<strong>GPS route</strong>: Follows your ${fixText}, snapped onto roads.`;
   } else if (a.route_source === 'gps') {
     routeNote = `<strong>GPS trace</strong>: Straight lines between your ${fixText}.`;
@@ -82,6 +84,9 @@ export function activityPopupHtml(
     routeNote = '<strong>Predicted route</strong>: No GPS points for this journey, so this is the fastest road route between start and end. Actual route may differ.';
   } else {
     routeNote = '<strong>Straight line</strong>: Route could not be determined from road data.';
+  }
+  if (a.mode_detected && a.google_mode) {
+    routeNote += ` Google labelled this ${escapeHtml((MODE_LABELS[a.google_mode] || a.google_mode).toLowerCase())}; your GPS points say ${escapeHtml(mode.toLowerCase())}.`;
   }
   const midLat = (a.start_lat + a.end_lat) / 2;
   const midLon = (a.start_lon + a.end_lon) / 2;

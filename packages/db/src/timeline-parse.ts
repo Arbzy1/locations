@@ -4,6 +4,7 @@
  * the Worker free plan cannot afford the CPU.
  */
 import type { PathPoint } from "./schema.js";
+import type { ModeDetection } from "./rail.js";
 import {
   classifyLocation,
   haversineM,
@@ -75,6 +76,10 @@ export type ActivityDraft = {
   distanceMeters: number;
   durationMinutes: number;
   path: PathPoint[] | null;
+  /** Set by GPS mode detection (`applyModeDetection` in rail.ts), not by parsing. */
+  googleMode?: string | null;
+  modeDetail?: ModeDetection | null;
+  railGeometry?: [number, number][] | null;
 };
 
 /** A trip Google itself recognised (Timeline `timelineMemory`). */

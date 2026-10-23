@@ -22,6 +22,8 @@ import {
   namedTripsFromMemories,
   sql,
   visits,
+  timelineOverrides,
+  type ModeDetection,
   type PathPoint,
   type TenantId,
   type TimelineMemory,
@@ -98,7 +100,67 @@ export type ActivityInput = {
   distanceMeters: number;
   durationMinutes: number;
   path: PathPoint[] | null;
+} & ModeFieldsInput;
+
+/** GPS mode detection results the browser computed for a journey. */
+export type ModeFieldsInput = {
+  googleMode: string | null;
+  modeDetail: ModeDetection | null;
+  railGeometry: [number, number][] | null;
 };
+
+/** Largest rail-snapped line accepted per journey. */
+export const MAX_RAIL_GEOMETRY_POINTS = 300;
+
+/**
+ * Validate detection fields: modes from the known set, a small fixed-shape detail
+ * object (rebuilt, never stored as sent) and a capped line of finite coordinates.
+ */
+export function checkModeFields(x: Record<string, unknown>): Check<ModeFieldsInput> {
+  const g = x.googleMode;
+  if (g !== null && g !== undefined && (typeof g !== "string" || !MODES.has(g))) {
+    return { ok: false, error: "unknown original journey mode" };
+  }
+  let modeDetail: ModeDetection | null = null;
+  const d = x.modeDetail;
+  if (d !== null && d !== undefined) {
+    if (
+      !isObj(d) ||
+      typeof d.mode !== "string" ||
+      !MODES.has(d.mode) ||
+      (d.confidence !== "high" && d.confidence !== "medium") ||
+      (d.by !== "rail" && d.by !== "speed") ||
+      !(d.railPct === null || num(d.railPct, 0, 100)) ||
+      !num(d.medianKmh, 0, 5000) ||
+      !(Number.isInteger(d.v) && num(d.v, 1, 1000))
+    ) {
+      return { ok: false, error: "mode detail invalid" };
+    }
+    modeDetail = {
+      mode: d.mode,
+      confidence: d.confidence,
+      by: d.by,
+      railPct: d.railPct as number | null,
+      medianKmh: d.medianKmh as number,
+      v: d.v as number,
+    };
+  }
+  let railGeometry: [number, number][] | null = null;
+  const r = x.railGeometry;
+  if (r !== null && r !== undefined) {
+    if (!Array.isArray(r) || r.length < 2 || r.length > MAX_RAIL_GEOMETRY_POINTS) {
+      return { ok: false, error: "rail line invalid" };
+    }
+    railGeometry = [];
+    for (const p of r) {
+      if (!Array.isArray(p) || p.length !== 2 || !num(p[0], -90, 90) || !num(p[1], -180, 180)) {
+        return { ok: false, error: "rail line point invalid" };
+      }
+      railGeometry.push([p[0], p[1]]);
+    }
+  }
+  return { ok: true, value: { googleMode: (g as string | null | undefined) ?? null, modeDetail, railGeometry } };
+}
 
 /** Validate one stay from the browser; only known fields are copied. */
 export function checkVisit(x: unknown): Check<VisitInput> {
@@ -163,9 +225,12 @@ export function checkActivity(x: unknown): Check<ActivityInput> {
       path.push([p[0], p[1], p[2]]);
     }
   }
+  const modeFields = checkModeFields(x);
+  if (!modeFields.ok) return modeFields;
   return {
     ok: true,
     value: {
+      ...modeFields.value,
       start: x.start as string,
       end: x.end as string,
       date: x.date as string,
@@ -353,12 +418,13 @@ export async function appendImportRows(
   if (rows.activities.length) {
     await db.execute(sql`
       insert into activities (tenant, source_id, start, "end", date, start_lat, start_lon, end_lat, end_lon, mode,
-        distance_meters, duration_minutes, path)
+        distance_meters, duration_minutes, path, google_mode, mode_detail, rail_geometry)
       select ${tenant}, ${job.sourceId}, x.start, x."end", x.date, x."startLat", x."startLon", x."endLat", x."endLon",
-        x.mode, x."distanceMeters", x."durationMinutes", x.path
+        x.mode, x."distanceMeters", x."durationMinutes", x.path, x."googleMode", x."modeDetail", x."railGeometry"
       from jsonb_to_recordset(${JSON.stringify(rows.activities)}::jsonb) as x(
         start text, "end" text, date text, "startLat" real, "startLon" real, "endLat" real, "endLon" real, mode text,
-        "distanceMeters" real, "durationMinutes" real, path jsonb)`);
+        "distanceMeters" real, "durationMinutes" real, path jsonb, "googleMode" text, "modeDetail" jsonb,
+        "railGeometry" jsonb)`);
   }
   await db
     .update(importJobs)
@@ -510,7 +576,8 @@ export async function writeAggregates(
     await db.delete(dayStats).where(eq(dayStats.tenant, tenant));
     await db
       .delete(analyticsCache)
-      .where(and(eq(analyticsCache.tenant, tenant), sql`${analyticsCache.key} <> ${AGGREGATES_STALE_KEY}`));
+      // Internal `_` keys (stale flag, mode-detection version) are not aggregates.
+      .where(and(eq(analyticsCache.tenant, tenant), sql`left(${analyticsCache.key}, 1) <> '_'`));
   }
   if (chunk.dayStats.length) {
     // Same single-parameter bulk insert as appendImportRows (CPU budget).
@@ -537,4 +604,104 @@ export async function writeAggregates(
       .delete(analyticsCache)
       .where(and(eq(analyticsCache.tenant, tenant), eq(analyticsCache.key, AGGREGATES_STALE_KEY)));
   }
+}
+
+/** analytics_cache key holding the detector version the browser last finished with. */
+export const MODE_DETECTION_KEY = "_mode_detection";
+/** GPS journeys per detection-input page (paths are the heavy field). */
+export const MODE_DETECT_PAGE = 200;
+
+/** Detector version this tenant's journeys were last checked with, or null. */
+export async function modeDetectionVersion(db: Db, tenant: TenantId): Promise<number | null> {
+  const [row] = await db
+    .select({ data: analyticsCache.data })
+    .from(analyticsCache)
+    .where(and(eq(analyticsCache.tenant, tenant), eq(analyticsCache.key, MODE_DETECTION_KEY)))
+    .limit(1);
+  const v = (row?.data as { v?: unknown } | undefined)?.v;
+  return typeof v === "number" ? v : null;
+}
+
+/**
+ * One page of journeys with GPS fixes for the browser to check. Journeys whose mode
+ * the user corrected by hand are flagged so detection leaves them alone.
+ */
+export async function modeDetectInputPage(db: Db, tenant: TenantId, afterId: number, limit = MODE_DETECT_PAGE) {
+  return db
+    .select({
+      id: activities.id,
+      start: activities.start,
+      end: activities.end,
+      startLat: activities.startLat,
+      startLon: activities.startLon,
+      endLat: activities.endLat,
+      endLon: activities.endLon,
+      mode: activities.mode,
+      googleMode: activities.googleMode,
+      distanceMeters: activities.distanceMeters,
+      path: activities.path,
+      hasDetail: sql<boolean>`${activities.modeDetail} is not null`,
+      hasRail: sql<boolean>`${activities.railGeometry} is not null`,
+      overridden: sql<boolean>`exists (
+        select 1 from ${timelineOverrides} o
+        where o.tenant = ${tenant} and o.kind = 'activity' and o.item_start = ${activities.start} and o.mode is not null)`,
+    })
+    .from(activities)
+    .where(and(eq(activities.tenant, tenant), gt(activities.id, afterId), sql`${activities.path} is not null`))
+    .orderBy(asc(activities.id))
+    .limit(limit);
+}
+
+export type ModeUpdate = { id: number; mode: string } & ModeFieldsInput;
+
+/** Validate a detection write: at most IMPORT_BATCH_ROWS updates, plus an optional finish marker. */
+export function checkModeUpdates(body: unknown): Check<{ updates: ModeUpdate[]; doneVersion: number | null }> {
+  if (!isObj(body)) return { ok: false, error: "JSON body required" };
+  const list = body.updates ?? [];
+  if (!Array.isArray(list) || list.length > IMPORT_BATCH_ROWS) {
+    return { ok: false, error: `updates must be an array of at most ${IMPORT_BATCH_ROWS}` };
+  }
+  const updates: ModeUpdate[] = [];
+  for (const u of list) {
+    if (!isObj(u) || !(Number.isInteger(u.id) && (u.id as number) > 0)) return { ok: false, error: "update id invalid" };
+    if (typeof u.mode !== "string" || !MODES.has(u.mode)) return { ok: false, error: "unknown journey mode" };
+    const fields = checkModeFields(u);
+    if (!fields.ok) return fields;
+    updates.push({ id: u.id as number, mode: u.mode, ...fields.value });
+  }
+  const done = body.doneVersion;
+  if (done !== null && done !== undefined && !(Number.isInteger(done) && num(done, 1, 1000))) {
+    return { ok: false, error: "doneVersion invalid" };
+  }
+  return { ok: true, value: { updates, doneVersion: (done as number | null | undefined) ?? null } };
+}
+
+/**
+ * Apply detected modes in one statement (tenant-scoped; ids from another tenant match
+ * nothing). Any change flags aggregates so the browser recomputes mileage by mode.
+ */
+export async function applyModeUpdates(
+  db: Db,
+  tenant: TenantId,
+  chunk: { updates: ModeUpdate[]; doneVersion: number | null },
+): Promise<number> {
+  let changed = 0;
+  if (chunk.updates.length) {
+    const result = await db.execute(sql`
+      update activities a set mode = x.mode, google_mode = x."googleMode", mode_detail = x."modeDetail",
+        rail_geometry = x."railGeometry"
+      from jsonb_to_recordset(${JSON.stringify(chunk.updates)}::jsonb) as x(
+        id integer, mode text, "googleMode" text, "modeDetail" jsonb, "railGeometry" jsonb)
+      where a.tenant = ${tenant} and a.id = x.id`);
+    changed = (result as { rowCount?: number }).rowCount ?? chunk.updates.length;
+    if (changed) await markAggregatesStale(db, tenant);
+  }
+  if (chunk.doneVersion !== null) {
+    const data = { v: chunk.doneVersion, at: new Date().toISOString() };
+    await db
+      .insert(analyticsCache)
+      .values({ tenant, key: MODE_DETECTION_KEY, data })
+      .onConflictDoUpdate({ target: [analyticsCache.tenant, analyticsCache.key], set: { data, updatedAt: new Date() } });
+  }
+  return changed;
 }

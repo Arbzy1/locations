@@ -8,6 +8,9 @@ import { eq } from "drizzle-orm";
 import * as schema from "./schema.js";
 import { user } from "./schema.js";
 import { ensureDataSource, importSourceData, pruneTenantToSource } from "./timeline-import.js";
+import { loadRailIndexFromDisk } from "./rail-disk.js";
+import { journeyPoints } from "./rail.js";
+import { parseTimelineJson } from "./timeline-parse.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -129,10 +132,18 @@ async function main() {
       : `Using existing source ${source.id} (${source.label})`,
   );
 
+  // Trains Google labelled as driving etc.: rail tiles from the web app's static assets.
+  const rail = await loadRailIndexFromDisk(
+    resolve(root, "apps/web/public/assets/rail/v1"),
+    journeyPoints(parseTimelineJson(raw).activities),
+  );
+  console.log(rail ? `Rail map loaded (${rail.segs.length} segments)` : "No rail map built; speed checks only");
+
   const result = await importSourceData(db, {
     tenant,
     sourceId: source.id,
     records: raw,
+    rail,
   });
 
   console.log("Import complete.", result);

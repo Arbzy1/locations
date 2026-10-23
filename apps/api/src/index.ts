@@ -109,6 +109,11 @@ import { isProbePath, probeNotFound } from "./probe-paths";
 import {
   AGGREGATE_INPUT_PAGE,
   IMPORT_BATCH_ROWS,
+  MODE_DETECT_PAGE,
+  applyModeUpdates,
+  checkModeUpdates,
+  modeDetectInputPage,
+  modeDetectionVersion,
   aggregateInputPage,
   aggregatesStale,
   appendImportRows,
@@ -837,7 +842,12 @@ app.post("/api/import/:jobId/finish", async (c) => {
 app.get("/api/aggregates/status", async (c) => {
   const tenant = c.get("tenant");
   const db = requestDb(c);
-  return c.json({ stale: await withTenant(db, tenant, (tx) => aggregatesStale(tx, tenant)) });
+  // modeVersion: GPS mode detection last finished with this detector version (null: never).
+  const status = await withTenant(db, tenant, async (tx) => ({
+    stale: await aggregatesStale(tx, tenant),
+    modeVersion: await modeDetectionVersion(tx, tenant),
+  }));
+  return c.json(status);
 });
 
 app.get("/api/aggregates/input", async (c) => {
@@ -863,6 +873,34 @@ app.post("/api/aggregates", async (c) => {
   const db = requestDb(c);
   await withTenant(db, tenant, (tx) => writeAggregates(tx, tenant, checked.value));
   return c.json({ ok: true, days: checked.value.dayStats.length, keys: checked.value.analytics.length, done: checked.value.done });
+});
+
+// GPS mode detection (trains Google labelled as driving, etc.) runs in the browser:
+// it pages journeys out here and writes back the few that change.
+app.get("/api/journeys/detect-input", async (c) => {
+  const tenant = c.get("tenant");
+  const after = Number(c.req.query("after") ?? 0);
+  if (!Number.isInteger(after) || after < 0) return c.json({ error: "after must be a row id" }, 400);
+  const db = requestDb(c);
+  const { rows, version } = await withTenant(db, tenant, async (tx) => ({
+    rows: await modeDetectInputPage(tx, tenant, after),
+    version: after === 0 ? await modeDetectionVersion(tx, tenant) : null,
+  }));
+  const last = rows.at(-1);
+  return c.json({ rows, version, next: rows.length === MODE_DETECT_PAGE && last ? last.id : null });
+});
+
+app.post("/api/journeys/modes", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const tenant = c.get("tenant");
+  const body = await readBatchBody(c.req.raw);
+  if (!body.ok) return c.json({ error: body.status === 413 ? "Chunk too large" : "JSON body required" }, body.status);
+  const checked = checkModeUpdates(body.value);
+  if (!checked.ok) return c.json({ error: checked.error }, 400);
+  const db = requestDb(c);
+  const changed = await withTenant(db, tenant, (tx) => applyModeUpdates(tx, tenant, checked.value));
+  return c.json({ ok: true, changed });
 });
 
 app.post("/api/import/preview", async (c) => {
