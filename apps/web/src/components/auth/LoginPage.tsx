@@ -25,6 +25,10 @@ export default function LoginPage() {
   const [otp, setOtp] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
   const [passwordless, setPasswordless] = useState(false);
+  /** Set when a password sign-in is refused because the email was never verified. */
+  const [verifyNeeded, setVerifyNeeded] = useState(false);
+  const [verifyCode, setVerifyCode] = useState('');
+  const [verifyLoading, setVerifyLoading] = useState(false);
 
   useEffect(() => {
     document.title = 'Sign in · Locations';
@@ -102,12 +106,44 @@ export default function LoginPage() {
     try {
       const result = await signIn.email({ email, password });
       if (result.error) {
+        if (result.error.code === 'EMAIL_NOT_VERIFIED') {
+          // Sign-in alone never re-sends anything: email a fresh code and ask for it here.
+          await sendVerifyCode();
+          return;
+        }
         setError(result.error.message || 'Sign in failed');
       }
     } catch {
       setError('Unable to sign in. Check your connection.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const sendVerifyCode = async () => {
+    const sent = await authClient.emailOtp.sendVerificationOtp({ email, type: 'email-verification' });
+    if (sent.error) {
+      setError(sent.error.message || 'Your email is not verified, and we could not send a new code.');
+      return;
+    }
+    setVerifyNeeded(true);
+  };
+
+  const confirmVerifyCode = async () => {
+    setError('');
+    setVerifyLoading(true);
+    try {
+      const verified = await authClient.emailOtp.verifyEmail({ email, otp: verifyCode });
+      if (verified.error) {
+        setError(verified.error.message || 'That code did not work. Check it, or send a new one.');
+        return;
+      }
+      const result = await signIn.email({ email, password });
+      if (result.error) setError(result.error.message || 'Email verified. Sign in again.');
+    } catch {
+      setError('Unable to verify code.');
+    } finally {
+      setVerifyLoading(false);
     }
   };
 
@@ -187,6 +223,44 @@ export default function LoginPage() {
         </EjectField>
         {error ? (
           <p className="mb-4 rounded-lg border border-train/30 bg-train/10 px-3 py-2 text-sm text-train">{error}</p>
+        ) : null}
+        {verifyNeeded ? (
+          <div className="mb-4 space-y-2 rounded-lg border border-border bg-bg p-3">
+            <p className="text-sm text-text">
+              Your email is not verified yet. We have sent a new 6-digit code to {email}. Check spam
+              if it is not there in a minute.
+            </p>
+            <EjectField label="Verification code" htmlFor="verify-code">
+              <Input
+                id="verify-code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                title="Six-digit verification code from your email"
+                value={verifyCode}
+                onChange={(e) => setVerifyCode(e.target.value.trim())}
+              />
+            </EjectField>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                className="flex-1"
+                title="Verify your email and sign in"
+                disabled={verifyLoading || verifyCode.length < 6}
+                onClick={() => void confirmVerifyCode()}
+              >
+                {verifyLoading ? 'Verifying…' : 'Verify and sign in'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                title="Email a new verification code"
+                disabled={verifyLoading}
+                onClick={() => void sendVerifyCode()}
+              >
+                Send again
+              </Button>
+            </div>
+          </div>
         ) : null}
         <Button type="submit" className="w-full" title="Sign in" disabled={busy}>
           {loading ? 'Signing in…' : 'Enter'}

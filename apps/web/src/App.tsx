@@ -675,7 +675,15 @@ function AuthGate() {
     }
   }, [isPending, configPending, session?.user, landing]);
 
-  if (isPending || (!session?.user && configPending)) {
+  // Only the first session check shows the spinner. Better Auth re-checks the session
+  // after sign-up and sign-in requests; swapping the page out then threw away the
+  // sign-up and login forms (their "enter the code" step) so the page looked like it
+  // refreshed and lost what was typed.
+  const [sessionLoadedOnce, setSessionLoadedOnce] = useState(false);
+  if (!isPending && !sessionLoadedOnce) setSessionLoadedOnce(true);
+  const firstLoad = !sessionLoadedOnce;
+
+  if ((firstLoad && isPending) || (!session?.user && configPending)) {
     return (
       <div className="flex h-dvh w-screen items-center justify-center bg-bg text-text-muted">
         <Loader2 className="animate-spin text-accent" size={24} />
