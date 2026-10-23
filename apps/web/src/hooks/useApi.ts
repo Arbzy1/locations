@@ -723,7 +723,15 @@ export function useRangeInsights(range: { from: string; to: string }) {
   const qs = new URLSearchParams(range).toString();
   return useQuery<RangeInsights>({
     queryKey: ['insights-range', tenantKey, qs],
-    queryFn: () => fetchJson(`/api/insights/range?${qs}`),
+    queryFn: async () => {
+      const res = await fetch(`/api/insights/range?${qs}`, { credentials: 'include' });
+      // Keep the server's reason (e.g. a bad date) so the card can say what went wrong.
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(res.status === 401 ? '401 Unauthorized' : body.error || `Request failed: ${res.status}`);
+      }
+      return res.json() as Promise<RangeInsights>;
+    },
     enabled: tenantKey !== 'anon' && Boolean(range.from && range.to && range.from <= range.to),
     staleTime: Infinity,
     placeholderData: (prev) => prev,
