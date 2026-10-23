@@ -9,6 +9,9 @@ workers_dev = true
 preview_urls = true
 account_id = "8507815ae44383c8d60535ea462f5124"
 
+[dev]
+port = 8787
+
 [assets]
 directory = "apps/web/dist"
 binding = "ASSETS"

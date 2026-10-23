@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --config ../../wrangler.toml --port 8787",
+    "dev": "node ../../scripts/ensure-web-dist.mjs && wrangler dev --config ../../wrangler.toml --port 8787",
     "build": "echo \"Worker bundled by wrangler on deploy\"",
     "typecheck": "tsc --noEmit"
   },

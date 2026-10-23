@@ -39,14 +39,14 @@ describe('resolveEstimateEvPrice', () => {
 });
 
 describe('intensityFromFixtures', () => {
-  it('picks the half-hour at leave time', () => {
-    const hit = intensityFromFixtures('2026-08-16T12:00:00Z', '1');
+  it('picks the half-hour at leave time', async () => {
+    const hit = await intensityFromFixtures('2026-08-16T12:00:00Z', '1');
     expect(hit.gPerKwh).toBe(190);
     expect(hit.reason).toMatch(/190 g\/kWh/);
   });
 
-  it('falls back to 150 with a reason when the window is missing', () => {
-    const miss = intensityFromFixtures('1970-01-01T00:00:00Z', '1');
+  it('falls back to 150 with a reason when the window is missing', async () => {
+    const miss = await intensityFromFixtures('1970-01-01T00:00:00Z', '1');
     expect(miss.gPerKwh).toBe(150);
     expect(miss.reason).toMatch(/150 g\/kWh/);
   });

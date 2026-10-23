@@ -452,7 +452,7 @@ function canonicalMapsUrl(raw: string): string {
 
 async function expandMapsShortUrl(env: Env, raw: string): Promise<string | null> {
   if (isFixtureMode(env.BRIM_FIXTURES)) {
-    const table = loadFixture<{ redirects: Record<string, string> }>('maps-short', env.BRIM_FIXTURES);
+    const table = await loadFixture<{ redirects: Record<string, string> }>('maps-short', env.BRIM_FIXTURES);
     const key = canonicalMapsUrl(raw);
     return table.redirects[key] ?? table.redirects[raw.trim()] ?? null;
   }

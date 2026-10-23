@@ -15,7 +15,8 @@ import { MODE_COLORS, MODE_LABELS } from '../../types';
 import { withLineVariant } from '../../lib/map/lineVariant';
 import { formatTime, formatDistance, formatDuration } from '../../utils/format';
 import { useTheme } from '../../lib/theme';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
+import { usePublicConfig } from '../../hooks/useApi';
 import { useUnits } from '../../lib/units';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useSession } from '../../lib/auth';
@@ -85,14 +86,6 @@ const HEAT_COLORS: [number, string][] = [
   [1, '#ffa198'],
 ];
 
-type PublicMapConfig = {
-  mapTileDark: string;
-  mapTileLight: string;
-  mapAttr: string;
-  mapStyleDark: string | null;
-  mapStyleLight: string | null;
-  customTiles: boolean;
-};
 
 function cssToken(name: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
@@ -245,15 +238,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   const { isDesktop } = useBreakpoint();
   const { data: session } = useSession();
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
-  const { data: mapConfig } = useQuery({
-    queryKey: ['map-config'],
-    queryFn: async () => {
-      const res = await fetch('/api/config');
-      if (!res.ok) return null;
-      return res.json() as Promise<PublicMapConfig>;
-    },
-    staleTime: Infinity,
-  });
+  const { data: mapConfig } = usePublicConfig();
 
   const [basemap, setBasemap] = useState<BasemapId>('auto');
   const [buildings3d, setBuildings3d] = useState(false);

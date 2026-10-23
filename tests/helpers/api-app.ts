@@ -43,6 +43,7 @@ export function createServicesMock(overrides: Record<string, unknown> = {}) {
     loadDayRows: vi.fn(async () => null),
     buildDay: vi.fn(),
     getHeatmap: vi.fn(async () => []),
+    enrichHeatmapSettlements: vi.fn(async (_db: unknown, points: unknown) => points ?? []),
     getAnalytics: vi.fn(async () => []),
     getRouteProgress: vi.fn(async () => ({})),
     resolveCoords: vi.fn(async () => ({ name: "Unknown", address: "" })),

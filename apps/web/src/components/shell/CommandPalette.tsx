@@ -97,8 +97,8 @@ export default function CommandPalette() {
   const parsed = parseCommandQuery(q);
   const searchQ = parsed.kind === 'text' ? parsed.q : '';
   const { data } = useSearch(searchQ);
-  const { data: days = [] } = useDays();
-  const { data: labels } = usePlaceLabels();
+  const { data: days = [] } = useDays({ enabled: open });
+  const { data: labels } = usePlaceLabels({ enabled: open });
   const labelByKey = useMemo(() => {
     const map = new Map<string, string>();
     for (const row of labels ?? []) {

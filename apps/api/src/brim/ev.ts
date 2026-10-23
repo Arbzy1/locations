@@ -72,11 +72,11 @@ export function resolveEstimateEvPrice(input: {
   });
 }
 
-export function intensityFromFixtures(
+export async function intensityFromFixtures(
   atIso: string,
   flag: string | undefined,
-): { gPerKwh: number; reason: string } {
-  const rows = loadFixture<CarbonIntensityPeriod[]>('carbon-intensity', flag);
+): Promise<{ gPerKwh: number; reason: string }> {
+  const rows = await loadFixture<CarbonIntensityPeriod[]>('carbon-intensity', flag);
   const hit = pickGridIntensity(rows, atIso);
   return {
     gPerKwh: hit?.intensityGPerKwh ?? GRID_INTENSITY_FALLBACK_G,
@@ -90,7 +90,7 @@ export async function loadGridIntensity(
   atIso: string,
 ): Promise<{ gPerKwh: number; reason: string }> {
   if (isFixtureMode(env.BRIM_FIXTURES)) {
-    return intensityFromFixtures(atIso, env.BRIM_FIXTURES);
+    return await intensityFromFixtures(atIso, env.BRIM_FIXTURES);
   }
   if (!persistLive(db)) {
     return {

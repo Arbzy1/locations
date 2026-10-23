@@ -5,8 +5,15 @@ import { defineConfig } from "vitest/config";
 const root = path.dirname(fileURLToPath(import.meta.url));
 
 const alias = {
-  // Browser-safe entry; listed first so it wins over the "@locations/db" prefix.
+  // Subpaths listed first so they win over the "@locations/db" prefix.
   "@locations/db/pure": path.resolve(root, "packages/db/src/pure.ts"),
+  "@locations/db/timeline-parse": path.resolve(root, "packages/db/src/timeline-parse.ts"),
+  "@locations/db/timeline-import": path.resolve(root, "packages/db/src/timeline-import.ts"),
+  "@locations/db/takeout-zip": path.resolve(root, "packages/db/src/takeout-zip.ts"),
+  "@locations/db/rail": path.resolve(root, "packages/db/src/rail.ts"),
+  "@locations/db/analytics": path.resolve(root, "packages/db/src/analytics.ts"),
+  "@locations/db/geo": path.resolve(root, "packages/db/src/geo.ts"),
+  "@locations/db/schema": path.resolve(root, "packages/db/src/schema.ts"),
   "@locations/db": path.resolve(root, "packages/db/src/index.ts"),
   "@locations/api": path.resolve(root, "apps/api/src"),
   "@locations/web": path.resolve(root, "apps/web/src"),

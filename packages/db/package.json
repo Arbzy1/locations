@@ -3,12 +3,16 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
     "./geo": "./src/geo.ts",
     "./analytics": "./src/analytics.ts",
     "./timeline-import": "./src/timeline-import.ts",
+    "./timeline-parse": "./src/timeline-parse.ts",
+    "./takeout-zip": "./src/takeout-zip.ts",
+    "./rail": "./src/rail.ts",
     "./pure": "./src/pure.ts"
   },
   "scripts": {

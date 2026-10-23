@@ -40,16 +40,6 @@ import {
   journeyAccuracy,
   haversineM,
   METERS_TO_MILES,
-  deleteSourceData,
-  deleteDateRange,
-  ensureDataSource,
-  importSourceData,
-  parseTimelineJson,
-  detectTimelineFormat,
-  datesFromParsed,
-  importDayDiff,
-  timezoneSkewWarning,
-  markAggregatesStale,
   and,
   eq,
   sql,
@@ -73,6 +63,18 @@ import {
   type MapBookmark,
   landmarkForPlaceId,
 } from "@locations/db";
+import {
+  datesFromParsed,
+  deleteDateRange,
+  deleteSourceData,
+  detectTimelineFormat,
+  ensureDataSource,
+  importDayDiff,
+  importSourceData,
+  markAggregatesStale,
+  parseTimelineJson,
+  timezoneSkewWarning,
+} from "@locations/db/timeline-import";
 import type { Env } from "./env";
 
 const OSRM_BASE_DEFAULT = "https://router.project-osrm.org/route/v1";
@@ -610,36 +612,47 @@ const SETTLEMENT_MISS = "(none)";
  * Guess town / city / village for coordinates via Nominatim (cached).
  * Reuses street-level place_cache address details when present to avoid extra fetches.
  */
+type PlaceCacheHit = {
+  placeId: string;
+  name: string;
+  address: string;
+  data: unknown;
+};
+
+async function loadPlaceCache(
+  db: ReturnType<typeof createDb>,
+  placeId: string,
+  prefetch?: Map<string, PlaceCacheHit>,
+): Promise<PlaceCacheHit | undefined> {
+  if (prefetch) return prefetch.get(placeId);
+  const rows = await db.select().from(placeCache).where(eq(placeCache.placeId, placeId)).limit(1);
+  return rows[0];
+}
+
 export async function resolveSettlement(
   db: ReturnType<typeof createDb>,
   lat: number,
   lon: number,
-  opts?: { allowLive?: boolean },
+  opts?: { allowLive?: boolean; prefetch?: Map<string, PlaceCacheHit> },
 ): Promise<{ settlement: string | null; fetched: boolean }> {
   const allowLive = opts?.allowLive ?? true;
+  const prefetch = opts?.prefetch;
   const settlementKey = makeSettlementPlaceKey(lat, lon);
 
-  const cachedSettlement = await db
-    .select()
-    .from(placeCache)
-    .where(eq(placeCache.placeId, settlementKey))
-    .limit(1);
-  if (cachedSettlement[0]?.name === SETTLEMENT_MISS) {
+  const cachedSettlement = await loadPlaceCache(db, settlementKey, prefetch);
+  const cachedSettlementRows = cachedSettlement ? [cachedSettlement] : [];
+  if (cachedSettlementRows[0]?.name === SETTLEMENT_MISS) {
     // Nominatim already said there is no town here; do not ask again on every load.
     return { settlement: null, fetched: false };
   }
-  if (cachedSettlement[0]?.name && cachedSettlement[0].name !== "Unknown") {
-    return { settlement: cachedSettlement[0].name, fetched: false };
+  if (cachedSettlementRows[0]?.name && cachedSettlementRows[0].name !== "Unknown") {
+    return { settlement: cachedSettlementRows[0].name, fetched: false };
   }
 
   const streetKey = makeCoordPlaceKey(lat, lon);
-  const streetCached = await db
-    .select()
-    .from(placeCache)
-    .where(eq(placeCache.placeId, streetKey))
-    .limit(1);
-  if (streetCached[0]) {
-    const addr = (streetCached[0].data as { address?: Record<string, string> } | null)?.address;
+  const streetCached = await loadPlaceCache(db, streetKey, prefetch);
+  if (streetCached) {
+    const addr = (streetCached.data as { address?: Record<string, string> } | null)?.address;
     const fromStreet = settlementFromAddress(addr);
     if (fromStreet) {
       await db
@@ -647,13 +660,19 @@ export async function resolveSettlement(
         .values({
           placeId: settlementKey,
           name: fromStreet,
-          address: streetCached[0].address,
+          address: streetCached.address,
           data: { address: addr ?? {}, source: "street_cache" },
         })
         .onConflictDoUpdate({
           target: placeCache.placeId,
-          set: { name: fromStreet, address: streetCached[0].address },
+          set: { name: fromStreet, address: streetCached.address },
         });
+      prefetch?.set(settlementKey, {
+        placeId: settlementKey,
+        name: fromStreet,
+        address: streetCached.address,
+        data: { address: addr ?? {}, source: "street_cache" },
+      });
       return { settlement: fromStreet, fetched: false };
     }
   }
@@ -678,6 +697,12 @@ export async function resolveSettlement(
         .insert(placeCache)
         .values({ placeId: settlementKey, name: SETTLEMENT_MISS, address: "", data: { source: "nominatim_settlement" } })
         .onConflictDoNothing();
+      prefetch?.set(settlementKey, {
+        placeId: settlementKey,
+        name: SETTLEMENT_MISS,
+        address: "",
+        data: { source: "nominatim_settlement" },
+      });
       return { settlement: null, fetched: true };
     }
     const address = data.display_name ?? "";
@@ -693,6 +718,12 @@ export async function resolveSettlement(
         target: placeCache.placeId,
         set: { name: settlement, address, data: { address: data.address ?? {} } },
       });
+    prefetch?.set(settlementKey, {
+      placeId: settlementKey,
+      name: settlement,
+      address,
+      data: { address: data.address ?? {}, source: "nominatim_settlement" },
+    });
     return { settlement, fetched: true };
   } catch {
     return { settlement: null, fetched: true };
@@ -742,39 +773,45 @@ function activityToApi(a: ActivityRow) {
 }
 
 export async function getOverview(db: ReturnType<typeof createDb>, tenant: TenantId) {
-  const [visitCount] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(visits)
-    .where(eq(visits.tenant, tenant));
-  const [activityCount] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(activities)
-    .where(eq(activities.tenant, tenant));
-  const [distRow] = await db
-    .select({ total: sql<number>`coalesce(sum(${dayStats.totalDistanceMiles}), 0)` })
-    .from(dayStats)
-    .where(eq(dayStats.tenant, tenant));
-  const dates = await db
-    .select({ date: dayStats.date })
-    .from(dayStats)
-    .where(eq(dayStats.tenant, tenant))
-    .orderBy(dayStats.date);
-  const [places] = await db
-    .select({ count: sql<number>`count(distinct ${visits.placeId})::int` })
-    .from(visits)
-    .where(and(eq(visits.tenant, tenant), sql`${visits.placeId} is not null`));
+  const [visitRows, activityRows, distRows, dateRows, placeRows] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(visits)
+      .where(eq(visits.tenant, tenant)),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(activities)
+      .where(eq(activities.tenant, tenant)),
+    db
+      .select({ total: sql<number>`coalesce(sum(${dayStats.totalDistanceMiles}), 0)` })
+      .from(dayStats)
+      .where(eq(dayStats.tenant, tenant)),
+    db
+      .select({
+        first: sql<string | null>`min(${dayStats.date})`,
+        last: sql<string | null>`max(${dayStats.date})`,
+        days: sql<number>`count(*)::int`,
+      })
+      .from(dayStats)
+      .where(eq(dayStats.tenant, tenant)),
+    db
+      .select({ count: sql<number>`count(distinct ${visits.placeId})::int` })
+      .from(visits)
+      .where(and(eq(visits.tenant, tenant), sql`${visits.placeId} is not null`)),
+  ]);
 
-  const allDates = dates.map((d) => d.date);
+  const visitCount = visitRows[0]?.count ?? 0;
+  const activityCount = activityRows[0]?.count ?? 0;
+  const first = dateRows[0]?.first;
+  const last = dateRows[0]?.last;
   return {
-    total_records: (visitCount?.count ?? 0) + (activityCount?.count ?? 0),
-    total_visits: visitCount?.count ?? 0,
-    total_activities: activityCount?.count ?? 0,
-    total_distance_miles: Math.round((distRow?.total ?? 0) * 10) / 10,
-    date_range: allDates.length
-      ? ([allDates[0], allDates[allDates.length - 1]] as [string, string])
-      : (["", ""] as [string, string]),
-    days_with_data: allDates.length,
-    unique_places: places?.count ?? 0,
+    total_records: visitCount + activityCount,
+    total_visits: visitCount,
+    total_activities: activityCount,
+    total_distance_miles: Math.round((Number(distRows[0]?.total) || 0) * 10) / 10,
+    date_range: first && last ? ([first, last] as [string, string]) : (["", ""] as [string, string]),
+    days_with_data: dateRows[0]?.days ?? 0,
+    unique_places: placeRows[0]?.count ?? 0,
   };
 }
 
@@ -897,30 +934,49 @@ export async function getHeatmap(
     })
     .sort((a, b) => b.count - a.count || a.lat - b.lat || a.lon - b.lon);
 
-  // Enrich top hotspots with settlement names (cache first; limited live Nominatim).
-  const TOP_SETTLEMENT = 20;
-  // Misses are cached too, so repeat loads converge on zero live lookups.
-  const MAX_LIVE_SETTLEMENT = 4;
-  let liveLookups = 0;
-  for (const point of points.slice(0, TOP_SETTLEMENT)) {
-    const { settlement, fetched } = await resolveSettlement(db, point.lat, point.lon, {
-      allowLive: liveLookups < MAX_LIVE_SETTLEMENT,
-    });
-    if (fetched) liveLookups += 1;
-    if (settlement) {
-      point.settlement = settlement;
-      if (!point.cluster) {
-        point.label = settlement;
-      }
-    }
-  }
-
   return points
     .filter((p) => {
       const coordKey = `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
       return !hidden.has(p.cluster) && !hidden.has(coordKey) && !hidden.has(p.label);
     })
     .map(({ cluster, ...rest }) => ({ ...rest, cluster: cluster || undefined }));
+}
+
+export type HeatmapPoint = Awaited<ReturnType<typeof getHeatmap>>[number];
+
+const TOP_SETTLEMENT = 20;
+const MAX_LIVE_SETTLEMENT = 4;
+
+/** Cache lookups then limited Nominatim, outside the tenant transaction. */
+export async function enrichHeatmapSettlements(
+  db: ReturnType<typeof createDb>,
+  points: HeatmapPoint[],
+): Promise<HeatmapPoint[]> {
+  const top = points.slice(0, TOP_SETTLEMENT);
+  if (!top.length) return points;
+  const ids = [
+    ...new Set(top.flatMap((p) => [makeSettlementPlaceKey(p.lat, p.lon), makeCoordPlaceKey(p.lat, p.lon)])),
+  ];
+  const rows = await db.select().from(placeCache).where(inArray(placeCache.placeId, ids));
+  const prefetch = new Map<string, PlaceCacheHit>(
+    rows.map((r) => [
+      r.placeId,
+      { placeId: r.placeId, name: r.name, address: r.address, data: r.data },
+    ]),
+  );
+  let liveLookups = 0;
+  for (const point of top) {
+    const { settlement, fetched } = await resolveSettlement(db, point.lat, point.lon, {
+      allowLive: liveLookups < MAX_LIVE_SETTLEMENT,
+      prefetch,
+    });
+    if (fetched) liveLookups += 1;
+    if (settlement) {
+      point.settlement = settlement;
+      if (!point.cluster) point.label = settlement;
+    }
+  }
+  return points;
 }
 
 export async function getAnalytics(
@@ -1643,36 +1699,35 @@ export async function getSourceById(
 }
 
 export async function listSources(db: ReturnType<typeof createDb>, tenant: TenantId) {
-  const sources = await db
-    .select()
-    .from(dataSources)
-    .where(eq(dataSources.tenant, tenant));
+  const [sources, visitRows, activityRows] = await Promise.all([
+    db.select().from(dataSources).where(eq(dataSources.tenant, tenant)),
+    db
+      .select({ sourceId: visits.sourceId, n: sql<number>`count(*)::int` })
+      .from(visits)
+      .where(eq(visits.tenant, tenant))
+      .groupBy(visits.sourceId),
+    db
+      .select({ sourceId: activities.sourceId, n: sql<number>`count(*)::int` })
+      .from(activities)
+      .where(eq(activities.tenant, tenant))
+      .groupBy(activities.sourceId),
+  ]);
   sources.sort(
     (a: { createdAt: Date }, b: { createdAt: Date }) =>
       new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   );
 
-  const result = [];
-  for (const s of sources) {
-    const [v] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(visits)
-      .where(and(eq(visits.tenant, tenant), eq(visits.sourceId, s.id)));
-    const [a] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(activities)
-      .where(and(eq(activities.tenant, tenant), eq(activities.sourceId, s.id)));
-    result.push({
-      id: s.id,
-      label: s.label,
-      color: s.color ?? null,
-      createdAt: s.createdAt,
-      updatedAt: s.updatedAt,
-      visitCount: v?.count ?? 0,
-      activityCount: a?.count ?? 0,
-    });
-  }
-  return result;
+  const visitCountBySource = new Map(visitRows.map((r) => [r.sourceId, r.n]));
+  const activityCountBySource = new Map(activityRows.map((r) => [r.sourceId, r.n]));
+  return sources.map((s) => ({
+    id: s.id,
+    label: s.label,
+    color: s.color ?? null,
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
+    visitCount: visitCountBySource.get(s.id) ?? 0,
+    activityCount: activityCountBySource.get(s.id) ?? 0,
+  }));
 }
 
 export async function renameSource(
