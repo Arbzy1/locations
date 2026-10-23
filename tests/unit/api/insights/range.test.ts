@@ -15,6 +15,7 @@ describe("getRangeInsights validation", () => {
   it("rejects bad or overlong ranges before touching the database", async () => {
     const db = {} as never;
     expect(await getRangeInsights(db, "t1", { from: "2024-02-01", to: "2024-01-01" })).toHaveProperty("error");
-    expect(await getRangeInsights(db, "t1", { from: "2000-01-01", to: "2024-01-01" })).toHaveProperty("error");
+    // "All time" is allowed (every query is an aggregate); only absurd spans are refused.
+    expect(await getRangeInsights(db, "t1", { from: "1900-01-01", to: "2024-01-01" })).toHaveProperty("error");
   });
 });

@@ -61,11 +61,17 @@ type PlaceGroup = {
 };
 
 /** Visits grouped by real place (or by region for older `cluster` keys). */
-async function placeGroups(db: Db, tenant: TenantId, key?: string): Promise<PlaceGroup[]> {
+/**
+ * Per-place summaries. Pass `keys` when only a few places are needed: grouping every
+ * place a long history has visited costs more than the free plan's 10 ms of CPU.
+ */
+async function placeGroups(db: Db, tenant: TenantId, key?: string, keys?: string[]): Promise<PlaceGroup[]> {
+  if (keys && !keys.length) return [];
   const byRegion = key !== undefined && !isRealPlaceKey(key);
   const keyCol = byRegion ? visits.cluster : visits.placeKey;
   const filters = [eq(visits.tenant, tenant), sql`${visits.placeKey} is not null`];
   if (key !== undefined) filters.push(eq(keyCol, key));
+  if (keys) filters.push(inArray(visits.placeKey, keys));
   const rows = await db
     .select({
       key: sql<string>`${keyCol}`,
@@ -99,10 +105,19 @@ async function placeGroups(db: Db, tenant: TenantId, key?: string): Promise<Plac
  * street-level name Day View cached, else Google's semantic type, else coordinates.
  */
 async function placeDisplayNames(db: Db, tenant: TenantId, groups: PlaceGroup[]) {
+  if (!groups.length) return new Map<string, string>();
   const labels = await db
     .select({ placeKey: placeLabels.placeKey, label: placeLabels.label })
     .from(placeLabels)
-    .where(eq(placeLabels.tenant, tenant));
+    .where(
+      and(
+        eq(placeLabels.tenant, tenant),
+        inArray(
+          placeLabels.placeKey,
+          groups.map((g) => g.key),
+        ),
+      ),
+    );
   const labelByKey = new Map(labels.map((l) => [l.placeKey, l.label]));
 
   const coordKey = (g: PlaceGroup) => makeCoordPlaceKey(g.repLat, g.repLon);
@@ -313,8 +328,11 @@ export async function deletePlaceData(db: Db, tenant: TenantId, key: string) {
   return { visitCount: removedVisits.length, activityCount: dropIds.length, trimmedPaths };
 }
 
-/** Longest period the range insights summarise. */
-export const INSIGHTS_RANGE_MAX_DAYS = 3660;
+/**
+ * Longest period the range insights summarise. Every query is a database aggregate
+ * returning a handful of rows, so "all time" is fine; this only rejects nonsense dates.
+ */
+export const INSIGHTS_RANGE_MAX_DAYS = 36_600;
 
 /** The same dates one year earlier, clamped for 29 February. */
 export function sameRangeLastYear(from: string, to: string): { from: string; to: string } {
@@ -383,9 +401,12 @@ export async function getRangeInsights(db: Db, tenant: TenantId, opts: { from: s
     return { error: "from and to must be YYYY-MM-DD with from <= to" as const };
   }
   if (to > addDays(from, INSIGHTS_RANGE_MAX_DAYS - 1)) {
-    return { error: "Choose a period of up to ten years" as const };
+    return { error: "Choose a period of up to 100 years" as const };
   }
   const hidden = await hiddenPlaceKeySet(db, tenant);
+  // Hidden places are left out in SQL, so only the rows shown come back.
+  const visible = [eq(visits.tenant, tenant), sql`${visits.placeKey} is not null`];
+  if (hidden.size) visible.push(sql`not ${inArray(visits.placeKey, [...hidden])}`);
   const current = await periodSummary(db, tenant, from, to);
   const last = sameRangeLastYear(from, to);
   const previous = await periodSummary(db, tenant, last.from, last.to);
@@ -397,24 +418,26 @@ export async function getRangeInsights(db: Db, tenant: TenantId, opts: { from: s
       visits: sql<number>`count(*)::int`,
     })
     .from(visits)
-    .where(
-      and(eq(visits.tenant, tenant), gte(visits.date, from), lte(visits.date, to), sql`${visits.placeKey} is not null`),
-    )
+    .where(and(...visible, gte(visits.date, from), lte(visits.date, to)))
     .groupBy(visits.placeKey)
     .orderBy(desc(sql`coalesce(sum(${visits.durationMinutes}), 0)`))
-    .limit(12);
-  const topKeys = placeRows.map((r) => r.key).filter((k) => !hidden.has(k)).slice(0, 8);
+    .limit(8);
+  const topKeys = placeRows.map((r) => r.key);
 
-  // First visits: places whose earliest stay ever falls inside the period.
-  const firsts = await db
-    .select({ key: sql<string>`${visits.placeKey}`, first: sql<string>`min(${visits.date})` })
+  // First visits: places whose earliest stay ever falls inside the period. Counted in
+  // the database; only the newest eight come back to name.
+  const firsts = db
+    .select({ key: sql<string>`${visits.placeKey}`.as("key"), first: sql<string>`min(${visits.date})`.as("first") })
     .from(visits)
-    .where(and(eq(visits.tenant, tenant), sql`${visits.placeKey} is not null`))
+    .where(and(...visible))
     .groupBy(visits.placeKey)
-    .having(and(gte(sql`min(${visits.date})`, from), lte(sql`min(${visits.date})`, to)));
-  const newKeys = firsts.filter((f) => !hidden.has(f.key)).map((f) => f.key);
+    .having(and(gte(sql`min(${visits.date})`, from), lte(sql`min(${visits.date})`, to)))
+    .as("firsts");
+  const [newCount] = await db.select({ n: sql<number>`count(*)::int` }).from(firsts);
+  const newSample = await db.select({ key: firsts.key }).from(firsts).orderBy(desc(firsts.first), firsts.key).limit(8);
+  const newKeys = newSample.map((f) => f.key);
 
-  const groups = (await placeGroups(db, tenant)).filter((g) => topKeys.includes(g.key) || newKeys.slice(0, 8).includes(g.key));
+  const groups = await placeGroups(db, tenant, undefined, [...new Set([...topKeys, ...newKeys])]);
   const names = await placeDisplayNames(db, tenant, groups);
   const byKey = new Map(placeRows.map((r) => [r.key, r]));
 
@@ -428,8 +451,8 @@ export async function getRangeInsights(db: Db, tenant: TenantId, opts: { from: s
       visits: byKey.get(key)?.visits ?? 0,
     })),
     new_places: {
-      count: newKeys.length,
-      sample: newKeys.slice(0, 8).map((key) => ({ key, label: names.get(key) ?? key })),
+      count: newCount?.n ?? 0,
+      sample: newKeys.map((key) => ({ key, label: names.get(key) ?? key })),
     },
   };
 }
@@ -474,7 +497,7 @@ export async function getOnThisDay(db: Db, tenant: TenantId, opts: { date: strin
     )
     .groupBy(visits.date, visits.placeKey);
   const keys = [...new Set(stays.map((r) => r.key))].filter((k) => !hidden.has(k));
-  const groups = keys.length ? (await placeGroups(db, tenant)).filter((g) => keys.includes(g.key)) : [];
+  const groups = await placeGroups(db, tenant, undefined, keys);
   const names = await placeDisplayNames(db, tenant, groups);
 
   return {
