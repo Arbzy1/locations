@@ -782,67 +782,76 @@ export async function getHeatmap(
   tenant: TenantId,
   opts?: { sourceIds?: string[]; from?: string; to?: string },
 ) {
+  const hidden = await hiddenPlaceKeySet(db, tenant);
   const filters = [eq(visits.tenant, tenant)];
   if (opts?.sourceIds?.length) filters.push(inArray(visits.sourceId, opts.sourceIds));
   if (opts?.from) filters.push(gte(visits.date, opts.from));
   if (opts?.to) filters.push(lte(visits.date, opts.to));
+  // A place hidden in the directory drops out of the heatmap entirely.
+  if (hidden.size) {
+    filters.push(or(sql`${visits.placeKey} is null`, sql`not ${inArray(visits.placeKey, [...hidden])}`)!);
+  }
 
-  const rows = await db
-    .select({
-      lat: visits.lat,
-      lon: visits.lon,
-      cluster: visits.cluster,
-      semanticType: visits.semanticType,
-      durationMinutes: visits.durationMinutes,
-      date: visits.date,
-      placeKey: visits.placeKey,
-    })
-    .from(visits)
-    .where(and(...filters));
-  const hidden = await hiddenPlaceKeySet(db, tenant);
+  // Cells are grouped in Postgres: sending every stay to the Worker and grouping in
+  // JavaScript costs more than the free plan's 10 ms CPU on a full timeline. The cell
+  // key matches the old Math.round(x * 1e5) / 1e5 exactly: real columns go through
+  // ::text first, which is the same shortest decimal the driver hands JavaScript.
+  const cellLat = sql<number>`floor(${visits.lat}::text::float8 * 100000 + 0.5) / 100000`;
+  const cellLon = sql<number>`floor(${visits.lon}::text::float8 * 100000 + 0.5) / 100000`;
+  const where = and(...filters);
+  const [parts, dayCounts] = await Promise.all([
+    db
+      .select({
+        lat: cellLat,
+        lon: cellLon,
+        cluster: sql<string>`coalesce(trim(${visits.cluster}), '')`,
+        semanticType: sql<string>`coalesce(trim(${visits.semanticType}), '')`,
+        n: sql<number>`count(*)::int`,
+        minutes: sql<number>`coalesce(sum(${visits.durationMinutes}::text::float8), 0)`,
+      })
+      .from(visits)
+      .where(where)
+      .groupBy(cellLat, cellLon, sql`3`, sql`4`),
+    db
+      .select({ lat: cellLat, lon: cellLon, days: sql<number>`count(distinct ${visits.date})::int` })
+      .from(visits)
+      .where(where)
+      .groupBy(cellLat, cellLon),
+  ]);
 
   type Cell = {
     lat: number;
     lon: number;
     count: number;
     totalDurationMinutes: number;
-    days: Set<string>;
+    days: number;
     clusters: Map<string, number>;
     types: Map<string, number>;
   };
-
   const cells = new Map<string, Cell>();
-
-  for (const r of rows) {
-    // A place hidden in the directory drops out of the heatmap entirely.
-    if (r.placeKey && hidden.has(r.placeKey)) continue;
-    const lat = Math.round(r.lat * 1e5) / 1e5;
-    const lon = Math.round(r.lon * 1e5) / 1e5;
-    const key = `${lat},${lon}`;
+  const keyOf = (lat: number, lon: number) => `${lat},${lon}`;
+  for (const p of parts) {
+    const lat = Number(p.lat);
+    const lon = Number(p.lon);
+    const key = keyOf(lat, lon);
     let cell = cells.get(key);
     if (!cell) {
-      cell = {
-        lat,
-        lon,
-        count: 0,
-        totalDurationMinutes: 0,
-        days: new Set(),
-        clusters: new Map(),
-        types: new Map(),
-      };
+      cell = { lat, lon, count: 0, totalDurationMinutes: 0, days: 0, clusters: new Map(), types: new Map() };
       cells.set(key, cell);
     }
-    cell.count += 1;
-    cell.totalDurationMinutes += r.durationMinutes ?? 0;
-    if (r.date) cell.days.add(r.date);
-    const cluster = (r.cluster || "").trim();
-    if (cluster) cell.clusters.set(cluster, (cell.clusters.get(cluster) ?? 0) + 1);
-    const sem = (r.semanticType || "").trim();
-    if (sem) cell.types.set(sem, (cell.types.get(sem) ?? 0) + 1);
+    cell.count += p.n;
+    cell.totalDurationMinutes += Number(p.minutes);
+    if (p.cluster) cell.clusters.set(p.cluster, (cell.clusters.get(p.cluster) ?? 0) + p.n);
+    if (p.semanticType) cell.types.set(p.semanticType, (cell.types.get(p.semanticType) ?? 0) + p.n);
+  }
+  for (const d of dayCounts) {
+    const cell = cells.get(keyOf(Number(d.lat), Number(d.lon)));
+    if (cell) cell.days = d.days;
   }
 
+  // Most frequent first; ties by name so the result does not depend on row order.
   const topKey = (m: Map<string, number>) =>
-    [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k]) => k);
 
   const points = [...cells.values()]
     .map((cell) => {
@@ -859,12 +868,12 @@ export async function getHeatmap(
         label: cluster || coordFallback,
         cluster,
         totalDurationMinutes: Math.round(cell.totalDurationMinutes),
-        uniqueDays: cell.days.size,
+        uniqueDays: cell.days,
         topTypes: types,
         settlement: null as string | null,
       };
     })
-    .sort((a, b) => b.count - a.count);
+    .sort((a, b) => b.count - a.count || a.lat - b.lat || a.lon - b.lon);
 
   // Enrich top hotspots with settlement names (cache first; limited live Nominatim).
   const TOP_SETTLEMENT = 20;
