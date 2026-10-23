@@ -5,18 +5,19 @@ import { Card, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Skeleton } from '../ui/skeleton';
 import { ErrorState } from '../ui/states';
-import { useRangeInsights } from '../../hooks/useApi';
+import { useOverview, useRangeInsights } from '../../hooks/useApi';
 import { useUnits } from '../../lib/units';
 import { formatDuration, formatMilesOrKm } from '../../utils/format';
 import { placePath } from '../../lib/nav/paths';
 import { MODE_LABELS } from '../../types';
 
-type Preset = 'year' | 'last-year' | '12m' | '90d' | 'custom';
+type Preset = 'year' | 'last-year' | '12m' | '90d' | 'all' | 'custom';
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
-function presetRange(preset: Preset, today = new Date()): { from: string; to: string } {
+function presetRange(preset: Preset, firstDay?: string, today = new Date()): { from: string; to: string } {
   const y = today.getUTCFullYear();
+  if (preset === 'all') return { from: firstDay ?? `${y}-01-01`, to: iso(today) };
   if (preset === 'year') return { from: `${y}-01-01`, to: iso(today) };
   if (preset === 'last-year') return { from: `${y - 1}-01-01`, to: `${y - 1}-12-31` };
   const days = preset === '90d' ? 90 : 365;
@@ -28,6 +29,7 @@ const PRESETS: { id: Preset; label: string; title: string }[] = [
   { id: 'last-year', label: 'Last year', title: 'The whole of last year' },
   { id: '12m', label: '12 months', title: 'The last 12 months' },
   { id: '90d', label: '90 days', title: 'The last 90 days' },
+  { id: 'all', label: 'All time', title: 'Everything since your first recorded day' },
   { id: 'custom', label: 'Custom', title: 'Pick your own dates' },
 ];
 
@@ -61,8 +63,9 @@ export default function RangeInsightsCard() {
   const { unit } = useUnits();
   const [preset, setPreset] = useState<Preset>('year');
   const [custom, setCustom] = useState(() => presetRange('12m'));
-  const range = useMemo(() => (preset === 'custom' ? custom : presetRange(preset)), [preset, custom]);
-  const { data, isLoading, isError, refetch } = useRangeInsights(range);
+  const firstDay = useOverview().data?.date_range?.[0];
+  const range = useMemo(() => (preset === 'custom' ? custom : presetRange(preset, firstDay)), [preset, custom, firstDay]);
+  const { data, isLoading, isError, error, refetch } = useRangeInsights(range);
 
   return (
     <Card>
@@ -113,7 +116,11 @@ export default function RangeInsightsCard() {
           ))}
         </div>
       ) : isError || !data?.current || !data.last_year ? (
-        <ErrorState title="This period did not load." onRetry={() => void refetch()} />
+        <ErrorState
+          title="This period did not load."
+          message={error && !/^Request failed/.test(error.message) ? error.message : undefined}
+          onRetry={() => void refetch()}
+        />
       ) : (
         <>
           <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
