@@ -4,6 +4,10 @@
 
 Trains detected from your GPS points: a journey Google called driving or a bus becomes a train (or Underground) when most of its points sit on a railway at train speeds, and it is drawn along the actual tracks in Day View and Routes. Walks at cycling speed, "drives" at walking pace and flights get fixed the same way. Each change shows a "Detected train" badge with one tap to switch back; weaker matches show "Might be a train". Your existing journeys are checked once in your browser; mileage by mode and statistics follow. Mode fixes you make now also update statistics and Routes, not only Day View. Road lines that wander away from your GPS points (or are thrown by a GPS spike) fall back to the points. Migration `0022_activity_mode_detection`.
 
+Rail map data for Great Britain, the Isle of Man and the island of Ireland ships with the site as small static tiles (`/assets/rail/v1/`), ready for spotting train journeys that Google labelled as driving. Built by hand from OpenStreetMap with `npm run rail:build`; served as plain files, so they cost no Worker time. Rail data © OpenStreetMap contributors, ODbL (see `docs/legal/credits.md` and the Terms page).
+
+Imports of any size work on Cloudflare's free plan: your browser reads the export and works out the statistics, and the site saves them in small checked batches with a live progress bar. Statistics also update in the browser after deleting a place or a date range, changing the history limit or timezone.
+
 Imports of any size work on Cloudflare's free plan: your browser reads the export and works out the statistics, and the site saves them in small checked batches with a live progress bar. Statistics also update in the browser after deleting a place or a date range, changing the history limit or timezone.
 
 Day View "Points" line option: only the GPS points your phone recorded, with no lines, coloured by journey. The panel counts the points, how many journeys had none, and the longest gap between points; tap a point for its time.

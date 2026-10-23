@@ -30,6 +30,7 @@
     "db:import": "npm run import -w @locations/db --",
     "db:import-demo": "node scripts/import-demo.mjs",
     "db:warm-routes": "npm run warm-routes -w @locations/db --",
+    "rail:build": "node scripts/rail/build-rail-tiles.mjs",
     "env:merge": "node scripts/env.mjs merge",
     "env:sync": "node scripts/env.mjs sync",
     "secrets:generate": "node scripts/secrets.mjs",

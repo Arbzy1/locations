@@ -23,6 +23,19 @@ export function TermsRoute() {
         Upload only Timeline data you are entitled to export. Paid plans are billed by Stripe. You
         may delete your account at any time.
       </p>
+      <p>
+        Data credits: Rail data ©{' '}
+        <a
+          className="text-accent hover:underline"
+          href="https://www.openstreetmap.org/copyright"
+          target="_blank"
+          rel="noreferrer"
+          title="OpenStreetMap copyright and licence"
+        >
+          OpenStreetMap contributors
+        </a>
+        , ODbL.
+      </p>
     </LegalPage>
   );
 }
