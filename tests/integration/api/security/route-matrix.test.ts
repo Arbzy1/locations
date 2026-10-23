@@ -20,6 +20,10 @@ vi.mock("@locations/api/services", async () => {
   return factory();
 });
 
+vi.mock("@locations/api/import-session", async () => {
+  const { createImportSessionMock } = await import("@tests/helpers/import-session-mock");
+  return createImportSessionMock();
+});
 vi.mock("@locations/api/billing", () => ({
   stripeClient: (env: { STRIPE_SECRET_KEY?: string }) =>
     env.STRIPE_SECRET_KEY

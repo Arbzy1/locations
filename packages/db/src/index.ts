@@ -27,4 +27,4 @@ export * from "./raw-signals.js";
 export * from "./with-tenant.js";
 export * from "./entitlements.js";
 export * from "./quotas.js";
-export { and, eq, sql, desc, or, ilike, inArray, gte, gt, lte, lt } from "drizzle-orm";
+export { and, eq, sql, asc, desc, or, ilike, inArray, gte, gt, lte, lt } from "drizzle-orm";
