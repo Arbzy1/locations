@@ -34,7 +34,7 @@ const post = (body: unknown) =>
   );
 const get = (path: string) => requestApp(app, path, {}, env);
 
-const detail = { mode: "train", confidence: "high", by: "rail", railPct: 96, medianKmh: 88, v: 1 };
+const detail = { mode: "train", confidence: "high", by: "rail", railPct: 96, avgKmh: 88, v: 1 };
 const update = { id: 7, mode: "train", googleMode: "car", modeDetail: detail, railGeometry: [[51.5, -0.2], [51.51, -0.19]] };
 
 beforeEach(() => {

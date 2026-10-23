@@ -131,7 +131,7 @@ export function checkModeFields(x: Record<string, unknown>): Check<ModeFieldsInp
       (d.confidence !== "high" && d.confidence !== "medium") ||
       (d.by !== "rail" && d.by !== "speed") ||
       !(d.railPct === null || num(d.railPct, 0, 100)) ||
-      !num(d.medianKmh, 0, 5000) ||
+      !num(d.avgKmh, 0, 5000) ||
       !(Number.isInteger(d.v) && num(d.v, 1, 1000))
     ) {
       return { ok: false, error: "mode detail invalid" };
@@ -141,7 +141,7 @@ export function checkModeFields(x: Record<string, unknown>): Check<ModeFieldsInp
       confidence: d.confidence,
       by: d.by,
       railPct: d.railPct as number | null,
-      medianKmh: d.medianKmh as number,
+      avgKmh: d.avgKmh as number,
       v: d.v as number,
     };
   }

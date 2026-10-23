@@ -50,7 +50,7 @@ describe("detectJourneyMode", () => {
     const d = detectJourneyMode(journey(fixes(arc, 12, 45)), rail);
     expect(d).toMatchObject({ mode: "train", confidence: "high", by: "rail" });
     expect(d!.railPct).toBeGreaterThanOrEqual(95);
-    expect(d!.medianKmh).toBeGreaterThan(50);
+    expect(d!.avgKmh).toBeGreaterThan(50);
   });
 
   it("leaves a drive on a road 150 m from the tracks alone", () => {
