@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Rail map data for Great Britain, the Isle of Man and the island of Ireland ships with the site as small static tiles (`/assets/rail/v1/`), ready for spotting train journeys that Google labelled as driving. Built by hand from OpenStreetMap with `npm run rail:build`; served as plain files, so they cost no Worker time. Rail data © OpenStreetMap contributors, ODbL (see `docs/legal/credits.md` and the Terms page).
+
 Imports of any size work on Cloudflare's free plan: your browser reads the export and works out the statistics, and the site saves them in small checked batches with a live progress bar. Statistics also update in the browser after deleting a place or a date range, changing the history limit or timezone.
 
 Journey cost (formerly the standalone Brim app) is now a Locations tab at `/journey-cost`: UK trip cost for petrol, diesel, hybrid, and EV cars, with tolls, clean-air zones, the cheapest forecourt along the route, a garage with brim-to-brim calibration, saved journeys, and the HMRC mileage tally. It uses your Locations account, works before any Timeline import, and adds a Journey cost section to Settings. Data is tenant-scoped under FORCE RLS and wiped with the account. Demo can estimate but not save.

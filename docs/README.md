@@ -35,6 +35,7 @@ Index of product, architecture, security, legal, and engineering docs. Agent con
 - [Terms](legal/terms.md)
 - [Cookies](legal/cookies.md)
 - [DPA](legal/dpa.md)
+- [Data credits](legal/credits.md)
 
 ## API and engineering
 
