@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { HOURS_LONDON_CC, schemeById } from "@locations/brim/shared";
 import {
   CHARGE_JOURNEY_SET,
-  HOURS_LONDON_CC,
   journeyHits,
-  schemeById,
-} from "@locations/brim/shared";
+} from "@locations/brim/shared/fixtures/charge-journeys.js";
 import {
   complianceForZone,
   localDaysTouched,

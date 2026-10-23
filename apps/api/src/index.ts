@@ -7,11 +7,11 @@ import {
   isEntitled,
   isStaffRole,
   quotaForEntitled,
-  countTimelineRecords,
   PLAN_QUOTAS,
   type TenantId,
   type PlaceColorToken,
 } from "@locations/db";
+import { countTimelineRecords } from "@locations/db/timeline-parse";
 import { APP_VERSION } from "./version";
 import { googleAuthEnabled, type Env, type ImportQueueMessage } from "./env";
 import { createAuth } from "./auth";
@@ -1615,7 +1615,7 @@ app.post("/api/account/delete", async (c) => {
   const prefix = `uploads/${user.id}/`;
   await deleteR2Prefix(c.env.UPLOADS, prefix);
   await deleteR2Prefix(c.env.UPLOADS, `exports/${user.id}/`);
-  const stripe = stripeClient(c.env);
+  const stripe = await stripeClient(c.env);
   const sub = await withTenant(db, tenant, (tx) => getSubscription(tx, tenant));
   if (stripe && sub?.stripeCustomerId) {
     await stripe.customers.del(sub.stripeCustomerId).catch(() => undefined);
@@ -1686,7 +1686,7 @@ app.post("/api/billing/checkout", async (c) => {
   const ip = clientIp(c.req.raw.headers);
   const limited = await rejectIfLimited(c, `checkout:${user.id}:${ip}`, 10, 60 * 60_000);
   if (limited) return limited;
-  const stripe = stripeClient(c.env);
+  const stripe = await stripeClient(c.env);
   if (!stripe) return c.json({ error: "Billing is not configured" }, 503);
   const body = (await c.req.json().catch(() => null)) as { interval?: "monthly" | "yearly" } | null;
   const interval = body?.interval === "yearly" ? "yearly" : "monthly";
@@ -1717,7 +1717,7 @@ app.post("/api/billing/portal", async (c) => {
   const ip = clientIp(c.req.raw.headers);
   const limited = await rejectIfLimited(c, `portal:${user.id}:${ip}`, 10, 60 * 60_000);
   if (limited) return limited;
-  const stripe = stripeClient(c.env);
+  const stripe = await stripeClient(c.env);
   if (!stripe) return c.json({ error: "Billing is not configured" }, 503);
   const tenant = c.get("tenant");
   const db = requestDb(c);
@@ -1731,7 +1731,7 @@ app.post("/api/billing/portal", async (c) => {
 });
 
 app.post("/api/billing/webhook", async (c) => {
-  const stripe = stripeClient(c.env);
+  const stripe = await stripeClient(c.env);
   const secret = c.env.STRIPE_WEBHOOK_SECRET;
   if (!stripe || !secret) return c.json({ error: "Billing is not configured" }, 503);
   const raw = await c.req.raw.text();

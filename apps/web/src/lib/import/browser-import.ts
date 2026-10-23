@@ -3,6 +3,8 @@
  * parsed and aggregated in a Web Worker, and the server only stores small batches.
  */
 import { MODE_DETECTOR_VERSION, importDayDiff, timezoneSkewWarning } from '@locations/db/pure';
+
+export { MODE_DETECTOR_VERSION };
 import type { DetectInputRow, ParsedExport, WorkerRequest, WorkerResponse } from './import-types';
 
 /** Target request size. Long GPS paths make bytes, not rows, the server's CPU cost. */

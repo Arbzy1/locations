@@ -10,8 +10,8 @@ describe('fixture prices', () => {
     expect(resolved.warning?.code).toBe('price-data-unavailable');
   });
 
-  it('excludes stale and silent sites from nearby lists', () => {
-    const corpus = fixtureCorpus('1');
+  it('excludes stale and silent sites from nearby lists', async () => {
+    const corpus = await fixtureCorpus('1');
     const near = nearbyFromObservations(corpus.observations, {
       lat: 51.1092,
       lng: -0.1872,

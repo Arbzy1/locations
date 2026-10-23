@@ -40,16 +40,6 @@ import {
   journeyAccuracy,
   haversineM,
   METERS_TO_MILES,
-  deleteSourceData,
-  deleteDateRange,
-  ensureDataSource,
-  importSourceData,
-  parseTimelineJson,
-  detectTimelineFormat,
-  datesFromParsed,
-  importDayDiff,
-  timezoneSkewWarning,
-  markAggregatesStale,
   and,
   eq,
   sql,
@@ -73,6 +63,18 @@ import {
   type MapBookmark,
   landmarkForPlaceId,
 } from "@locations/db";
+import {
+  datesFromParsed,
+  deleteDateRange,
+  deleteSourceData,
+  detectTimelineFormat,
+  ensureDataSource,
+  importDayDiff,
+  importSourceData,
+  markAggregatesStale,
+  parseTimelineJson,
+  timezoneSkewWarning,
+} from "@locations/db/timeline-import";
 import type { Env } from "./env";
 
 const OSRM_BASE_DEFAULT = "https://router.project-osrm.org/route/v1";

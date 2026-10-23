@@ -479,7 +479,7 @@ export async function wipeOpsUser(
     await deleteR2Prefix(env.UPLOADS, `uploads/${target.id}/`);
     await deleteR2Prefix(env.UPLOADS, `exports/${target.id}/`);
   }
-  const stripe = stripeClient(env);
+  const stripe = await stripeClient(env);
   if (stripe && sub?.stripeCustomerId) {
     await stripe.customers.del(sub.stripeCustomerId).catch(() => undefined);
   }

@@ -88,7 +88,7 @@ async function corridorStations(
   maxPerpendicularMeters: number,
 ): Promise<NearStation[]> {
   if (isFixtureMode(env.BRIM_FIXTURES)) {
-    const corpus = fixtureCorpus(env.BRIM_FIXTURES);
+    const corpus = await fixtureCorpus(env.BRIM_FIXTURES);
     const hits = fixtureAlongRoute(corpus.observations, points, maxPerpendicularMeters, grade);
     return decorateNearby(hits, corpus.stations);
   }

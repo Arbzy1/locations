@@ -42,8 +42,14 @@ npm run setup:project
 Then:
 
 ```bash
-npm run build:web
-npm run dev:api    # open http://localhost:8787
+npm run dev:all    # UI http://localhost:5173 (HMR), API http://localhost:8787
+```
+
+Magic links, Google OAuth, Stripe returns, and Playwright use the production-like SPA on :8787:
+
+```bash
+npm run dev:e2e          # typecheck + Vite build, then Wrangler on :8787
+npm run dev:kill         # free leftover Vite / Wrangler / inspector ports
 ```
 
 Set `DISABLE_SIGNUP=true` if you want invite-only again (`npm run auth:create-user`).
@@ -104,7 +110,8 @@ Full list: [docs/product/features.md](docs/product/features.md).
 | `npm run test:unit` | Vitest unit project |
 | `npm run test:integration` | Vitest integration project |
 | `npm run test:rls` | RLS leak tests (loads `.env` / `.dev.vars`; skips if `DATABASE_URL` is still unset) |
-| `npm run test:e2e` | Playwright (requires API at `:8787`) |
+| `npm run test:e2e` | Playwright (requires API at `:8787`; start with `dev:e2e`) |
+| `npm run dev:kill` | Free leftover Vite, Wrangler, and inspector ports |
 | `npm run rules:sync` | Regenerate AI tool rule files from `AGENTS.md` |
 
 ## Testing
@@ -115,8 +122,7 @@ npm run test:unit
 npm run test:integration
 npm run test:rls
 
-npm run build:web
-npm run dev:api
+npm run dev:e2e
 # other terminal:
 npm run test:e2e
 ```

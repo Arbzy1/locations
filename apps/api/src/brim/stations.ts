@@ -26,7 +26,7 @@ export async function handleStationsNear(c: BrimContext) {
   const grade = parseFuelGrade(c.req.query('grade'));
   const radiusMeters = radiusMetersFromQuery(c.req.query('radiusKm'));
   if (isFixtureMode(c.env.BRIM_FIXTURES)) {
-    const corpus = fixtureCorpus(c.env.BRIM_FIXTURES);
+    const corpus = await fixtureCorpus(c.env.BRIM_FIXTURES);
     const hits = nearbyFromObservations(corpus.observations, {
       lat,
       lng,
@@ -48,7 +48,7 @@ export async function handleStationsNear(c: BrimContext) {
 
 export async function handleMetaPrices(c: BrimContext) {
   if (isFixtureMode(c.env.BRIM_FIXTURES)) {
-    const corpus = fixtureCorpus(c.env.BRIM_FIXTURES);
+    const corpus = await fixtureCorpus(c.env.BRIM_FIXTURES);
     return c.json({ grades: nationalMediansFromObservations(corpus.observations) });
   }
   const db = createDb(c.env);

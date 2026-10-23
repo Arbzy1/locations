@@ -397,9 +397,11 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 
 | Script | Purpose |
 |--------|---------|
-| `dev:all` | Build web, then run web + API concurrently |
+| `dev:all` | Vite :5173 + Wrangler :8787 concurrently (no production SPA build) |
 | `dev:web` / `dev:api` | Single workspace dev server |
-| `build:all` / `build:web` | Production builds |
+| `dev:e2e` | Production SPA build, then Wrangler on :8787 (Playwright, OAuth, Stripe) |
+| `dev:kill` / `kill:servers` | Free Vite :5173-5179, Wrangler :8787, and inspector :9229 (process trees) |
+| `build:all` / `build:web` | Production builds (`tsc -b` then Vite) |
 | `deploy:staging` / `deploy:prod` / `deploy:both` / `deploy:preview` | Build + Wrangler `--env staging` / `--env production` / both / staging version upload (secrets from local env files) |
 | `release` / `release:patch` / `release:minor` / `release:major` / `release:set` | Tag a semver release, bump workspace package versions, promote `docs/changelog.md` |
 | `db:*` | generate, migrate:dev/staging/prod/all, import, import-demo, warm-routes |
@@ -414,7 +416,6 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 | `rules:sync` | Regenerate tool-specific rule files from `AGENTS.md` |
 | `test:placement` / `test:unit` / `test:integration` / `test:admin` / `test:rls` / `test:security` / `test:watch` / `test:e2e` / `test:all` / `test:report` | Placement lint, Vitest (including operator admin matrix), security catalog, Playwright, markdown report |
 | `loc` / `loc:report` | Lines-of-code summary / write `reports/loc.md` |
-| `kill:servers` | Free ports 5173 and 8787 |
 | `deps:audit` | `npm audit` (high/critical) |
 
 Edit **this file**, then run `npm run rules:sync`. Do not hand-edit generated tool rule files.

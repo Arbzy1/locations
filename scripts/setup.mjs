@@ -115,8 +115,8 @@ Your data stays in YOUR Neon project after this setup.
 Setup complete
 ==============
 Local:
-  npm run build:web
-  npm run dev:api     # http://localhost:8787
+  npm run dev:all     # UI http://localhost:5173 , API http://localhost:8787
+  npm run dev:e2e     # production SPA on :8787 (OAuth, Playwright)
   Sign in as ${email}
 
 Deploy your own site (not aden.website):
