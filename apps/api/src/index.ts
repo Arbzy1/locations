@@ -106,6 +106,7 @@ import { billingEmailKind, sendProductEmail } from "./email";
 import { parsePlaceColor, sanitizePlaceTags } from "./place-labels";
 import { runMonthlyRecaps } from "./monthly-recap";
 import { runRetention } from "./retention";
+import { isProbePath, probeNotFound } from "./probe-paths";
 import { runExportPackJob } from "./export-pack-job";
 import { publicExportJob } from "./export-pack";
 import {
@@ -1701,6 +1702,7 @@ export default {
     if (url.pathname.startsWith("/api/")) {
       return app.fetch(request, env, ctx);
     }
+    if (isProbePath(url.pathname)) return probeNotFound();
     const asset = await env.ASSETS.fetch(request);
     return withAssetSecurityHeaders(asset, env, request.url);
   },

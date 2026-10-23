@@ -7,6 +7,8 @@ import type { BrimDb } from "./db/types";
 type Variables = {
   user: { id: string; email: string; name: string; role: string } | null;
   tenant: string;
+  /** Neon pools opened by the request, closed after the response (index.ts). */
+  pools: { end: () => Promise<void> }[];
 };
 
 export type BrimContext = Context<{ Bindings: Env; Variables: Variables }>;
