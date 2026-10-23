@@ -8,7 +8,8 @@
     "./schema": "./src/schema.ts",
     "./geo": "./src/geo.ts",
     "./analytics": "./src/analytics.ts",
-    "./timeline-import": "./src/timeline-import.ts"
+    "./timeline-import": "./src/timeline-import.ts",
+    "./pure": "./src/pure.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
