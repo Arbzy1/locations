@@ -24,10 +24,11 @@ export type RailCoverage = {
 
 /** Bump when detection rules change so stored results are recomputed. */
 export const MODE_DETECTOR_VERSION = 1;
-/** A fix this close to a rail line counts as on the tracks. */
-const ON_RAIL_M = 40;
-/** A journey end this close to a station adds confidence. */
-const STATION_M = 400;
+/**
+ * A fix this close to a rail line counts as on the tracks. Phone GPS on trains is rough:
+ * on the user's real export only about half of train fixes fell within 40 m, most within 80 m.
+ */
+const ON_RAIL_M = 80;
 /** Fixes implying more than this from both neighbours are GPS spikes. */
 const SPIKE_KMH = 350;
 const SNAP_M = 60;
@@ -70,11 +71,10 @@ function toSegment(lat: number, lon: number, s: Seg): { d: number; t: number } {
   return { d: Math.sqrt(px * px + py * py), t };
 }
 
-/** Grid index over rail segments and stations, so nearest-rail lookups stay local. */
+/** Grid index over rail segments, so nearest-rail lookups stay local. */
 export class RailIndex {
   readonly segs: Seg[] = [];
   private readonly buckets = new Map<string, number[]>();
-  private readonly stations = new Map<string, [number, number][]>();
 
   readonly coverage: RailCoverage | null;
 
@@ -100,12 +100,6 @@ export class RailIndex {
             } else this.buckets.set(key, [id]);
           }
         }
-      }
-      for (const st of tile.stations) {
-        const key = bucketKey(st[0], st[1]);
-        const list = this.stations.get(key);
-        if (list) list.push(st);
-        else this.stations.set(key, [st]);
       }
     }
   }
@@ -138,20 +132,6 @@ export class RailIndex {
       }
     }
     return best;
-  }
-
-  nearStation(lat: number, lon: number, maxM = STATION_M): boolean {
-    const bi = Math.floor(lat / LAT_STEP);
-    const bj = Math.floor(lon / LON_STEP);
-    const r = Math.ceil(maxM / 200);
-    for (let i = bi - r; i <= bi + r; i++) {
-      for (let j = bj - r; j <= bj + r; j++) {
-        for (const st of this.stations.get(`${i},${j}`) ?? []) {
-          if (haversineM(lat, lon, st[0], st[1]) <= maxM) return true;
-        }
-      }
-    }
-    return false;
   }
 }
 
@@ -217,7 +197,8 @@ export type ModeDetection = {
   confidence: "high" | "medium";
   by: "rail" | "speed";
   railPct: number | null;
-  medianKmh: number;
+  /** Average speed over the whole journey. */
+  avgKmh: number;
   v: number;
 };
 
@@ -263,46 +244,55 @@ export function detectJourneyMode(a: DetectableJourney, rail: RailIndex | null):
   const trace = cleanTrace(raw);
   const fixes = trace.slice(1, -1);
   const lengthM = Math.max(polylineLengthM(trace), a.distanceMeters || 0);
-  const speeds = segmentSpeeds(trace);
-  const medianKmh = Math.round(median(speeds) * 10) / 10;
-  const base = { medianKmh, v: MODE_DETECTOR_VERSION };
+  const hours = (Date.parse(a.end) - Date.parse(a.start)) / 3_600_000;
+  if (!(hours > 0)) return null;
+  const avgKmh = Math.round((lengthM / 1000 / hours) * 10) / 10;
+  const base = { avgKmh, v: MODE_DETECTOR_VERSION };
 
+  // Thresholds tuned on a real export (London area): with 75% of fixes within 80 m of a
+  // railway, a median distance of 50 m or less and over 20 km/h, 50 of 69 Google-labelled
+  // trains matched against 4 of 1,425 cars and 5 of 264 buses (likely mislabelled trains).
   if (rail && RAIL_CANDIDATES.has(a.mode) && fixes.length >= 4 && lengthM >= 3000) {
     const covered = fixes.filter((f) => rail.covers(f[0], f[1])).length;
     if (covered >= fixes.length * 0.9) {
       const kinds: Record<RailKind, number> = { rail: 0, subway: 0, tram: 0 };
-      let on = 0;
+      const dists: number[] = [];
       for (const f of fixes) {
-        const hit = rail.nearest(f[0], f[1], ON_RAIL_M);
         // Trams share streets with cars and buses, so tram track alone proves nothing.
-        if (hit && rail.segs[hit.seg].kind !== "tram") {
-          on += 1;
-          kinds[rail.segs[hit.seg].kind] += 1;
-        }
+        const hit = rail.nearest(f[0], f[1], 300, (seg) => rail.segs[seg].kind === "tram");
+        dists.push(hit ? hit.distM : 300);
+        if (hit && hit.distM <= ON_RAIL_M) kinds[rail.segs[hit.seg].kind] += 1;
       }
+      const on = kinds.rail + kinds.subway;
       const railPct = Math.round((on / fixes.length) * 100);
-      const station =
-        rail.nearStation(trace[0][0], trace[0][1]) || rail.nearStation(trace[trace.length - 1][0], trace[trace.length - 1][1]);
+      const medianM = median(dists);
       const mode = kinds.subway > kinds.rail ? "subway" : "train";
-      if (railPct >= 85 && medianKmh > 25 && (station || railPct >= 95)) {
+      if (railPct >= 75 && medianM <= 50 && avgKmh > 20) {
         return { mode, confidence: "high", by: "rail", railPct, ...base };
       }
-      if (railPct >= 70 && medianKmh > 20) {
+      if (railPct >= 60 && medianM <= 80 && avgKmh > 15) {
         return { mode, confidence: "medium", by: "rail", railPct, ...base };
       }
     }
   }
 
-  // Speed sanity needs a few real speed samples to be worth acting on.
+  // Speed sanity needs a few real speed samples to be worth acting on, and a trace that
+  // is not GPS noise: fixes bouncing around one spot add up to tens of km (seen on real
+  // exports as "walks" of 26 km that Google measured at 0.1 km, start = end).
+  const speeds = segmentSpeeds(trace).sort((x, y) => x - y);
   if (speeds.length < 3) return null;
-  const minutes = (Date.parse(a.end) - Date.parse(a.start)) / 60000;
-  if (a.mode !== "flying" && medianKmh > 250 && lengthM >= 50_000) {
+  const displacementM = haversineM(trace[0][0], trace[0][1], trace[trace.length - 1][0], trace[trace.length - 1][1]);
+  if (polylineLengthM(trace) > 3 * Math.max(a.distanceMeters || 0, displacementM) + 2000) return null;
+  const p90 = speeds[Math.floor(speeds.length * 0.9)];
+  const minutes = hours * 60;
+  if (a.mode !== "flying" && avgKmh > 250 && lengthM >= 50_000) {
     return { mode: "flying", confidence: "high", by: "speed", railPct: null, ...base };
   }
-  if (a.mode === "walking" && medianKmh > 15 && lengthM >= 2000) {
-    return { mode: medianKmh <= 28 ? "cycling" : "car", confidence: "high", by: "speed", railPct: null, ...base };
+  if (a.mode === "walking" && avgKmh > 15 && lengthM >= 2000) {
+    return { mode: avgKmh <= 28 ? "cycling" : "car", confidence: "high", by: "speed", railPct: null, ...base };
   }
-  if ((a.mode === "car" || a.mode === "bus") && medianKmh > 0 && medianKmh < 6 && lengthM >= 500 && minutes >= 5) {
+  // Slow on average is not enough (London traffic): every stretch must be walking pace.
+  if ((a.mode === "car" || a.mode === "bus") && avgKmh < 6 && p90 < 12 && lengthM >= 500 && minutes >= 5) {
     return { mode: "walking", confidence: "high", by: "speed", railPct: null, ...base };
   }
   return null;
