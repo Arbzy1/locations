@@ -59,6 +59,25 @@ export function findPlaceLabel(p: RankablePlace, labels: PlaceLabelMeta[]): Plac
   return labels.find((l) => keys.has(l.placeKey));
 }
 
+/**
+ * `findPlaceLabel` for many points: index the labels once instead of scanning them
+ * per point. Same answer (the earliest matching label in `labels` order wins).
+ */
+export function placeLabelLookup(labels: PlaceLabelMeta[]): (p: RankablePlace) => PlaceLabelMeta | undefined {
+  const byKey = new Map<string, number>();
+  labels.forEach((l, i) => {
+    if (!byKey.has(l.placeKey)) byKey.set(l.placeKey, i);
+  });
+  return (p) => {
+    let best: number | undefined;
+    for (const key of placeKeys(p)) {
+      const i = byKey.get(key);
+      if (i !== undefined && (best === undefined || i < best)) best = i;
+    }
+    return best === undefined ? undefined : labels[best];
+  };
+}
+
 export function uniqueTopTypes(points: RankablePlace[], cap = 12): string[] {
   const counts = new Map<string, number>();
   for (const p of points) {
@@ -101,21 +120,20 @@ export function filterAndRankPlaces<T extends RankablePlace>(
   },
 ): T[] {
   const selectedTags = new Set(opts.tags.map((t) => t.toLowerCase()));
+  const labelFor = placeLabelLookup(opts.labels);
+  // Resolve each point's label once; the sort comparator then reads a flag.
   const ranked = points
     .filter((p) => placeMatchesTypes(p.topTypes, opts.types))
-    .filter((p) => {
-      const meta = findPlaceLabel(p, opts.labels);
+    .map((p) => ({ p, meta: labelFor(p) }))
+    .filter(({ meta }) => {
       if (opts.favouritesOnly && !meta?.favourite) return false;
       if (!selectedTags.size) return true;
       const tags = (meta?.tags ?? []).map((t) => t.toLowerCase());
       return tags.some((t) => selectedTags.has(t));
     })
-    .sort((a, b) => {
-      const fa = findPlaceLabel(a, opts.labels)?.favourite ? 1 : 0;
-      const fb = findPlaceLabel(b, opts.labels)?.favourite ? 1 : 0;
-      if (fa !== fb) return fb - fa;
-      return placeMetric(b, opts.rankBy) - placeMetric(a, opts.rankBy);
-    });
+    .map(({ p, meta }) => ({ p, fav: meta?.favourite ? 1 : 0, metric: placeMetric(p, opts.rankBy) }))
+    .sort((a, b) => (a.fav !== b.fav ? b.fav - a.fav : b.metric - a.metric))
+    .map(({ p }) => p);
   return opts.limit ? ranked.slice(0, opts.limit) : ranked;
 }
 

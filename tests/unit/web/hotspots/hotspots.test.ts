@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   filterAndRankPlaces,
+  findPlaceLabel,
+  placeLabelLookup,
   placeMatchesTypes,
   placeMetric,
   sourceTokenVar,
@@ -87,5 +89,25 @@ describe('sourceTokenVar', () => {
     expect(sourceTokenVar('visit')).toBe('var(--visit)');
     expect(sourceTokenVar(null)).toBe('var(--accent)');
     expect(sourceTokenVar('#ff00aa')).toBe('var(--accent)');
+  });
+});
+
+describe('placeLabelLookup', () => {
+  it('matches findPlaceLabel, including which label wins when several match', () => {
+    const labels = [
+      { placeKey: '51.50000,-0.10000', label: 'By coords', hidden: false },
+      { placeKey: 'Home', label: 'By cluster', hidden: false },
+      { placeKey: 'Elsewhere', label: 'Other', hidden: false },
+      { placeKey: 'Home', label: 'Duplicate', hidden: false },
+    ];
+    const lookup = placeLabelLookup(labels);
+    const points = [
+      home,
+      cafe,
+      { lat: 1, lon: 2, count: 1, cluster: 'Elsewhere' },
+      { lat: 3, lon: 4, count: 1 },
+    ];
+    for (const p of points) expect(lookup(p)).toBe(findPlaceLabel(p, labels));
+    expect(lookup(home)?.label).toBe('By coords');
   });
 });

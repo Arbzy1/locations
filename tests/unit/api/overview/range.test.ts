@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activities, dayStats, visits } from "@locations/db";
+import { dayStats } from "@locations/db";
 import { getOverview } from "@locations/api/services";
 
 function overviewDb(opts: {
@@ -11,30 +11,28 @@ function overviewDb(opts: {
   days: number;
   places: number;
 }) {
-  const used = { visits: 0, dayStats: 0 };
+  // One statement: day_stats aggregates plus scalar subqueries for the visit,
+  // activity and distinct-place counts.
   return {
     select: () => ({
-      from: (table: unknown) => {
-        const q: Record<string, unknown> = {};
-        q.where = () => {
-          if (table === visits) {
-            const row = used.visits === 0 ? { count: opts.visits } : { count: opts.places };
-            used.visits += 1;
-            return Promise.resolve([row]);
-          }
-          if (table === activities) return Promise.resolve([{ count: opts.activities }]);
-          if (table === dayStats) {
-            const row =
-              used.dayStats === 0
-                ? { total: opts.miles }
-                : { first: opts.first, last: opts.last, days: opts.days };
-            used.dayStats += 1;
-            return Promise.resolve([row]);
-          }
-          return Promise.resolve([]);
-        };
-        return q;
-      },
+      from: (table: unknown) => ({
+        where: () =>
+          Promise.resolve(
+            table === dayStats
+              ? [
+                  {
+                    total: opts.miles,
+                    first: opts.first,
+                    last: opts.last,
+                    days: opts.days,
+                    visits: opts.visits,
+                    activities: opts.activities,
+                    places: opts.places,
+                  },
+                ]
+              : [],
+          ),
+      }),
     }),
   } as never;
 }

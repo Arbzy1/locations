@@ -550,6 +550,35 @@ function makeSettlementPlaceKey(lat: number, lon: number): string {
 export type LiveLookupBudget = { live: number; lastAt?: number };
 const NOMINATIM_SPACING_MS = 1100;
 
+/**
+ * Wait for this request's next Nominatim slot. The slot is reserved before sleeping,
+ * so lookups running in parallel (Day View routes journeys concurrently) still go
+ * out one per NOMINATIM_SPACING_MS instead of all reading the same `lastAt`.
+ */
+async function awaitNominatimSlot(budget: LiveLookupBudget): Promise<void> {
+  const now = Date.now();
+  const slot = budget.lastAt === undefined ? now : Math.max(now, budget.lastAt + NOMINATIM_SPACING_MS);
+  budget.lastAt = slot;
+  if (slot > now) await new Promise((r) => setTimeout(r, slot - now));
+}
+
+/**
+ * Run `fn` over `items` with at most `limit` in flight, keeping input order in the
+ * result. Bounded so a busy day stays within the Worker's connection limits.
+ */
+export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
 export async function resolveCoords(
   db: ReturnType<typeof createDb>,
   lat: number,
@@ -565,9 +594,7 @@ export async function resolveCoords(
   if (budget) {
     if (budget.live <= 0) return { name: "Unknown", address: "", data: {} };
     budget.live -= 1;
-    const wait = budget.lastAt ? budget.lastAt + NOMINATIM_SPACING_MS - Date.now() : 0;
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    budget.lastAt = Date.now();
+    await awaitNominatimSlot(budget);
   }
 
   try {
@@ -633,7 +660,7 @@ export async function resolveSettlement(
   db: ReturnType<typeof createDb>,
   lat: number,
   lon: number,
-  opts?: { allowLive?: boolean; prefetch?: Map<string, PlaceCacheHit> },
+  opts?: { allowLive?: boolean; prefetch?: Map<string, PlaceCacheHit>; budget?: LiveLookupBudget },
 ): Promise<{ settlement: string | null; fetched: boolean }> {
   const allowLive = opts?.allowLive ?? true;
   const prefetch = opts?.prefetch;
@@ -678,6 +705,12 @@ export async function resolveSettlement(
   }
 
   if (!allowLive) return { settlement: null, fetched: false };
+  // Reserve before the fetch so parallel callers cannot overspend the budget.
+  if (opts?.budget) {
+    if (opts.budget.live <= 0) return { settlement: null, fetched: false };
+    opts.budget.live -= 1;
+    await awaitNominatimSlot(opts.budget);
+  }
 
   try {
     // zoom ~14 prefers locality over a single building / POI
@@ -773,45 +806,32 @@ function activityToApi(a: ActivityRow) {
 }
 
 export async function getOverview(db: ReturnType<typeof createDb>, tenant: TenantId) {
-  const [visitRows, activityRows, distRows, dateRows, placeRows] = await Promise.all([
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(visits)
-      .where(eq(visits.tenant, tenant)),
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(activities)
-      .where(eq(activities.tenant, tenant)),
-    db
-      .select({ total: sql<number>`coalesce(sum(${dayStats.totalDistanceMiles}), 0)` })
-      .from(dayStats)
-      .where(eq(dayStats.tenant, tenant)),
-    db
-      .select({
-        first: sql<string | null>`min(${dayStats.date})`,
-        last: sql<string | null>`max(${dayStats.date})`,
-        days: sql<number>`count(*)::int`,
-      })
-      .from(dayStats)
-      .where(eq(dayStats.tenant, tenant)),
-    db
-      .select({ count: sql<number>`count(distinct ${visits.placeId})::int` })
-      .from(visits)
-      .where(and(eq(visits.tenant, tenant), sql`${visits.placeId} is not null`)),
-  ]);
-
-  const visitCount = visitRows[0]?.count ?? 0;
-  const activityCount = activityRows[0]?.count ?? 0;
-  const first = dateRows[0]?.first;
-  const last = dateRows[0]?.last;
+  // One statement: queries inside a tenant transaction share one connection and run
+  // one after another, so five selects cost five round trips even under Promise.all.
+  const [row] = await db
+    .select({
+      total: sql<number>`coalesce(sum(${dayStats.totalDistanceMiles}), 0)`,
+      first: sql<string | null>`min(${dayStats.date})`,
+      last: sql<string | null>`max(${dayStats.date})`,
+      days: sql<number>`count(*)::int`,
+      visits: sql<number>`(select count(*)::int from ${visits} where ${visits.tenant} = ${tenant})`,
+      activities: sql<number>`(select count(*)::int from ${activities} where ${activities.tenant} = ${tenant})`,
+      places: sql<number>`(select count(distinct ${visits.placeId})::int from ${visits} where ${visits.tenant} = ${tenant} and ${visits.placeId} is not null)`,
+    })
+    .from(dayStats)
+    .where(eq(dayStats.tenant, tenant));
+  const visitCount = Number(row?.visits ?? 0);
+  const activityCount = Number(row?.activities ?? 0);
+  const first = row?.first;
+  const last = row?.last;
   return {
     total_records: visitCount + activityCount,
     total_visits: visitCount,
     total_activities: activityCount,
-    total_distance_miles: Math.round((Number(distRows[0]?.total) || 0) * 10) / 10,
+    total_distance_miles: Math.round((Number(row?.total) || 0) * 10) / 10,
     date_range: first && last ? ([first, last] as [string, string]) : (["", ""] as [string, string]),
-    days_with_data: dateRows[0]?.days ?? 0,
-    unique_places: placeRows[0]?.count ?? 0,
+    days_with_data: row?.days ?? 0,
+    unique_places: Number(row?.places ?? 0),
   };
 }
 
@@ -857,26 +877,24 @@ export async function getHeatmap(
   // ::text first, which is the same shortest decimal the driver hands JavaScript.
   const cellLat = sql<number>`floor(${visits.lat}::text::float8 * 100000 + 0.5) / 100000`;
   const cellLon = sql<number>`floor(${visits.lon}::text::float8 * 100000 + 0.5) / 100000`;
-  const where = and(...filters);
-  const [parts, dayCounts] = await Promise.all([
-    db
-      .select({
-        lat: cellLat,
-        lon: cellLon,
-        cluster: sql<string>`coalesce(trim(${visits.cluster}), '')`,
-        semanticType: sql<string>`coalesce(trim(${visits.semanticType}), '')`,
-        n: sql<number>`count(*)::int`,
-        minutes: sql<number>`coalesce(sum(${visits.durationMinutes}::text::float8), 0)`,
-      })
-      .from(visits)
-      .where(where)
-      .groupBy(cellLat, cellLon, sql`3`, sql`4`),
-    db
-      .select({ lat: cellLat, lon: cellLon, days: sql<number>`count(distinct ${visits.date})::int` })
-      .from(visits)
-      .where(where)
-      .groupBy(cellLat, cellLon),
-  ]);
+  const cluster = sql<string>`coalesce(trim(${visits.cluster}), '')`;
+  const semanticType = sql<string>`coalesce(trim(${visits.semanticType}), '')`;
+  // One scan: grouping sets give the (cell, cluster, type) breakdown and, on the
+  // per-cell rollup rows (perCell = 1), the distinct-day count for each cell.
+  const rows = await db
+    .select({
+      lat: cellLat,
+      lon: cellLon,
+      cluster,
+      semanticType,
+      perCell: sql<number>`grouping(${cluster}, ${semanticType})`,
+      n: sql<number>`count(*)::int`,
+      minutes: sql<number>`coalesce(sum(${visits.durationMinutes}::text::float8), 0)`,
+      days: sql<number>`count(distinct ${visits.date})::int`,
+    })
+    .from(visits)
+    .where(and(...filters))
+    .groupBy(sql`grouping sets ((${cellLat}, ${cellLon}, ${cluster}, ${semanticType}), (${cellLat}, ${cellLon}))`);
 
   type Cell = {
     lat: number;
@@ -889,23 +907,25 @@ export async function getHeatmap(
   };
   const cells = new Map<string, Cell>();
   const keyOf = (lat: number, lon: number) => `${lat},${lon}`;
-  for (const p of parts) {
-    const lat = Number(p.lat);
-    const lon = Number(p.lon);
+  const cellFor = (lat: number, lon: number) => {
     const key = keyOf(lat, lon);
     let cell = cells.get(key);
     if (!cell) {
       cell = { lat, lon, count: 0, totalDurationMinutes: 0, days: 0, clusters: new Map(), types: new Map() };
       cells.set(key, cell);
     }
+    return cell;
+  };
+  for (const p of rows) {
+    const cell = cellFor(Number(p.lat), Number(p.lon));
+    if (Number(p.perCell) !== 0) {
+      cell.days = p.days;
+      continue;
+    }
     cell.count += p.n;
     cell.totalDurationMinutes += Number(p.minutes);
     if (p.cluster) cell.clusters.set(p.cluster, (cell.clusters.get(p.cluster) ?? 0) + p.n);
     if (p.semanticType) cell.types.set(p.semanticType, (cell.types.get(p.semanticType) ?? 0) + p.n);
-  }
-  for (const d of dayCounts) {
-    const cell = cells.get(keyOf(Number(d.lat), Number(d.lon)));
-    if (cell) cell.days = d.days;
   }
 
   // Most frequent first; ties by name so the result does not depend on row order.
@@ -1092,7 +1112,7 @@ const VIA_SAMPLES_MAX = 5;
 export async function placesAlongTrace(
   db: ReturnType<typeof createDb>,
   trace: PathPoint[],
-  budget: { live: number },
+  budget: LiveLookupBudget,
 ): Promise<string[]> {
   const samples = sampleAlongTrace(trace, VIA_SAMPLE_EVERY_M, VIA_SAMPLES_MAX);
   if (!samples.length) return [];
@@ -1103,8 +1123,7 @@ export async function placesAlongTrace(
   ];
   const names: (string | null)[] = [];
   for (const [lat, lon] of points) {
-    const { settlement, fetched } = await resolveSettlement(db, lat, lon, { allowLive: budget.live > 0 });
-    if (fetched) budget.live -= 1;
+    const { settlement } = await resolveSettlement(db, lat, lon, { budget });
     names.push(settlement);
   }
   const ends = new Set([names[0], names[names.length - 1]].filter(Boolean));
@@ -1114,6 +1133,9 @@ export async function placesAlongTrace(
   }
   return via;
 }
+
+/** Journeys (and gap connectors) one Day View request routes at the same time. */
+const DAY_ROUTE_CONCURRENCY = 4;
 
 /** Live place-name lookups per Day View request (see LiveLookupBudget). */
 const MAX_LIVE_PLACE_LOOKUPS = 10;
@@ -1284,12 +1306,14 @@ export async function buildDay(
   /** Where each journey line is actually drawn from and to, for gap lines. */
   const drawnEnds = new Map<ActivityRow, { start: LatLon; end: LatLon }>();
 
-  const viaBudget = { live: MAX_LIVE_VIA_LOOKUPS };
+  const viaBudget: LiveLookupBudget = { live: MAX_LIVE_VIA_LOOKUPS };
   const routeBudget: LiveLookupBudget = { live: MAX_LIVE_ROUTE_CALLS };
-  const enrichedActivities = [];
-  for (let idx = 0; idx < events.length; idx++) {
-    const ev = events[idx];
-    if (ev.type !== "activity") continue;
+  // Journeys route concurrently (bounded): each is cache reads plus maybe OSRM and
+  // Nominatim, and done one by one a busy day paid every round trip in sequence.
+  // Budgets reserve synchronously, so the live-call caps still hold.
+  const activityIdxs = events.flatMap((ev, idx) => (ev.type === "activity" ? [idx] : []));
+  const enrichedActivities = await mapLimit(activityIdxs, DAY_ROUTE_CONCURRENCY, async (idx) => {
+    const ev = events[idx] as Extract<Event, { type: "activity" }>;
     const a = ev.data;
     activityDone += 1;
     const pct =
@@ -1409,8 +1433,8 @@ export async function buildDay(
     }
     d.from_place = fromPlace;
     d.to_place = toPlace;
-    enrichedActivities.push(d);
-  }
+    return d;
+  });
 
   const connectorCandidates: Array<{
     fromLat: number;
@@ -1456,10 +1480,9 @@ export async function buildDay(
     });
   }
 
-  const connectors = [];
   const connectorTotal = connectorCandidates.length;
   let connectorDone = 0;
-  for (const c of connectorCandidates) {
+  const connectors = await mapLimit(connectorCandidates, DAY_ROUTE_CONCURRENCY, async (c) => {
     connectorDone += 1;
     const pct =
       connectorTotal === 0
@@ -1474,7 +1497,7 @@ export async function buildDay(
     });
 
     if (c.gapM < 300) {
-      connectors.push({
+      return {
         from_time: c.from_time,
         to_time: c.to_time,
         from_lat: c.fromLat,
@@ -1490,41 +1513,41 @@ export async function buildDay(
         is_routed: false,
         from_label: c.from_label,
         to_label: c.to_label,
-      });
-    } else {
-      const connectorData = await fetchRoute(
-        db,
-        c.fromLat,
-        c.fromLon,
-        c.toLat,
-        c.toLon,
-        connectorMode(c.gapM, c.from_time, c.to_time),
-        routeBudget,
-      );
-      connectors.push({
-        from_time: c.from_time,
-        to_time: c.to_time,
-        from_lat: c.fromLat,
-        from_lon: c.fromLon,
-        to_lat: c.toLat,
-        to_lon: c.toLon,
-        route_geometry: connectorData.geometry,
-        steps: connectorData.steps,
-        distance_meters: connectorData.steps.length
-          ? connectorData.steps.reduce((s, st) => s + st.distance_meters, 0)
-          : Math.round(c.gapM * 10) / 10,
-        is_routed: true,
-        from_label: c.from_label,
-        to_label: c.to_label,
-      });
+      };
     }
-  }
+    const connectorData = await fetchRoute(
+      db,
+      c.fromLat,
+      c.fromLon,
+      c.toLat,
+      c.toLon,
+      connectorMode(c.gapM, c.from_time, c.to_time),
+      routeBudget,
+    );
+    return {
+      from_time: c.from_time,
+      to_time: c.to_time,
+      from_lat: c.fromLat,
+      from_lon: c.fromLon,
+      to_lat: c.toLat,
+      to_lon: c.toLon,
+      route_geometry: connectorData.geometry,
+      steps: connectorData.steps,
+      distance_meters: connectorData.steps.length
+        ? connectorData.steps.reduce((s, st) => s + st.distance_meters, 0)
+        : Math.round(c.gapM * 10) / 10,
+      is_routed: true,
+      from_label: c.from_label,
+      to_label: c.to_label,
+    };
+  });
 
   const visitEvents = events.filter((e) => e.type === "visit");
-  const uniqueCoords = new Map<string, [number, number]>();
+  // First visit at each rounded coordinate (its place id picks the demo landmark).
+  const uniqueCoords = new Map<string, VisitRow>();
   for (const ev of visitEvents) {
     const key = `${Math.round(ev.data.lat * 1e5) / 1e5},${Math.round(ev.data.lon * 1e5) / 1e5}`;
-    if (!uniqueCoords.has(key)) uniqueCoords.set(key, [ev.data.lat, ev.data.lon]);
+    if (!uniqueCoords.has(key)) uniqueCoords.set(key, ev.data);
   }
 
   await report({
@@ -1542,7 +1565,9 @@ export async function buildDay(
   let placeDone = 0;
   const placeTotal = uniqueCoords.size;
   const placeBudget: LiveLookupBudget = { live: MAX_LIVE_PLACE_LOOKUPS };
-  for (const [key, [lat, lon]] of uniqueCoords) {
+  // Concurrent like the journeys: cache hits overlap, and live lookups stay one per
+  // NOMINATIM_SPACING_MS through the budget's reserved slots.
+  await mapLimit([...uniqueCoords], DAY_ROUTE_CONCURRENCY, async ([key, visit]) => {
     placeDone += 1;
     await report({
       stage: "Resolving place names",
@@ -1552,12 +1577,7 @@ export async function buildDay(
       total: placeTotal,
     });
 
-    const visit = visitEvents.find(
-      (ev) =>
-        Math.round(ev.data.lat * 1e5) / 1e5 === Math.round(lat * 1e5) / 1e5 &&
-        Math.round(ev.data.lon * 1e5) / 1e5 === Math.round(lon * 1e5) / 1e5,
-    );
-    const landmark = tenant === "demo" ? landmarkForPlaceId(visit?.data.placeId) : null;
+    const landmark = tenant === "demo" ? landmarkForPlaceId(visit.placeId) : null;
     if (landmark) {
       placeNames.set(key, {
         name: landmark.name,
@@ -1571,13 +1591,14 @@ export async function buildDay(
         },
       });
     } else {
-      placeNames.set(key, await resolveCoords(db, lat, lon, placeBudget));
+      placeNames.set(key, await resolveCoords(db, visit.lat, visit.lon, placeBudget));
     }
-  }
+  });
 
   await report({ stage: "Assembling day view", percent: 97 });
 
   const enrichedVisits = [];
+  let stopNumber = 0;
   for (let idx = 0; idx < events.length; idx++) {
     const ev = events[idx];
     if (ev.type !== "visit") continue;
@@ -1605,8 +1626,8 @@ export async function buildDay(
     }
     vd.departed_by = nextMode;
 
-    const visitIdx = visitEvents.findIndex((e) => e === ev);
-    vd.stop_number = visitIdx + 1;
+    stopNumber += 1;
+    vd.stop_number = stopNumber;
     vd.total_stops = visitEvents.length;
 
     const coordKey = `${Math.round(v.lat * 1e5) / 1e5},${Math.round(v.lon * 1e5) / 1e5}`;

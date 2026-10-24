@@ -102,6 +102,24 @@ async function fetchDayStreaming(
   let result: DayData | null = null;
   let streamError: string | null = null;
 
+  // At most one progress render per frame: a busy day streams dozens of lines.
+  let pending: DayLoadProgress | null = null;
+  let frame: number | null = null;
+  const emitProgress = (p: DayLoadProgress) => {
+    pending = p;
+    if (frame !== null) return;
+    frame = requestAnimationFrame(() => {
+      frame = null;
+      if (pending) onProgress(pending);
+      pending = null;
+    });
+  };
+  const cancelProgress = () => {
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = null;
+    pending = null;
+  };
+
   const pushLog = (stage: string, detail?: string) => {
     const line = detail ? `${stage}: ${detail}` : stage;
     if (logs[logs.length - 1] !== line) {
@@ -110,41 +128,45 @@ async function fetchDayStreaming(
     }
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      const msg = JSON.parse(trimmed) as {
-        type: string;
-        stage?: string;
-        detail?: string;
-        percent?: number;
-        done?: number;
-        total?: number;
-        data?: DayData;
-        error?: string;
-      };
-      if (msg.type === 'progress') {
-        pushLog(msg.stage ?? 'Working', msg.detail);
-        onProgress({
-          stage: msg.stage ?? 'Working',
-          detail: msg.detail,
-          percent: msg.percent ?? 0,
-          done: msg.done,
-          total: msg.total,
-          logs: [...logs],
-        });
-      } else if (msg.type === 'result' && msg.data) {
-        result = msg.data;
-      } else if (msg.type === 'error') {
-        streamError = msg.error ?? 'Failed to load day';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const msg = JSON.parse(trimmed) as {
+          type: string;
+          stage?: string;
+          detail?: string;
+          percent?: number;
+          done?: number;
+          total?: number;
+          data?: DayData;
+          error?: string;
+        };
+        if (msg.type === 'progress') {
+          pushLog(msg.stage ?? 'Working', msg.detail);
+          emitProgress({
+            stage: msg.stage ?? 'Working',
+            detail: msg.detail,
+            percent: msg.percent ?? 0,
+            done: msg.done,
+            total: msg.total,
+            logs: [...logs],
+          });
+        } else if (msg.type === 'result' && msg.data) {
+          result = msg.data;
+        } else if (msg.type === 'error') {
+          streamError = msg.error ?? 'Failed to load day';
+        }
       }
     }
+  } finally {
+    cancelProgress();
   }
 
   // An empty day is an answer, not a failure: no retries, no error state.
