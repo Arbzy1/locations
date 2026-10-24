@@ -12,7 +12,13 @@ Named Wrangler environments isolate staging and production. Top-level `wrangler.
 | Stripe | test-mode keys + webhook to staging URL | live keys |
 | CSP | `CSP_ENFORCE=true` | `CSP_ENFORCE=true` |
 
-Push to `main` deploys staging. Production is a manual promote (`npm run deploy:prod` or the production GitHub Action).
+Push to `master` deploys staging. Production is a manual promote: run the **Deploy production** GitHub workflow on `master` (or `npm run deploy:prod` locally).
+
+**Migrations are not part of any deploy.** Neither workflow nor `deploy:*` touches the database. Before deploying code that reads a new table or column, run `npm run db:migrate:prod` (and `db:migrate:staging`). Migrations are idempotent (`ADD ... IF NOT EXISTS`; the runner skips "already exists"), so running them again is safe. Deploying first leaves the new feature failing until they run.
+
+## Cron triggers
+
+The Workers free plan allows 5 cron triggers per account, shared with the account's other Workers. Each Locations Worker therefore has one trigger, `*/20 * * * *`. Every tick runs the Journey cost data sync; the 08:00 UTC tick on the 1st of the month also runs the monthly jobs (history retention and the recap email). Any other cron expression, such as a manual run, also counts as "run the monthly jobs". Jobs run independently and log failures by `kind`. Do not add a second trigger without freeing one elsewhere: the deploy fails at the schedules step.
 
 ## First-run checklist
 
@@ -57,7 +63,7 @@ Push to `main` deploys staging. Production is a manual promote (`npm run deploy:
 
 7. GitHub: add repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (`8507815ae44383c8d60535ea462f5124`). Enable the deploy workflows. Token needs Workers, R2, and Queues edit on this account.
 
-Local CLI secrets: `.env` / `.dev.vars`. Staging: `.env.staging` / `.dev.vars.staging`. Production: `.env.production` / `.dev.vars.production`. Wrangler named envs read `.dev.vars.<env>` during `wrangler dev --env …`.
+Local CLI secrets: `.env` / `.dev.vars` (these also hold `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, so Wrangler commands run without `wrangler login`). Staging: `.env.staging` / `.dev.vars.staging`. Production: `.env.production` / `.dev.vars.production`. Wrangler named envs read `.dev.vars.<env>` during `wrangler dev --env …`.
 
 ## npm scripts
 
@@ -90,7 +96,7 @@ npm run release:minor -- --dry-run
 npm run release:patch -- --no-push
 ```
 
-The working tree must be clean (untracked files are ignored). Use `--force` only to replace an existing tag of the same name. Staging still deploys on push to `main`; production is a separate promote (`npm run deploy:prod` or the production workflow).
+The working tree must be clean (untracked files are ignored). Use `--force` only to replace an existing tag of the same name. Staging still deploys on push to `master`; production is a separate promote (the production workflow or `npm run deploy:prod`).
 
 ## GitHub Actions
 
@@ -98,14 +104,14 @@ CI (`.github/workflows/ci.yml`) stays on pull requests and pushes: unit, integra
 
 | Workflow | Trigger | Wrangler |
 |----------|---------|----------|
-| `deploy-staging.yml` | push to `main` | `deploy --env staging` |
+| `deploy-staging.yml` | push to `master` | `deploy --env staging` |
 | `deploy-production.yml` | `workflow_dispatch` only | `deploy --env production` |
 
-Both workflows run `npm ci`, unit + integration tests, typecheck, `build:all`, then `cloudflare/wrangler-action`. They must **not** receive `DATABASE_URL` or other Worker secrets. Those are already on the Worker from `npm run cf:sync`.
+Both workflows first fail fast if the Cloudflare secrets are missing, then run `npm ci`, test placement, unit, integration and admin tests, typecheck, `build:all`, then `cloudflare/wrangler-action`. They must **not** receive `DATABASE_URL` or other Worker secrets (those are already on the Worker from `npm run cf:sync`), which is also why they cannot run migrations.
 
 Required GitHub secrets:
 
-- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_API_TOKEN` (an account API token: check it with `/accounts/<id>/tokens/verify`; the user `/user/tokens/verify` endpoint reports account tokens as invalid)
 - `CLOUDFLARE_ACCOUNT_ID`
 
 E2E against staging (`PLAYWRIGHT_BASE_URL=https://locations-staging.aden.website`) is a later follow-up.

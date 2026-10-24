@@ -50,3 +50,15 @@ Three read-only audits (UX/layout, product, performance/reliability) fed this pl
 - [x] GPX / GeoJSON / visits CSV export.
 - [x] Use Timeline `timelineMemory` (seed named trips) and Google's own home/work.
 - [x] "On this day" in the app (Insights). Not as an email: AGENTS.md forbids activity digests and place names in mail.
+
+## After the audit
+
+- [x] Imports of any size on the Workers free plan: the browser parses the export and computes statistics; the Worker stores checked batches (`import-session.ts`).
+- [x] Transport mode from GPS points: trains Google called driving, bus, unknown or walking; drawn along the tracks from static UK and Ireland rail tiles (`rail.ts`, migration `0022`).
+- [x] Google start or end points that could not be reached in time are ignored (no more there-and-back lines).
+- [x] Day View: colour by transport, numbered journeys, separate out-and-back lanes, focus, mode legend.
+- [x] Insights for any period up to all time without hitting the CPU limit.
+- [x] Performance pass: smaller entry bundle, lazy marketing and legal pages, fewer round trips, per-group map overlay sync, bounded concurrency for routing and place names.
+- [ ] Production migrations for Journey cost (`0020_brim`, `0021_brim_rls`): deploys do not run migrations.
+- [ ] Split a walk, train, walk recorded as one journey (drawing only).
+- [ ] Dashed segments where GPS had a long gap (tunnels, phone asleep).

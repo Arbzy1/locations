@@ -20,7 +20,14 @@ What the hosted app does today. Nothing here is a roadmap.
 - Overnight stays: labelled when a visit started yesterday or continues past midnight; those stays also appear on the next morning
 - Timeline rows show arrived-by / left-by when Google recorded a mode
 - Gaps without a recorded journey show as unknown movement, with a note that the dashed path is inferred
-- Journeys use cached road geometry when it is available (turn-by-turn steps in the timeline)
+- Journeys are drawn from the GPS points your phone recorded: matched onto roads, or along the railway for trains, with turn-by-turn steps in the timeline; without GPS, the fastest road route between start and end
+- Journey lines: Best, Recorded GPS, Predicted (fastest road route, with how closely it matches your GPS), or Points (only the GPS points, no lines)
+- Each journey shows an accuracy badge (GPS points, longest gap, distance from the line) and the towns its GPS trace passed through
+- Journeys are coloured by transport (Layers can switch to one colour per journey), numbered on the map to match the timeline, with direction arrows; a trip there and back along the same road shows as two lines side by side
+- Tap a journey (on the map or in the timeline) to bring it forward and fade the rest; a legend of the day's transport modes hides or shows each one
+- Trains detected from GPS: a journey Google called driving, a bus, unknown, or a "walk" at train speed becomes a train (or Underground) when most of its points sit on a railway (Great Britain and Ireland). Walks at cycling speed, "drives" at walking pace and flights are fixed too. Each change has a "Detected" badge with one tap back to Google's label; weaker matches say "Might be a train"
+- Notes on any stay or journey, and transport-mode fixes that also update stats and Routes; both survive re-imports
+- **Routes** (Map > Lines, `/routes`): every journey line for a day, month, year, or custom range, coloured by mode, with month and year chips and a mode legend
 - Basemaps: auto (follows theme), street, satellite; optional vector style from env
 - 3D buildings when a vector style is configured
 - Measure tool, visit clustering with spiderfy, Street View / Mapillary link-out (coordinates only)
@@ -38,6 +45,8 @@ What the hosted app does today. Nothing here is a roadmap.
 - **Explore** overflow (desktop rail, mobile More): place directory and place pages, corridors, coverage, compare, replay, month/week/on this day/gaps, year-in-review, trip stories, commute, away nights, chapters, activity guesses, badges, changelog, and related screens
 - Auto-named multi-day trips (start and end place names, modes, distance) on Insights and Day Trips; tap opens the trip story
 - **Insights:** total distance, days tracked, visits, journeys, unique places
+- Any period (this year, last year, 12 months, 90 days, all time, or custom) with distance, days, journeys, places, transport mix, top places and first visits, against the same dates a year earlier
+- On this day: the same date in earlier years (in the app only, never emailed)
 - Monthly distance chart, per-month top places, and transport-mode breakdown
 - Yearly table with driving vs public-transit miles, plus a year-in-review teaser and a `/review/:year` chapter page (places, modes, trips, firsts, streaks)
 - Streaks, new places this month vs last, lapsed places, two-year compare, stacked modes-by-year, and hour-of-week heatmap
@@ -59,14 +68,16 @@ What the hosted app does today. Nothing here is a roadmap.
 - Hidden places stay out of search, heatmap, and directory lists. Day View and place-history rows still list those visits. Hide is discovery-only, not a privacy wipe.
 - Recent places and named filter presets stay on this device
 - Keyboard: `g` then `h`/`d`/`t`/`i`/`e`/`s` for main pages; `[` / `]` previous/next day
-- Hotspots and Day Trips filters live in the URL so refresh keeps them. Insights is the full import, not a date slice
+- Hotspots and Day Trips filters live in the URL so refresh keeps them
 
 ## Import
 
-- Upload Google Timeline JSON or a Takeout zip (`Timeline.json` / `Records.json`)
+- Upload Google Timeline JSON or a Takeout zip (`Timeline.json` / `Records.json`). Your browser parses the file and works out the statistics, then uploads checked batches with a live progress bar, so imports of any size work on the Workers free plan
 - Drag-drop on the empty Hotspots state and in Settings; a preview shows which zip file won, date overlap, and replace vs merge vs skip-overlap counts
 - One source per Google account; label, colour, rename, re-upload, merge (optional skip overlapping days), or delete a source
 - Delete a date range (optionally per source) from Settings
+- Delete everything at a place (stays, journeys to or from it, GPS points within 200 m)
+- Export GPX or GeoJSON (up to a year, journeys included) or a stays CSV, with home blurred to about 1 km by default
 - Reprocess a capped batch of predicted routes from Settings
 - Import progress shows records parsed, visits written, and the chosen file name
 - Timezone skew is a warning only (dates are not rewritten)

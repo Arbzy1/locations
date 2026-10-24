@@ -51,7 +51,7 @@ All routes are under `/api/brim/*`, behind the normal session middleware. See [r
 
 ## Scheduled sync
 
-The Worker `scheduled` handler dispatches on the cron expression: `0 8 1 * *` sends monthly recaps; `*/20 * * * *` runs `runBrimSync` (carbon intensity always, Fuel Finder when its secrets are set). Logs carry counts only.
+The Worker has one cron, `*/20 * * * *` (the free plan allows 5 per account, shared with other Workers). Each tick runs `runBrimSync` (carbon intensity always, Fuel Finder when its secrets are set); the 08:00 UTC tick on the 1st also runs retention and the monthly recap (`isMonthlyTick` in `apps/api/src/index.ts`). Logs carry counts only. The `brim_*` tables come from migrations `0020_brim` and `0021_brim_rls`, which deploys do not run (see [deploy](../engineering/deploy.md)).
 
 ## Registration plates
 

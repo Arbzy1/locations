@@ -16,6 +16,12 @@ All other `/api/*` require a session.
 | GET | `/api/heatmap` | optional `?sources=` |
 | GET | `/api/route-progress` | tenant-scoped cache hits |
 | POST | `/api/routes/rewarm` | not demo; cap 100 uncached journeys |
+| GET | `/api/routes` | `from`, `to` (`YYYY-MM-DD`, at most 366 days; `truncated` when capped), optional `sources=`; every journey line in the period as recorded (rail line for trains, else GPS trace, else straight), thinned by span; no OSRM calls |
+| GET | `/api/hotspots/days` | `lat`, `lon`, optional `radius_m` (default 150, max 2000); days with a stay near the point, newest first, with time spent |
+| GET | `/api/insights/range` | `from`, `to`; totals, transport mix, top places, first visits, and the same dates a year earlier; any span up to 100 years ("All time") |
+| GET | `/api/on-this-day` | optional `date=` (the client's local date); the same day in earlier years with distance and top places; in-app only |
+| GET | `/api/export/:format` | `gpx`, `geojson` (journeys, up to a year) or `csv` (stays, any span); `from`, `to`, `blur_home=1` blurs home to about 1 km; download |
+| GET | `/api/place/:placeId` | `lat`, `lon`; place name from `place_cache` or Nominatim; rate-limited 30/min |
 | GET | `/api/analytics/*` | monthly, yearly, day-trips, corridors, facts, multi-day, home-work, areas, year-in-review (`?year=`), flights, train-hops, low-movement, away-nights, commute, firsts, data-health, moving, anomaly, activity-guesses, badges |
 | GET | `/api/clusters` | directory; `q`, `sort`, `limit`, `cursor`; hidden omitted |
 | GET | `/api/clusters/:key` | summary, hour histogram, related corridors |
@@ -77,6 +83,8 @@ All other `/api/*` require a session.
 | PATCH | `/api/account/settings` | units, timezone, recap, map bookmarks, allowlisted custom tiles |
 | GET | `/api/places/labels` | user place names, hidden, favourite, colour, tags |
 | PATCH | `/api/places/labels` | `{ placeKey, label?, hidden?, favourite?, color?, tags? }`; `color` is an allowlisted token; demo 403 |
+| DELETE | `/api/places/:key/data` | not demo; deletes every stay at the place, journeys to or from it, and GPS points within 200 m; marks aggregates stale |
+| PATCH | `/api/overrides` | not demo; `{ kind: visit\|activity, start, note?, mode? }`; a mode fix also updates the journey row so stats and Routes follow; no mode means Google's label again |
 
 Cross-tenant ids return 404. Demo writes return 403.
 
