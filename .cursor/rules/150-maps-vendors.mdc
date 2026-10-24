@@ -11,4 +11,4 @@ alwaysApply: false
 - Tile, routing, and geocode hosts come from env (commercial providers). Public OSRM/Nominatim/OSM tiles are fallbacks for local dev only.
 - API keys stay in Worker secrets, never `VITE_*`.
 - Initial map viewport and clusters are derived from the tenant’s data, not hardcoded UK points.
-- Escape untrusted place names in Leaflet `divIcon` / popup HTML.
+- Escape untrusted place names in MapLibre marker / popup HTML.

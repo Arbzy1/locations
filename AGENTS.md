@@ -11,7 +11,7 @@ Hosted Google Timeline / location-history explorer: heatmaps, day views, trips, 
 | Auth | Better Auth (email/password, verified signup; `DISABLE_SIGNUP` kill switch) |
 | Billing | Stripe Checkout, Customer Portal, webhooks |
 | DB | Neon Postgres + Drizzle (`packages/db`) with FORCE RLS |
-| UI | React 19, Vite, Tailwind 4, shadcn/ui, Motion, Leaflet, Recharts (`apps/web`) |
+| UI | React 19, Vite, Tailwind 4, shadcn/ui, Motion, MapLibre GL, Recharts (`apps/web`) |
 
 Monorepo (npm workspaces) under this directory:
 
@@ -131,7 +131,7 @@ Interactive chrome uses **Motion** (`motion/react`). Do not ship dead controls w
 **Do**
 
 - Animate shell chrome: nav, sheets, cards, dialogs, timeline rows, legends, toasts.
-- Keep Leaflet tile pan/zoom and Recharts ticks native (no spring on the map canvas).
+- Keep MapLibre pan/zoom and Recharts ticks native (no spring on the map canvas).
 
 **Do not**
 
@@ -153,11 +153,11 @@ The web app supports dark and light mode via `html[data-theme="dark"|"light"]` a
 
 **Do not**
 
-- Hardcode theme colours (`#0d1117`, `#161b22`, `#30363d`, `#f0f6fc`, `#8b949e`, `#58a6ff`, or light equivalents) in components, Leaflet HTML, or chart styles.
+- Hardcode theme colours (`#0d1117`, `#161b22`, `#30363d`, `#f0f6fc`, `#8b949e`, `#58a6ff`, or light equivalents) in components, map marker HTML, or chart styles.
 - Assume dark-only UI (e.g. white text on a fixed dark panel).
 - Add a second theming system; extend the existing CSS variables and `useTheme()` from [`apps/web/src/lib/theme.tsx`](apps/web/src/lib/theme.tsx).
 
-**When colours must be set in JS** (Recharts ticks, Leaflet `divIcon` HTML, canvas):
+**When colours must be set in JS** (Recharts ticks, MapLibre marker HTML, canvas):
 
 - Read live values with `getComputedStyle(document.documentElement).getPropertyValue('--…')`, or use `var(--…)` in style strings.
 - Recompute when `useTheme().theme` changes.
@@ -225,7 +225,7 @@ Hover styles for polish are fine; hover as the only way to reach content is not.
 ### Map responsiveness
 
 <!-- sync:cursor-rule name="ui-map-responsive" order="80" globs="apps/web/src/components/explorer/Map.tsx,apps/web/src/components/**/*View.tsx" -->
-Leaflet maps must stay usable when the container is small or resizes.
+MapLibre maps must stay usable when the container is small or resizes.
 
 **Controls and legend**
 
@@ -336,7 +336,7 @@ Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_s
 - Tile, routing, and geocode hosts come from env (commercial providers). Public OSRM/Nominatim/OSM tiles are fallbacks for local dev only.
 - API keys stay in Worker secrets, never `VITE_*`.
 - Initial map viewport and clusters are derived from the tenant’s data, not hardcoded UK points.
-- Escape untrusted place names in Leaflet `divIcon` / popup HTML.
+- Escape untrusted place names in MapLibre marker / popup HTML.
 <!-- /sync:cursor-rule -->
 
 ### Performance

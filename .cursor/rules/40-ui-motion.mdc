@@ -26,7 +26,7 @@ Interactive chrome uses **Motion** (`motion/react`). Do not ship dead controls w
 **Do**
 
 - Animate shell chrome: nav, sheets, cards, dialogs, timeline rows, legends, toasts.
-- Keep Leaflet tile pan/zoom and Recharts ticks native (no spring on the map canvas).
+- Keep MapLibre pan/zoom and Recharts ticks native (no spring on the map canvas).
 
 **Do not**
 

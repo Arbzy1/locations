@@ -18,11 +18,11 @@ The web app supports dark and light mode via `html[data-theme="dark"|"light"]` a
 
 **Do not**
 
-- Hardcode theme colours (`#0d1117`, `#161b22`, `#30363d`, `#f0f6fc`, `#8b949e`, `#58a6ff`, or light equivalents) in components, Leaflet HTML, or chart styles.
+- Hardcode theme colours (`#0d1117`, `#161b22`, `#30363d`, `#f0f6fc`, `#8b949e`, `#58a6ff`, or light equivalents) in components, map marker HTML, or chart styles.
 - Assume dark-only UI (e.g. white text on a fixed dark panel).
 - Add a second theming system; extend the existing CSS variables and `useTheme()` from [`apps/web/src/lib/theme.tsx`](apps/web/src/lib/theme.tsx).
 
-**When colours must be set in JS** (Recharts ticks, Leaflet `divIcon` HTML, canvas):
+**When colours must be set in JS** (Recharts ticks, MapLibre marker HTML, canvas):
 
 - Read live values with `getComputedStyle(document.documentElement).getPropertyValue('--…')`, or use `var(--…)` in style strings.
 - Recompute when `useTheme().theme` changes.
