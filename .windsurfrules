@@ -313,6 +313,13 @@ Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_s
 
 Keep local start, first authed paint, and later tab switches fast. Do not trade Motion, map fidelity, or empty-state UX for a smaller spinner.
 
+**Mindset**
+
+- Think about cost while writing, not after. For each change ask: how many round trips, how much data, how much re-rendering, and what it costs on the largest tenant (tens of thousands of visits).
+- Measure before optimising: `Server-Timing` headers (`total`, `auth`, `db`, `build`, `geo`), `EXPLAIN (ANALYZE, BUFFERS)`, a fresh `build:web` for chunk sizes. Do not judge speed in dev mode (StrictMode mounts the map twice).
+- Prefer the simple fast version (fewer queries, a `Map` lookup, a memo) over clever caching. Do not add caches that need invalidation unless measurement shows the need.
+- Speed never overrides privacy or correctness: API responses stay `no-store`, and query rewrites must return identical results (check against real data before swapping).
+
 **Local `dev:all`**
 
 - Vite HMR on :5173 plus Wrangler on :8787. No `tsc` / `vite build` on that path. Wrangler may serve a stub `apps/web/dist` from `ensure-web-dist.mjs`.
@@ -330,10 +337,32 @@ Keep local start, first authed paint, and later tab switches fast. Do not trade 
 
 **API and Worker**
 
-- Independent SQL in `Promise.all`. Overview date range is `min` / `max` / `count`, not every `day_stats` row. Source counts are `GROUP BY`, not 1+2N.
+- Count statements, not lines. Queries inside one `withTenant` share a connection and run one after another, so `Promise.all` there does not overlap them. Fold related reads into one statement (scalar subqueries, `GROUPING SETS`) instead of issuing several. `Promise.all` only helps across separate connections or outside the transaction.
+- Overview date range is `min` / `max` / `count`, not every `day_stats` row. Source counts are `GROUP BY`, not 1+2N.
+- One Neon pool per request (`requestDb`); reuse it for cache reads after the tenant transaction commits instead of opening another. Better Auth is built once per isolate (`createAuth` caches it); do not construct per call.
+- Select only the columns you need. `activities.path` (GPS) is most of the table's bytes; leave it out of wide or range reads unless the route draws it.
 - `withTenant` is for tenant rows only. Geocode, Nominatim, and OSRM run after commit (heatmap settlements, Day View routing). Batch `place_cache` reads.
 - Do not open a Neon WebSocket pool for ops-flag / `/api/config` reads. HTTP drizzle (`createHttpDb`) for those tiny lookups; close any probe pool. `requestDb` still ends its pool after the response.
 - Do not cap heatmap cells or change clustering to “go faster”. Payload shape and map density stay as they are.
+
+**External calls (OSRM, Nominatim)**
+
+- Independent per-item work (journeys, connectors, place names) runs with bounded concurrency via `mapLimit` (Day View uses 4), not a sequential loop and not an unbounded `Promise.all`.
+- Live-call budgets and the Nominatim 1 req/s spacing must hold under concurrency: reserve the budget and the slot synchronously before awaiting (`awaitNominatimSlot`), never check-then-await-then-decrement.
+- Cache first, live second, and keep live calls capped per request so a cold day degrades to straight lines or "Unknown" instead of timing out.
+
+**React and the map**
+
+- Keep props and derived arrays referentially stable (`useMemo` / `useCallback`, module-level empty defaults). A fresh array per render re-runs every effect downstream of it.
+- Index once, look up many: build a `Map` / `Set` before loops; no `.find` / `.includes` inside `filter`, `sort` comparators, or per-item loops. No spread into `Math.max(...big)`; use a loop or `reduce`.
+- Map overlays sync per group (`useOverlayGroup` in `Map.tsx`): a change re-runs only the group it feeds. Sliders and toggles update paint/layout properties; they do not rebuild sources. HTML markers are for a few pins; gate the rest by zoom and rebuild only when a zoom threshold is crossed.
+- Do work at the rate the screen can show it: coalesce streamed progress to one `setState` per animation frame.
+- Latest-value refs update in a layout effect (`useLatest`), not during render.
+
+**Bundle**
+
+- Route-level `lazy()` for anything that is not the first screen (marketing, legal, admin, heavy views). Landing and the auth pages stay eager for signed-out visitors.
+- Do not force a library into a named `manualChunks` group unless it is only used by lazy code: Rolldown pulls the group's dependencies in with it (that is how `recharts` ended up preloaded on every page). Check `dist/index.html` modulepreloads after bundle changes.
 
 **Do not**
 
@@ -342,6 +371,8 @@ Keep local start, first authed paint, and later tab switches fast. Do not trade 
 - Hold an RLS transaction across live Nominatim.
 - Add heavy static imports to `apps/api/src/index.ts` when a request-time `import()` will do (Stripe is already lazy).
 - Strip Motion springs or restyle spinners as a performance shortcut.
+- Add a query, fetch, or full-list scan inside a per-item loop when one batched call or a lookup map will do.
+- Relax `Cache-Control: no-store` on API responses for speed (location data must not land in the browser disk cache).
 
 ### Testing
 
