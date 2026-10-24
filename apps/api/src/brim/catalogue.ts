@@ -21,7 +21,7 @@ import type { Context } from 'hono';
 import { brimVcaVehicles as vcaVehicles } from '@locations/db';
 import { createDb, type BrimContext } from "./context";
 
-function fixtureVehicles(flag: string | undefined): VcaVehicle[] {
+function fixtureVehicles(flag: string | undefined): Promise<VcaVehicle[]> {
   return loadFixture<VcaVehicle[]>('vca-vehicles', flag);
 }
 
@@ -55,7 +55,7 @@ function facetName(value: string | null | undefined): string | undefined {
 
 export async function listMakesHandler(c: BrimContext) {
   if (isFixtureMode(c.env.BRIM_FIXTURES)) {
-    return c.json({ makes: listVcaMakes(fixtureVehicles(c.env.BRIM_FIXTURES)) });
+    return c.json({ makes: listVcaMakes(await fixtureVehicles(c.env.BRIM_FIXTURES)) });
   }
   const db = createDb(c.env);
   const rows = await db.db
@@ -73,7 +73,7 @@ export async function listModelsHandler(c: BrimContext) {
   const make = facetName(c.req.query('make'));
   if (!make) return c.json({ models: [] });
   if (isFixtureMode(c.env.BRIM_FIXTURES)) {
-    return c.json({ models: listVcaModels(fixtureVehicles(c.env.BRIM_FIXTURES), make) });
+    return c.json({ models: listVcaModels(await fixtureVehicles(c.env.BRIM_FIXTURES), make) });
   }
   const db = createDb(c.env);
   const rows = await db.db
@@ -95,7 +95,7 @@ export async function listCatalogueHandler(c: BrimContext) {
 
   if (make && model) {
     if (isFixtureMode(c.env.BRIM_FIXTURES)) {
-      return c.json({ vehicles: listVcaTrims(fixtureVehicles(c.env.BRIM_FIXTURES), make, model) });
+      return c.json({ vehicles: listVcaTrims(await fixtureVehicles(c.env.BRIM_FIXTURES), make, model) });
     }
     const db = createDb(c.env);
     const rows = await db.db
@@ -117,7 +117,7 @@ export async function listCatalogueHandler(c: BrimContext) {
   }
 
   if (isFixtureMode(c.env.BRIM_FIXTURES)) {
-    return c.json({ vehicles: searchVcaCatalogue(fixtureVehicles(c.env.BRIM_FIXTURES), q) });
+    return c.json({ vehicles: searchVcaCatalogue(await fixtureVehicles(c.env.BRIM_FIXTURES), q) });
   }
   const needle = q.replace(/[%_]/g, '').trim();
   if (needle.length < MIN_QUERY) return c.json({ vehicles: [] });
@@ -144,7 +144,7 @@ export async function listCatalogueHandler(c: BrimContext) {
 export async function getCatalogueHandler(c: BrimContext) {
   const id = c.req.param('id') ?? '';
   if (isFixtureMode(c.env.BRIM_FIXTURES)) {
-    const hit = getVcaById(fixtureVehicles(c.env.BRIM_FIXTURES), id);
+    const hit = getVcaById(await fixtureVehicles(c.env.BRIM_FIXTURES), id);
     if (!hit) return c.json({ error: 'not_found' }, 404);
     return c.json(hit);
   }

@@ -1,6 +1,5 @@
 import { sql } from 'drizzle-orm';
 import {
-  FUEL_FINDER_FIXTURE_NOW,
   HOME_AREA_METERS,
   distanceMeters,
   gradeForPropulsion,
@@ -67,15 +66,15 @@ function asIso(value: Date | string | null | undefined): string | undefined {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : value;
 }
 
-export function fixtureCorpus(flag: string | undefined) {
-  const raw = loadFixture<{ pfs: FuelFinderPfs[]; prices: FuelFinderPriceRow[]; nowIso?: string }>(
+export async function fixtureCorpus(flag: string | undefined) {
+  const raw = await loadFixture<{ pfs: FuelFinderPfs[]; prices: FuelFinderPriceRow[]; nowIso?: string }>(
     'fuel-finder',
     flag,
   );
   const result = normaliseFuelFinder({
     pfs: raw.pfs,
     prices: raw.prices,
-    nowIso: raw.nowIso ?? FUEL_FINDER_FIXTURE_NOW,
+    nowIso: raw.nowIso ?? new Date().toISOString(),
   });
   return {
     ...result,
@@ -176,7 +175,7 @@ export async function resolveEstimatePrice(
   const grade = gradeForPropulsion(input.propulsion);
   if (!grade) return undefined;
   if (isFixtureMode(env.BRIM_FIXTURES)) {
-    const corpus = fixtureCorpus(env.BRIM_FIXTURES);
+    const corpus = await fixtureCorpus(env.BRIM_FIXTURES);
     const resolved = resolveIcePrice({
       grade,
       observations: corpus.observations,
@@ -495,7 +494,7 @@ export async function resolveEstimateFillBaseline(
   const grade = gradeForPropulsion(input.propulsion);
   if (!grade) return undefined;
   if (isFixtureMode(env.BRIM_FIXTURES)) {
-    const corpus = fixtureCorpus(env.BRIM_FIXTURES);
+    const corpus = await fixtureCorpus(env.BRIM_FIXTURES);
     return resolveFillBaseline({
       grade,
       observations: corpus.observations,

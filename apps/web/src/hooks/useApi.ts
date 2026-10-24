@@ -54,13 +54,13 @@ export function useOverview() {
   });
 }
 
-export function useDays() {
+export function useDays(opts?: { enabled?: boolean }) {
   const tenantKey = useTenantKey();
   return useQuery<DaySummary[]>({
     queryKey: ['days', tenantKey],
     queryFn: () => fetchJson('/api/days'),
     staleTime: Infinity,
-    enabled: tenantKey !== 'anon',
+    enabled: tenantKey !== 'anon' && (opts?.enabled ?? true),
   });
 }
 
@@ -102,6 +102,24 @@ async function fetchDayStreaming(
   let result: DayData | null = null;
   let streamError: string | null = null;
 
+  // At most one progress render per frame: a busy day streams dozens of lines.
+  let pending: DayLoadProgress | null = null;
+  let frame: number | null = null;
+  const emitProgress = (p: DayLoadProgress) => {
+    pending = p;
+    if (frame !== null) return;
+    frame = requestAnimationFrame(() => {
+      frame = null;
+      if (pending) onProgress(pending);
+      pending = null;
+    });
+  };
+  const cancelProgress = () => {
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = null;
+    pending = null;
+  };
+
   const pushLog = (stage: string, detail?: string) => {
     const line = detail ? `${stage}: ${detail}` : stage;
     if (logs[logs.length - 1] !== line) {
@@ -110,41 +128,45 @@ async function fetchDayStreaming(
     }
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      const msg = JSON.parse(trimmed) as {
-        type: string;
-        stage?: string;
-        detail?: string;
-        percent?: number;
-        done?: number;
-        total?: number;
-        data?: DayData;
-        error?: string;
-      };
-      if (msg.type === 'progress') {
-        pushLog(msg.stage ?? 'Working', msg.detail);
-        onProgress({
-          stage: msg.stage ?? 'Working',
-          detail: msg.detail,
-          percent: msg.percent ?? 0,
-          done: msg.done,
-          total: msg.total,
-          logs: [...logs],
-        });
-      } else if (msg.type === 'result' && msg.data) {
-        result = msg.data;
-      } else if (msg.type === 'error') {
-        streamError = msg.error ?? 'Failed to load day';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const msg = JSON.parse(trimmed) as {
+          type: string;
+          stage?: string;
+          detail?: string;
+          percent?: number;
+          done?: number;
+          total?: number;
+          data?: DayData;
+          error?: string;
+        };
+        if (msg.type === 'progress') {
+          pushLog(msg.stage ?? 'Working', msg.detail);
+          emitProgress({
+            stage: msg.stage ?? 'Working',
+            detail: msg.detail,
+            percent: msg.percent ?? 0,
+            done: msg.done,
+            total: msg.total,
+            logs: [...logs],
+          });
+        } else if (msg.type === 'result' && msg.data) {
+          result = msg.data;
+        } else if (msg.type === 'error') {
+          streamError = msg.error ?? 'Failed to load day';
+        }
       }
     }
+  } finally {
+    cancelProgress();
   }
 
   // An empty day is an answer, not a failure: no retries, no error state.
@@ -315,7 +337,7 @@ export function useSearch(q: string) {
   });
 }
 
-export function usePlaceLabels() {
+export function usePlaceLabels(opts?: { enabled?: boolean }) {
   const tenantKey = useTenantKey();
   return useQuery<{
     placeKey: string;
@@ -327,7 +349,7 @@ export function usePlaceLabels() {
   }[]>({
     queryKey: ['place-labels', tenantKey],
     queryFn: () => fetchJson('/api/places/labels'),
-    enabled: tenantKey !== 'anon',
+    enabled: tenantKey !== 'anon' && (opts?.enabled ?? true),
   });
 }
 
@@ -666,18 +688,23 @@ export function usePersonality() {
   return useCachedAnalytics<PersonalityTag[] | []>('personality');
 }
 
+export type PublicConfig = {
+  signupDisabled?: boolean;
+  googleAuth?: boolean;
+  globe?: boolean;
+  billingConfigured?: boolean;
+  customTiles?: boolean;
+  customTileHosts?: string[];
+  mapTileDark?: string;
+  mapTileLight?: string;
+  mapAttr?: string;
+  mapStyleDark?: string | null;
+  mapStyleLight?: string | null;
+  flags?: { globe?: boolean; demoTour?: boolean; landing?: boolean };
+};
+
 export function usePublicConfig() {
-  return useQuery<{
-    signupDisabled?: boolean;
-    googleAuth?: boolean;
-    globe?: boolean;
-    billingConfigured?: boolean;
-    customTiles?: boolean;
-    customTileHosts?: string[];
-    mapStyleDark?: string | null;
-    mapStyleLight?: string | null;
-    flags?: { globe?: boolean; demoTour?: boolean; landing?: boolean };
-  }>({
+  return useQuery<PublicConfig>({
     queryKey: ['public-config'],
     queryFn: () => fetchJson('/api/config'),
     staleTime: 60_000,
@@ -723,7 +750,15 @@ export function useRangeInsights(range: { from: string; to: string }) {
   const qs = new URLSearchParams(range).toString();
   return useQuery<RangeInsights>({
     queryKey: ['insights-range', tenantKey, qs],
-    queryFn: () => fetchJson(`/api/insights/range?${qs}`),
+    queryFn: async () => {
+      const res = await fetch(`/api/insights/range?${qs}`, { credentials: 'include' });
+      // Keep the server's reason (e.g. a bad date) so the card can say what went wrong.
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(res.status === 401 ? '401 Unauthorized' : body.error || `Request failed: ${res.status}`);
+      }
+      return res.json() as Promise<RangeInsights>;
+    },
     enabled: tenantKey !== 'anon' && Boolean(range.from && range.to && range.from <= range.to),
     staleTime: Infinity,
     placeholderData: (prev) => prev,

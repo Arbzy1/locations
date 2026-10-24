@@ -146,13 +146,24 @@ export function journeyTrace(a: {
   if (!inner.length) return null;
   const startS = Math.round(Date.parse(a.start) / 1000);
   const endS = Math.round(Date.parse(a.end) / 1000);
-  const first = inner[0][2];
-  const last = inner[inner.length - 1][2];
+  const firstFix = inner[0];
+  const lastFix = inner[inner.length - 1];
+  const head: PathPoint = [a.startLat, a.startLon, Number.isFinite(startS) ? Math.min(startS, firstFix[2]) : firstFix[2]];
+  const tail: PathPoint = [a.endLat, a.endLon, Number.isFinite(endS) ? Math.max(endS, lastFix[2]) : lastFix[2]];
+  // Google's start or end is sometimes the wrong place entirely (seen: a "0.1 km walk"
+  // whose start was its destination, 40 km from its first fix at the same moment).
+  // Such an end point would draw the journey there and back; leave it out.
   return [
-    [a.startLat, a.startLon, Number.isFinite(startS) ? Math.min(startS, first) : first],
+    ...(reachable(head, firstFix) ? [head] : []),
     ...inner,
-    [a.endLat, a.endLon, Number.isFinite(endS) ? Math.max(endS, last) : last],
+    ...(reachable(lastFix, tail) ? [tail] : []),
   ];
+}
+
+/** Whether one could get from `a` to `b` in the time between them (under 250 km/h, 1 min slack). */
+function reachable(a: PathPoint, b: PathPoint): boolean {
+  const m = haversineM(a[0], a[1], b[0], b[1]);
+  return m <= 1000 || (m / Math.max(Math.abs(b[2] - a[2]), 60)) * 3.6 <= 250;
 }
 
 /**

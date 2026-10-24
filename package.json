@@ -8,9 +8,11 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:all": "npm run build:web && concurrently -n web,api -c cyan,magenta \"npm run dev -w @locations/web\" \"npm run dev -w @locations/api\"",
+    "dev:all": "node scripts/ensure-web-dist.mjs && concurrently -n web,api -c cyan,magenta \"npm run dev -w @locations/web\" \"npm run dev -w @locations/api\"",
     "dev:web": "npm run dev -w @locations/web",
     "dev:api": "npm run dev -w @locations/api",
+    "dev:e2e": "npm run build:web && npm run dev:api",
+    "dev:kill": "node scripts/kill-servers.mjs",
     "build:all": "npm run build -w @locations/web && npm run build -w @locations/api",
     "build:web": "npm run build -w @locations/web",
     "deploy:staging": "npm run build:all && node scripts/deploy.mjs staging",
@@ -54,6 +56,7 @@
     "typecheck:all": "npm run typecheck -w @locations/web && npm run typecheck -w @locations/api && npm run typecheck -w @locations/db",
     "lint:web": "npm run lint -w @locations/web",
     "rules:sync": "node scripts/sync-rules.mjs",
+    "agents:sync": "node scripts/sync-agents.mjs",
     "test:placement": "node scripts/test-placement.mjs",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",

@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -15,7 +16,8 @@ import { MODE_COLORS, MODE_LABELS } from '../../types';
 import { withLineVariant } from '../../lib/map/lineVariant';
 import { formatTime, formatDistance, formatDuration } from '../../utils/format';
 import { useTheme } from '../../lib/theme';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
+import { usePublicConfig } from '../../hooks/useApi';
 import { useUnits } from '../../lib/units';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useSession } from '../../lib/auth';
@@ -57,6 +59,53 @@ type FC = {
 
 const emptyFc = (): FC => ({ type: 'FeatureCollection', features: [] });
 
+/** Heatmap intensity paint value for the intensity slider (percent). */
+const heatIntensity = (pct: number) => Math.max(0.35, Math.min(2, pct / 100));
+
+/** Zoom thresholds where marker sets appear (labels 10, arrows 13, stops 14, names 16). */
+const zoomBand = (z: number) => [10, 13, 14, 16].filter((t) => z >= t).length;
+
+/** A ref holding the latest `value`, written after render (refs are not render state). */
+function useLatest<T>(value: T) {
+  const ref = useRef(value);
+  useLayoutEffect(() => {
+    ref.current = value;
+  });
+  return ref;
+}
+
+/**
+ * Re-run one overlay group when its inputs change. Before the first full sync the
+ * load handler covers it. isStyleLoaded() is also false while tiles are still
+ * downloading after style.load, so a skipped update (heatmap data arriving on a cold
+ * visit) retries on the first frame the style reports loaded instead of being lost.
+ */
+function useOverlayGroup(
+  mapRef: { current: MLMap | null },
+  ready: { current: boolean },
+  sync: (map: MLMap) => void,
+) {
+  const syncRef = useLatest(sync);
+  const pending = useRef(false);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready.current) return;
+    if (map.isStyleLoaded()) {
+      sync(map);
+      return;
+    }
+    if (pending.current) return;
+    pending.current = true;
+    const retry = () => {
+      if (!map.isStyleLoaded()) return;
+      map.off('render', retry);
+      pending.current = false;
+      if (ready.current) syncRef.current(map);
+    };
+    map.on('render', retry);
+  }, [mapRef, ready, sync, syncRef]);
+}
+
 // Stable defaults: a fresh `[]` per render would rebuild syncOverlays every
 // render and redraw every source and marker (every frame during playback).
 const NO_VISITS: Visit[] = [];
@@ -87,14 +136,6 @@ const HEAT_COLORS: [number, string][] = [
   [1, '#ffa198'],
 ];
 
-type PublicMapConfig = {
-  mapTileDark: string;
-  mapTileLight: string;
-  mapAttr: string;
-  mapStyleDark: string | null;
-  mapStyleLight: string | null;
-  customTiles: boolean;
-};
 
 function cssToken(name: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
@@ -199,10 +240,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     () => (lineVariant === 'best' ? rawActivities : rawActivities.map((a) => withLineVariant(a, lineVariant))),
     [rawActivities, lineVariant],
   );
-  const onHotspotSelectRef = useRef(onHotspotSelect);
-  onHotspotSelectRef.current = onHotspotSelect;
-  const hitPointsRef = useRef<HeatmapPoint[]>([]);
-  hitPointsRef.current = heatmapPoints ?? heatmapLayers?.flatMap((l) => l.points) ?? [];
+  const onHotspotSelectRef = useLatest(onHotspotSelect);
+  const hitPointsRef = useLatest<HeatmapPoint[]>(heatmapPoints ?? heatmapLayers?.flatMap((l) => l.points) ?? []);
   // Fit to the busiest region (1-degree cell with most points and its neighbours):
   // trips abroad and flights stay drawn without shrinking everyday journeys to a dot.
   const routeLineCorners = useMemo((): [number, number][] => {
@@ -244,22 +283,13 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const visitPopupById = useRef(new Map<string, string>());
   const overlayReady = useRef(false);
-  const measureRef = useRef(false);
   const { theme, mood } = useTheme();
   const { unit, mapBookmarks, mapTileDarkUrl, mapTileLightUrl } = useUnits();
   const queryClient = useQueryClient();
   const { isDesktop } = useBreakpoint();
   const { data: session } = useSession();
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
-  const { data: mapConfig } = useQuery({
-    queryKey: ['map-config'],
-    queryFn: async () => {
-      const res = await fetch('/api/config');
-      if (!res.ok) return null;
-      return res.json() as Promise<PublicMapConfig>;
-    },
-    staleTime: Infinity,
-  });
+  const { data: mapConfig } = usePublicConfig();
 
   const [basemap, setBasemap] = useState<BasemapId>('auto');
   const [buildings3d, setBuildings3d] = useState(false);
@@ -272,16 +302,15 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   const [bookmarkName, setBookmarkName] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(zoom);
+
+  const measureRef = useLatest(measuring);
   const [coloring, setColoring] = useJourneyColoring();
   // Hidden modes belong to one day: keyed by date so a new day starts clean.
   const [hiddenDay, setHiddenDay] = useState<{ day?: string; modes: string[] }>({ modes: [] });
   const hiddenDayModes = useMemo(() => (hiddenDay.day === dayDate ? hiddenDay.modes : []), [hiddenDay, dayDate]);
   const focusedStart = focusedJourney ?? null;
   const focusJourney = useCallback((start: string | null) => onFocusJourney?.(start), [onFocusJourney]);
-  const focusJourneyRef = useRef(focusJourney);
-  focusJourneyRef.current = focusJourney;
-
-  measureRef.current = measuring;
+  const focusJourneyRef = useLatest(focusJourney);
   const isNarrow = !isDesktop;
 
   const darkUrl = mapTileDarkUrl || mapConfig?.mapTileDark || CARTO_DARK;
@@ -317,7 +346,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       (heatmapPoints && heatmapPoints.length > 0),
   );
 
-  const allCoords = useCallback((): [number, number][] => {
+  // Every drawn coordinate, rebuilt only when the data changes (not on each render).
+  const allCoords = useMemo((): [number, number][] => {
     const coords: [number, number][] = [];
     visits.forEach((v) => coords.push([v.lat, v.lon]));
     activities.forEach((a) => {
@@ -381,24 +411,15 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     if (!map.getLayer(layer.id)) map.addLayer(layer as never);
   };
 
-  const syncOverlays = useCallback(
-    (map: MLMap) => {
-      const accent = cssToken('--accent', '#58a6ff');
-      const visitColor = cssToken('--visit', '#bc8cff');
-      const onAccent = cssToken('--on-accent', '#fff');
-      const surface = cssToken('--surface', '#161b22');
-      const drive = cssToken('--drive', '#f778ba');
-      const muted = cssToken('--text-muted', '#8b949e');
-      const colorForActivity = (a: Activity, i: number) =>
-        literalColor(journeyColor(a, i, totalJourneys, coloring, sourceColors));
-      // One journey in focus: it stays bright and a little thicker, the rest fade back.
-      const lineOpacity = (a: Activity) => {
-        if (focusedStart) return a.start === focusedStart ? 0.95 : 0.12;
-        return a.route_source && !a.route_source.startsWith('gps') ? 0.5 : 0.85;
-      };
-      const colorForVisit = (v: Visit) =>
-        literalColor((v.source_id && sourceColors?.[v.source_id]) || visitColor);
+  // Slider values are read at layer creation; later changes only set paint properties.
+  const intensityRef = useLatest(intensityPct);
+  const opacityRef = useLatest(opacityPct);
+  /** Which zoom-gated marker sets apply; markers rebuild only when this changes. */
+  const markerZoomBand = useRef(-1);
 
+  /** Heatmap layers (one per source when several are shown). */
+  const syncHeat = useCallback(
+    (map: MLMap) => {
       const heatSpecs: Array<{ id: string; points: HeatmapPoint[]; token?: string | null }> =
         heatmapOn && heatmapLayers && heatmapLayers.length > 1
           ? heatmapLayers.map((layer) => ({
@@ -427,7 +448,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           properties: { weight: p.weight ?? p.count },
           geometry: { type: 'Point' as const, coordinates: toLngLat(p.lat, p.lon) },
         }));
-        const maxW = Math.max(1, ...features.map((f) => Number(f.properties.weight) || 1));
+        const maxW = features.reduce((max, f) => Math.max(max, Number(f.properties.weight) || 1), 1);
         upsertSource(map, spec.id, { type: 'FeatureCollection', features });
         ensureLayer(map, {
           id: spec.id,
@@ -435,18 +456,24 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           source: spec.id,
           paint: {
             'heatmap-weight': ['interpolate', ['linear'], ['get', 'weight'], 0, 0, maxW, 1],
-            'heatmap-intensity': Math.max(0.35, Math.min(2, intensityPct / 100)),
+            'heatmap-intensity': heatIntensity(intensityRef.current),
             'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 16, 9, 36],
-            'heatmap-opacity': opacityPct / 100,
+            'heatmap-opacity': opacityRef.current / 100,
             'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], ...heatColorStops(spec.token)],
           },
         });
-        if (map.getLayer(spec.id)) {
-          map.setPaintProperty(spec.id, 'heatmap-intensity', Math.max(0.35, Math.min(2, intensityPct / 100)));
-          map.setPaintProperty(spec.id, 'heatmap-opacity', opacityPct / 100);
-        }
       }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [heatmapOn, heatmapLayers, heatmapPoints, theme, mood],
+  );
 
+  /** Area pins, corridors and gap connectors. */
+  const syncAreas = useCallback(
+    (map: MLMap) => {
+      const accent = cssToken('--accent', '#58a6ff');
+      const onAccent = cssToken('--on-accent', '#fff');
+      const muted = cssToken('--text-muted', '#8b949e');
       upsertSource(map, 'loc-areas', {
         type: 'FeatureCollection',
         features: areaMarkers.map((m, i) => ({
@@ -515,7 +542,22 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           'line-dasharray': [1, 1.5],
         },
       });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [areaMarkers, corridorLines, connectors, unit, theme, mood],
+  );
 
+  /** Journey lines, or raw GPS fixes in Points mode. */
+  const syncActivities = useCallback(
+    (map: MLMap) => {
+      const surface = cssToken('--surface', '#161b22');
+      const colorForActivity = (a: Activity, i: number) =>
+        literalColor(journeyColor(a, i, totalJourneys, coloring, sourceColors));
+      // One journey in focus: it stays bright and a little thicker, the rest fade back.
+      const lineOpacity = (a: Activity) => {
+        if (focusedStart) return a.start === focusedStart ? 0.95 : 0.12;
+        return a.route_source && !a.route_source.startsWith('gps') ? 0.5 : 0.85;
+      };
       // Numbering follows the whole day, so hiding a mode does not renumber the rest.
       const shownActivities = sortedActivities
         .map((a, i) => ({ a, i }))
@@ -608,7 +650,15 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           'circle-opacity': 0.95,
         },
       });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pointsMode, sortedActivities, sourceColors, totalJourneys, coloring, focusedStart, hiddenDayModes, unit, theme, mood],
+  );
 
+  /** Period route lines, filtered by the hidden modes. */
+  const syncPeriod = useCallback(
+    (map: MLMap) => {
+      const muted = cssToken('--text-muted', '#8b949e');
       const modeColor: unknown[] = ['match', ['get', 'mode']];
       for (const [mode, hex] of Object.entries(MODE_COLORS)) modeColor.push(mode, literalColor(hex));
       modeColor.push(literalColor(MODE_COLORS.unknown ?? muted));
@@ -640,7 +690,16 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         });
         map.setFilter(spec.id, ['all', ['==', ['get', 'recorded'], spec.recorded], visibleModes] as never);
       }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [routeLines, hiddenModes, unit, theme, mood],
+  );
 
+  /** Tappable hotspot cells and the selected-hotspot ring. */
+  const syncHotspotHit = useCallback(
+    (map: MLMap) => {
+      const accent = cssToken('--accent', '#58a6ff');
+      const onAccent = cssToken('--on-accent', '#fff');
       // Tappable hotspot cells once zoomed in (the heatmap itself is not clickable).
       upsertSource(map, 'loc-heat-hit', {
         type: 'FeatureCollection',
@@ -690,7 +749,16 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           'circle-stroke-color': onAccent,
         },
       });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedHotspot, heatmapPoints, heatmapLayers, theme, mood],
+  );
 
+  /** Visit stops (clustered). */
+  const syncVisits = useCallback(
+    (map: MLMap) => {
+      const visitColor = cssToken('--visit', '#bc8cff');
+      const onAccent = cssToken('--on-accent', '#fff');
       visitPopupById.current.clear();
       const visitFeatures = visits.map((v, i) => {
         const id = `v-${i}`;
@@ -744,7 +812,16 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           'circle-stroke-color': onAccent,
         },
       });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visits, dayDate, theme, mood],
+  );
 
+  /** Measure tool line and points. */
+  const syncMeasure = useCallback(
+    (map: MLMap) => {
+      const accent = cssToken('--accent', '#58a6ff');
+      const onAccent = cssToken('--on-accent', '#fff');
       const measureFc: FC = {
         type: 'FeatureCollection',
         features:
@@ -785,7 +862,25 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           'circle-stroke-color': onAccent,
         },
       });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [measurePts, theme, mood],
+  );
 
+  /** HTML markers: home/work pins, plus zoom-gated labels, stops and arrows. */
+  const syncMarkers = useCallback(
+    (map: MLMap) => {
+      const visitColor = cssToken('--visit', '#bc8cff');
+      const onAccent = cssToken('--on-accent', '#fff');
+      const surface = cssToken('--surface', '#161b22');
+      const drive = cssToken('--drive', '#f778ba');
+      const colorForActivity = (a: Activity, i: number) =>
+        literalColor(journeyColor(a, i, totalJourneys, coloring, sourceColors));
+      const colorForVisit = (v: Visit) =>
+        literalColor((v.source_id && sourceColors?.[v.source_id]) || visitColor);
+      const shownActivities = sortedActivities
+        .map((a, i) => ({ a, i }))
+        .filter(({ a }) => !hiddenDayModes.includes(a.mode));
       clearMarkers(markersRef.current);
       const z = map.getZoom();
 
@@ -922,49 +1017,35 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         });
       }
 
+      markerZoomBand.current = zoomBand(z);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [homeWorkPins, hotspotLabels, visits, pointsMode, compact, sortedActivities, sourceColors, totalJourneys, coloring, focusedStart, hiddenDayModes, unit, showPopup, focusJourneyRef, theme, mood],
+  );
+
+  // Every group at once, in layer order: on load and after a style change, when the
+  // layers have to be (re)created. Later data changes re-run only their own group.
+  const syncOverlays = useCallback(
+    (map: MLMap) => {
+      syncHeat(map);
+      syncAreas(map);
+      syncActivities(map);
+      syncPeriod(map);
+      syncHotspotHit(map);
+      syncVisits(map);
+      syncMeasure(map);
+      syncMarkers(map);
       overlayReady.current = true;
     },
-    [
-      pointsMode,
-      compact,
-      coloring,
-      focusedStart,
-      hiddenDayModes,
-      areaMarkers,
-      corridorLines,
-      connectors,
-      dayDate,
-      routeLines,
-      hiddenModes,
-      selectedHotspot,
-      heatmapOn,
-      heatmapPoints,
-      heatmapLayers,
-      sourceColors,
-      homeWorkPins,
-      hotspotLabels,
-      intensityPct,
-      measurePts,
-      opacityPct,
-      showPopup,
-      sortedActivities,
-      totalJourneys,
-      unit,
-      visits,
-      theme,
-      mood,
-    ],
+    [syncHeat, syncAreas, syncActivities, syncPeriod, syncHotspotHit, syncVisits, syncMeasure, syncMarkers],
   );
-  const syncOverlaysRef = useRef(syncOverlays);
-  syncOverlaysRef.current = syncOverlays;
-  const apply3dRef = useRef(apply3d);
-  apply3dRef.current = apply3d;
-  const allCoordsRef = useRef(allCoords);
-  allCoordsRef.current = allCoords;
-  const buildings3dRef = useRef(buildings3d);
-  buildings3dRef.current = buildings3d;
-  const hasVectorRef = useRef(hasVectorStyle);
-  hasVectorRef.current = hasVectorStyle;
+  const syncOverlaysRef = useLatest(syncOverlays);
+  const syncMarkersRef = useLatest(syncMarkers);
+  const apply3dRef = useLatest(apply3d);
+  const allCoordsRef = useLatest(allCoords);
+  const dataBounds = useMemo(() => extendBounds(allCoords), [allCoords]);
+  const buildings3dRef = useLatest(buildings3d);
+  const hasVectorRef = useLatest(hasVectorStyle);
 
   const bindClicks = useCallback(
     (map: MLMap) => {
@@ -1068,10 +1149,13 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       });
       map.on('zoomend', () => {
         setZoomLevel(map.getZoom());
-        if (overlayReady.current) syncOverlaysRef.current(map);
+        // Only the HTML markers depend on zoom, and only when a threshold is crossed.
+        if (overlayReady.current && zoomBand(map.getZoom()) !== markerZoomBand.current) {
+          syncMarkersRef.current(map);
+        }
       });
     },
-    [showPopup, syncOverlays],
+    [showPopup, hitPointsRef, measureRef, onHotspotSelectRef, syncMarkersRef, focusJourneyRef],
   );
 
   useEffect(() => {
@@ -1109,7 +1193,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       syncOverlaysRef.current(map);
       bindClicks(map);
       if (hasVectorRef.current) apply3dRef.current(map, buildings3dRef.current);
-      const b = extendBounds(allCoordsRef.current());
+      const b = extendBounds(allCoordsRef.current);
       if (b && !followPlayhead) {
         map.fitBounds(
           [
@@ -1145,27 +1229,26 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     map.setStyle(styleSpec);
   }, [styleKey, styleSpec]);
 
-  const syncPending = useRef(false);
+  // One effect per overlay group, so a slider, a selection or new day data re-runs
+  // only the group it feeds instead of rebuilding every source and marker.
+  useOverlayGroup(mapRef, overlayReady, syncHeat);
+  useOverlayGroup(mapRef, overlayReady, syncAreas);
+  useOverlayGroup(mapRef, overlayReady, syncActivities);
+  useOverlayGroup(mapRef, overlayReady, syncPeriod);
+  useOverlayGroup(mapRef, overlayReady, syncHotspotHit);
+  useOverlayGroup(mapRef, overlayReady, syncVisits);
+  useOverlayGroup(mapRef, overlayReady, syncMeasure);
+  useOverlayGroup(mapRef, overlayReady, syncMarkers);
+
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
-    if (map.isStyleLoaded()) {
-      syncOverlays(map);
-      return;
+    if (!map || !overlayReady.current) return;
+    for (const layer of map.getStyle().layers ?? []) {
+      if (layer.type !== 'heatmap' || !layer.id.startsWith('loc-heat')) continue;
+      map.setPaintProperty(layer.id, 'heatmap-intensity', heatIntensity(intensityPct));
+      map.setPaintProperty(layer.id, 'heatmap-opacity', opacityPct / 100);
     }
-    // isStyleLoaded() is also false while tiles are still downloading, after style.load
-    // has fired, so a skipped update (heatmap data arriving on a cold visit) was lost
-    // until a reload. Retry on the first frame the style reports loaded.
-    if (syncPending.current) return;
-    syncPending.current = true;
-    const retry = () => {
-      if (!map.isStyleLoaded()) return;
-      map.off('render', retry);
-      syncPending.current = false;
-      syncOverlaysRef.current(map);
-    };
-    map.on('render', retry);
-  }, [syncOverlays]);
+  }, [intensityPct, opacityPct]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1188,17 +1271,16 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const followRef = useRef(followPlayhead);
-  followRef.current = followPlayhead;
-  const boundsKey = allCoords()
-    .map((c) => c.join(','))
-    .join('|')
-    .slice(0, 4000);
+  const followRef = useLatest(followPlayhead);
+  // Refit when the data's extent (or amount) changes.
+  const boundsKey = dataBounds
+    ? `${allCoords.length}|${dataBounds.west},${dataBounds.south},${dataBounds.east},${dataBounds.north}`
+    : '';
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || followRef.current) return;
-    const b = extendBounds(allCoords());
+    const b = dataBounds;
     if (!b) return;
     map.fitBounds(
       [

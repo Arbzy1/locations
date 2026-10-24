@@ -5,8 +5,7 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:8787";
 /**
  * Prerequisite: API (with built web assets) listening at PLAYWRIGHT_BASE_URL.
  * Typical local flow:
- *   npm run build:web
- *   npm run dev:api
+ *   npm run dev:e2e
  *   npm run test:e2e
  */
 export default defineConfig({

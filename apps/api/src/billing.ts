@@ -1,4 +1,4 @@
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import {
   stripeEvents,
   subscriptions,
@@ -10,9 +10,16 @@ import {
 import type { Env } from "./env";
 import type { Db } from "@locations/db";
 
-export function stripeClient(env: Env): Stripe | null {
+type StripeCtor = typeof import("stripe").default;
+
+let StripeClass: StripeCtor | undefined;
+
+export async function stripeClient(env: Env): Promise<Stripe | null> {
   if (!env.STRIPE_SECRET_KEY) return null;
-  return new Stripe(env.STRIPE_SECRET_KEY);
+  if (!StripeClass) {
+    StripeClass = (await import("stripe")).default;
+  }
+  return new StripeClass(env.STRIPE_SECRET_KEY);
 }
 
 export function priceIdForInterval(env: Env, interval: "monthly" | "yearly"): string | null {

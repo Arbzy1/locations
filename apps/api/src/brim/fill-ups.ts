@@ -66,7 +66,7 @@ async function lookupStation(
   stationId: string,
 ): Promise<{ id: string; name: string } | undefined> {
   if (isFixtureMode(env.BRIM_FIXTURES)) {
-    const station = fixtureCorpus(env.BRIM_FIXTURES).stations.find((s) => s.id === stationId);
+    const station = (await fixtureCorpus(env.BRIM_FIXTURES)).stations.find((s) => s.id === stationId);
     return station ? { id: station.id, name: station.name } : undefined;
   }
   if (!persistLive(db) || !db.db) return undefined;

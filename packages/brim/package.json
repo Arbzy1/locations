@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Journey-cost engine, routing providers, and UK reference data (fuel, EV tariffs, clean-air zones, tolls)",
+  "sideEffects": false,
   "exports": {
     "./engine": "./src/engine/index.ts",
     "./routing": "./src/routing/index.ts",
@@ -13,7 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.12.0",

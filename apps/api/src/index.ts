@@ -1,17 +1,18 @@
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { stream } from "hono/streaming";
+import { endTime, startTime, timing, type TimingVariables } from "hono/timing";
 import {
   tenantForUser,
   withTenant,
   isEntitled,
   isStaffRole,
   quotaForEntitled,
-  countTimelineRecords,
   PLAN_QUOTAS,
   type TenantId,
   type PlaceColorToken,
 } from "@locations/db";
+import { countTimelineRecords } from "@locations/db/timeline-parse";
 import { APP_VERSION } from "./version";
 import { googleAuthEnabled, type Env, type ImportQueueMessage } from "./env";
 import { createAuth } from "./auth";
@@ -48,11 +49,11 @@ import {
   getAnalytics,
   loadDayRows,
   buildDay,
-  getCacheDb,
   closeDb,
   getDays,
   getDb,
   getHeatmap,
+  enrichHeatmapSettlements,
   getImportStatus,
   getOverview,
   getRouteProgress,
@@ -146,19 +147,42 @@ type Variables = {
   tenant: TenantId;
   /** Neon pools opened by this request, closed once the response is sent. */
   pools: { end: () => Promise<void> }[];
+  /** This request's pool-backed DB, opened on first use and shared by every query. */
+  db?: ReturnType<typeof getDb>;
 };
 
-type AppEnv = { Bindings: Env; Variables: Variables };
+type AppEnv = { Bindings: Env; Variables: Variables & TimingVariables };
 
 export const app = new Hono<AppEnv>();
 
-/** Pool-backed DB for this request; the pool is closed after the response. */
+/**
+ * Pool-backed DB for this request; the pool is closed after the response. One pool
+ * per request: tenant transactions and the shared route/place cache reads (which run
+ * after the transaction commits) reuse the same WebSocket instead of opening another.
+ */
 function requestDb(c: Context<AppEnv>) {
+  const existing = c.get("db");
+  if (existing) return existing;
   const db = getDb(c.env);
   const client = (db as { $client?: { end?: () => Promise<void> } }).$client;
   if (client?.end) c.get("pools")?.push(client as { end: () => Promise<void> });
+  c.set("db", db);
   return db;
 }
+
+/** Run `fn` and record its duration as a `Server-Timing` metric on this response. */
+async function timed<T>(c: Context<AppEnv>, metric: string, fn: () => Promise<T>): Promise<T> {
+  startTime(c, metric);
+  try {
+    return await fn();
+  } finally {
+    endTime(c, metric);
+  }
+}
+
+// Server-Timing (total, auth, db, ...) so each request's cost shows in DevTools.
+// Durations only; never names, coordinates, or query text.
+app.use("/api/*", timing({ crossOrigin: false }));
 
 app.use("/api/*", async (c, next) => {
   const pools: Variables["pools"] = [];
@@ -263,7 +287,7 @@ app.use("/api/*", async (c, next) => {
     return next();
   }
   const auth = createAuth(c.env);
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  const session = await timed(c, "auth", () => auth.api.getSession({ headers: c.req.raw.headers }));
   if (!session?.user) {
     return c.json({ error: "Unauthorized" }, 401);
   }
@@ -426,13 +450,13 @@ app.get("/api/me", async (c) => {
 app.get("/api/overview", async (c) => {
   const db = requestDb(c);
   const tenant = c.get("tenant");
-  return c.json(await withTenant(db, tenant, (tx) => getOverview(tx, tenant)));
+  return c.json(await timed(c, "db", () => withTenant(db, tenant, (tx) => getOverview(tx, tenant))));
 });
 
 app.get("/api/days", async (c) => {
   const db = requestDb(c);
   const tenant = c.get("tenant");
-  return c.json(await withTenant(db, tenant, (tx) => getDays(tx, tenant)));
+  return c.json(await timed(c, "db", () => withTenant(db, tenant, (tx) => getDays(tx, tenant))));
 });
 
 app.get("/api/day/:date", async (c) => {
@@ -441,17 +465,11 @@ app.get("/api/day/:date", async (c) => {
   const sourceIds = parseSourceIds(c.req.query("sources"));
   // compare=1 also fetches the OSRM-predicted route for each journey.
   const dayOpts = { compare: c.req.query("compare") === "1", signal: c.req.raw.signal };
-  // Tenant rows in a short transaction; routing and geocoding then run on the
-  // stateless cache connection so a slow day never holds a pooled transaction.
-  const loadRows = async () => {
-    const db = getDb(c.env);
-    try {
-      return await withTenant(db, tenant, (tx) => loadDayRows(tx, tenant, date, sourceIds));
-    } finally {
-      const client = (db as { $client?: { end?: () => Promise<void> } }).$client;
-      await client?.end?.().catch(() => undefined);
-    }
-  };
+  // Tenant rows in a short transaction; routing and geocoding then run on the same
+  // pool after it commits, so a slow day never holds a transaction open. The pool is
+  // owned here (not by requestDb) because the streamed body outlives the middleware.
+  const db = getDb(c.env);
+  const loadRows = () => withTenant(db, tenant, (tx) => loadDayRows(tx, tenant, date, sourceIds));
 
   if (c.req.query("stream") === "1") {
     c.header("Content-Type", "application/x-ndjson; charset=utf-8");
@@ -467,30 +485,26 @@ app.get("/api/day/:date", async (c) => {
           await write({ type: "error", error: "No data for this date" });
           return;
         }
-        const cacheDb = getCacheDb(c.env);
-        try {
-          const result = await buildDay(cacheDb, tenant, date, rows, async (progress) => {
-            await write({ type: "progress", ...progress });
-          }, dayOpts);
-          await write({ type: "result", data: result });
-        } finally {
-          await closeDb(cacheDb);
-        }
+        const result = await buildDay(db, tenant, date, rows, async (progress) => {
+          await write({ type: "progress", ...progress });
+        }, dayOpts);
+        await write({ type: "result", data: result });
       } catch (err) {
         // Never send query text or coordinates to the client; log the kind only.
         console.error(JSON.stringify({ kind: "day_build", ok: false, error: err instanceof Error ? err.name : "unknown" }));
         await write({ type: "error", error: "Building this day failed. Try again in a moment." });
+      } finally {
+        await closeDb(db);
       }
     });
   }
 
-  const rows = await loadRows();
-  if (!rows) return c.json({ error: "No data for this date" }, 404);
-  const cacheDb = getCacheDb(c.env);
   try {
-    return c.json(await buildDay(cacheDb, tenant, date, rows, undefined, dayOpts));
+    const rows = await timed(c, "db", loadRows);
+    if (!rows) return c.json({ error: "No data for this date" }, 404);
+    return c.json(await timed(c, "build", () => buildDay(db, tenant, date, rows, undefined, dayOpts)));
   } finally {
-    await closeDb(cacheDb);
+    await closeDb(db);
   }
 });
 
@@ -518,8 +532,8 @@ app.get("/api/heatmap", async (c) => {
   const db = requestDb(c);
   const tenant = c.get("tenant");
   const sources = c.req.query("sources");
-  return c.json(
-    await withTenant(db, tenant, (tx) =>
+  const points = await timed(c, "db", () =>
+    withTenant(db, tenant, (tx) =>
       getHeatmap(tx, tenant, {
         sourceIds: sources ? sources.split(",").filter(Boolean) : undefined,
         from: c.req.query("from") || undefined,
@@ -527,6 +541,8 @@ app.get("/api/heatmap", async (c) => {
       }),
     ),
   );
+  // Same pool, outside the tenant transaction (the cache tables have no RLS).
+  return c.json(await timed(c, "geo", () => enrichHeatmapSettlements(db, points)));
 });
 
 app.get("/api/analytics/monthly", async (c) => {
@@ -1615,7 +1631,7 @@ app.post("/api/account/delete", async (c) => {
   const prefix = `uploads/${user.id}/`;
   await deleteR2Prefix(c.env.UPLOADS, prefix);
   await deleteR2Prefix(c.env.UPLOADS, `exports/${user.id}/`);
-  const stripe = stripeClient(c.env);
+  const stripe = await stripeClient(c.env);
   const sub = await withTenant(db, tenant, (tx) => getSubscription(tx, tenant));
   if (stripe && sub?.stripeCustomerId) {
     await stripe.customers.del(sub.stripeCustomerId).catch(() => undefined);
@@ -1686,7 +1702,7 @@ app.post("/api/billing/checkout", async (c) => {
   const ip = clientIp(c.req.raw.headers);
   const limited = await rejectIfLimited(c, `checkout:${user.id}:${ip}`, 10, 60 * 60_000);
   if (limited) return limited;
-  const stripe = stripeClient(c.env);
+  const stripe = await stripeClient(c.env);
   if (!stripe) return c.json({ error: "Billing is not configured" }, 503);
   const body = (await c.req.json().catch(() => null)) as { interval?: "monthly" | "yearly" } | null;
   const interval = body?.interval === "yearly" ? "yearly" : "monthly";
@@ -1717,7 +1733,7 @@ app.post("/api/billing/portal", async (c) => {
   const ip = clientIp(c.req.raw.headers);
   const limited = await rejectIfLimited(c, `portal:${user.id}:${ip}`, 10, 60 * 60_000);
   if (limited) return limited;
-  const stripe = stripeClient(c.env);
+  const stripe = await stripeClient(c.env);
   if (!stripe) return c.json({ error: "Billing is not configured" }, 503);
   const tenant = c.get("tenant");
   const db = requestDb(c);
@@ -1731,7 +1747,7 @@ app.post("/api/billing/portal", async (c) => {
 });
 
 app.post("/api/billing/webhook", async (c) => {
-  const stripe = stripeClient(c.env);
+  const stripe = await stripeClient(c.env);
   const secret = c.env.STRIPE_WEBHOOK_SECRET;
   if (!stripe || !secret) return c.json({ error: "Billing is not configured" }, 503);
   const raw = await c.req.raw.text();

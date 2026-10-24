@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 # .cursorignore — HARD BLOCK for Cursor AI
 # Files here are not indexed, not @-mentionable, not readable by Agent/Tab.
 # Use for secrets and anything the model must never see.
@@ -76,3 +76,18 @@ Desktop.ini
 **/*.rar
 **/*.dump
 **/*.sql.gz
+
+# >>> agents:sync (generated - edit scripts/sync-agents.mjs) >>>
+# Other agents' dirs/config - not relevant to cursor.
+.claude/
+CLAUDE.md
+.codex/
+.windsurf/
+.windsurfrules
+.codeiumignore
+.aider.conf.yml
+.aiderignore
+.aider*
+CONVENTIONS.md
+.github/copilot-instructions.md
+# <<< agents:sync <<<

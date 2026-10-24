@@ -47,7 +47,7 @@ async function liveVes(apiKey: string, vrm: string): Promise<VesVehicle | { stat
 
 async function vcaCorpus(env: Env, db: BrimDb, ves: VesVehicle): Promise<VcaVehicle[]> {
   if (isFixtureMode(env.BRIM_FIXTURES)) {
-    return loadFixture<VcaVehicle[]>('vca-vehicles', env.BRIM_FIXTURES);
+    return await loadFixture<VcaVehicle[]>('vca-vehicles', env.BRIM_FIXTURES);
   }
   if (!persistLive(db) || !db.db) return [];
   const rows = await db.db
@@ -69,7 +69,7 @@ export async function handleVehiclesResolve(c: BrimContext) {
 
   let ves: VesVehicle;
   if (isFixtureMode(c.env.BRIM_FIXTURES)) {
-    const fixtures = loadFixture<{ ves: Record<string, unknown> }>('dvla', c.env.BRIM_FIXTURES);
+    const fixtures = await loadFixture<{ ves: Record<string, unknown> }>('dvla', c.env.BRIM_FIXTURES);
     const raw = fixtures.ves[vrm];
     if (!raw) return c.json({ error: 'not_found' }, 404);
     const parsedVes = parseVesJson(raw);

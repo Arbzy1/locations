@@ -18,7 +18,7 @@ Hosted Google Timeline / location-history explorer: heatmaps, day views, trips, 
 | Auth | Better Auth (email/password, verified signup; `DISABLE_SIGNUP` kill switch) |
 | Billing | Stripe Checkout, Customer Portal, webhooks |
 | DB | Neon Postgres + Drizzle (`packages/db`) with FORCE RLS |
-| UI | React 19, Vite, Tailwind 4, shadcn/ui, Motion, Leaflet, Recharts (`apps/web`) |
+| UI | React 19, Vite, Tailwind 4, shadcn/ui, Motion, MapLibre GL, Recharts (`apps/web`) |
 
 Monorepo (npm workspaces) under this directory:
 
@@ -129,7 +129,7 @@ Interactive chrome uses **Motion** (`motion/react`). Do not ship dead controls w
 **Do**
 
 - Animate shell chrome: nav, sheets, cards, dialogs, timeline rows, legends, toasts.
-- Keep Leaflet tile pan/zoom and Recharts ticks native (no spring on the map canvas).
+- Keep MapLibre pan/zoom and Recharts ticks native (no spring on the map canvas).
 
 **Do not**
 
@@ -149,11 +149,11 @@ The web app supports dark and light mode via `html[data-theme="dark"|"light"]` a
 
 **Do not**
 
-- Hardcode theme colours (`#0d1117`, `#161b22`, `#30363d`, `#f0f6fc`, `#8b949e`, `#58a6ff`, or light equivalents) in components, Leaflet HTML, or chart styles.
+- Hardcode theme colours (`#0d1117`, `#161b22`, `#30363d`, `#f0f6fc`, `#8b949e`, `#58a6ff`, or light equivalents) in components, map marker HTML, or chart styles.
 - Assume dark-only UI (e.g. white text on a fixed dark panel).
 - Add a second theming system; extend the existing CSS variables and `useTheme()` from [`apps/web/src/lib/theme.tsx`](apps/web/src/lib/theme.tsx).
 
-**When colours must be set in JS** (Recharts ticks, Leaflet `divIcon` HTML, canvas):
+**When colours must be set in JS** (Recharts ticks, MapLibre marker HTML, canvas):
 
 - Read live values with `getComputedStyle(document.documentElement).getPropertyValue('--…')`, or use `var(--…)` in style strings.
 - Recompute when `useTheme().theme` changes.
@@ -215,7 +215,7 @@ Hover styles for polish are fine; hover as the only way to reach content is not.
 
 ### Map responsiveness
 
-Leaflet maps must stay usable when the container is small or resizes.
+MapLibre maps must stay usable when the container is small or resizes.
 
 **Controls and legend**
 
@@ -312,7 +312,72 @@ Postgres FORCE RLS is mandatory on tenant tables (`visits`, `activities`, `day_s
 - Tile, routing, and geocode hosts come from env (commercial providers). Public OSRM/Nominatim/OSM tiles are fallbacks for local dev only.
 - API keys stay in Worker secrets, never `VITE_*`.
 - Initial map viewport and clusters are derived from the tenant’s data, not hardcoded UK points.
-- Escape untrusted place names in Leaflet `divIcon` / popup HTML.
+- Escape untrusted place names in MapLibre marker / popup HTML.
+
+### Performance
+
+Keep local start, first authed paint, and later tab switches fast. Do not trade Motion, map fidelity, or empty-state UX for a smaller spinner.
+
+**Mindset**
+
+- Think about cost while writing, not after. For each change ask: how many round trips, how much data, how much re-rendering, and what it costs on the largest tenant (tens of thousands of visits).
+- Measure before optimising: `Server-Timing` headers (`total`, `auth`, `db`, `build`, `geo`), `EXPLAIN (ANALYZE, BUFFERS)`, a fresh `build:web` for chunk sizes. Do not judge speed in dev mode (StrictMode mounts the map twice).
+- Prefer the simple fast version (fewer queries, a `Map` lookup, a memo) over clever caching. Do not add caches that need invalidation unless measurement shows the need.
+- Speed never overrides privacy or correctness: API responses stay `no-store`, and query rewrites must return identical results (check against real data before swapping).
+
+**Local `dev:all`**
+
+- Vite HMR on :5173 plus Wrangler on :8787. No `tsc` / `vite build` on that path. Wrangler may serve a stub `apps/web/dist` from `ensure-web-dist.mjs`.
+- Production SPA on :8787 is `dev:e2e` (Playwright, OAuth, Stripe returns).
+- Vite `strictPort: true` on 5173. Leftover listeners: `dev:kill`.
+- Warm `AuthedApp`, `HotspotsView`, and `Map` in `vite.config.ts` `server.warmup.clientFiles`. Keep `optimizeDeps.exclude: ['maplibre-gl']`.
+
+**First authed paint**
+
+- Overlap work. Prefetch the lazy view that is about to render (Hotspots on `/hotspots`) while `/api/overview` runs. Do not start the MapLibre import only after overview returns.
+- Keep [`AuthedApp.tsx`](apps/web/src/AuthedApp.tsx) thin: no static `browser-import` / `@locations/db/pure` / GetStarted on the authed shell. Dynamic-import those in the effects or empty-state that need them. `MODE_DETECTOR_VERSION` comes from `@locations/db/rail`.
+- Do not un-lazy AuthedApp (that puts the explorer on the landing bundle). Do not lazy-split `Map.tsx` out of `HotspotsView` (that adds another full-pane spinner).
+- Closed UI must not contend with heatmap: Command Palette `useDays` / `usePlaceLabels` stay `enabled: open`. Share React Query keys for the same endpoint (`['public-config']` for `/api/config`, not a second `['map-config']`).
+- Nested `lazy()` for Admin, Globe, and Year Review so `/places` does not download them.
+
+**API and Worker**
+
+- Count statements, not lines. Queries inside one `withTenant` share a connection and run one after another, so `Promise.all` there does not overlap them. Fold related reads into one statement (scalar subqueries, `GROUPING SETS`) instead of issuing several. `Promise.all` only helps across separate connections or outside the transaction.
+- Overview date range is `min` / `max` / `count`, not every `day_stats` row. Source counts are `GROUP BY`, not 1+2N.
+- One Neon pool per request (`requestDb`); reuse it for cache reads after the tenant transaction commits instead of opening another. Better Auth is built once per isolate (`createAuth` caches it); do not construct per call.
+- Select only the columns you need. `activities.path` (GPS) is most of the table's bytes; leave it out of wide or range reads unless the route draws it.
+- `withTenant` is for tenant rows only. Geocode, Nominatim, and OSRM run after commit (heatmap settlements, Day View routing). Batch `place_cache` reads.
+- Do not open a Neon WebSocket pool for ops-flag / `/api/config` reads. HTTP drizzle (`createHttpDb`) for those tiny lookups; close any probe pool. `requestDb` still ends its pool after the response.
+- Do not cap heatmap cells or change clustering to “go faster”. Payload shape and map density stay as they are.
+
+**External calls (OSRM, Nominatim)**
+
+- Independent per-item work (journeys, connectors, place names) runs with bounded concurrency via `mapLimit` (Day View uses 4), not a sequential loop and not an unbounded `Promise.all`.
+- Live-call budgets and the Nominatim 1 req/s spacing must hold under concurrency: reserve the budget and the slot synchronously before awaiting (`awaitNominatimSlot`), never check-then-await-then-decrement.
+- Cache first, live second, and keep live calls capped per request so a cold day degrades to straight lines or "Unknown" instead of timing out.
+
+**React and the map**
+
+- Keep props and derived arrays referentially stable (`useMemo` / `useCallback`, module-level empty defaults). A fresh array per render re-runs every effect downstream of it.
+- Index once, look up many: build a `Map` / `Set` before loops; no `.find` / `.includes` inside `filter`, `sort` comparators, or per-item loops. No spread into `Math.max(...big)`; use a loop or `reduce`.
+- Map overlays sync per group (`useOverlayGroup` in `Map.tsx`): a change re-runs only the group it feeds. Sliders and toggles update paint/layout properties; they do not rebuild sources. HTML markers are for a few pins; gate the rest by zoom and rebuild only when a zoom threshold is crossed.
+- Do work at the rate the screen can show it: coalesce streamed progress to one `setState` per animation frame.
+- Latest-value refs update in a layout effect (`useLatest`), not during render.
+
+**Bundle**
+
+- Route-level `lazy()` for anything that is not the first screen (marketing, legal, admin, heavy views). Landing and the auth pages stay eager for signed-out visitors.
+- Do not force a library into a named `manualChunks` group unless it is only used by lazy code: Rolldown pulls the group's dependencies in with it (that is how `recharts` ended up preloaded on every page). Check `dist/index.html` modulepreloads after bundle changes.
+
+**Do not**
+
+- Production-build the SPA inside `dev:all`.
+- Fetch a full history table for a closed search box.
+- Hold an RLS transaction across live Nominatim.
+- Add heavy static imports to `apps/api/src/index.ts` when a request-time `import()` will do (Stripe is already lazy).
+- Strip Motion springs or restyle spinners as a performance shortcut.
+- Add a query, fetch, or full-list scan inside a per-item loop when one batched call or a lookup map will do.
+- Relax `Cache-Control: no-store` on API responses for speed (location data must not land in the browser disk cache).
 
 ### Testing
 
@@ -364,9 +429,11 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 
 | Script | Purpose |
 |--------|---------|
-| `dev:all` | Build web, then run web + API concurrently |
+| `dev:all` | Vite :5173 + Wrangler :8787 concurrently (no production SPA build) |
 | `dev:web` / `dev:api` | Single workspace dev server |
-| `build:all` / `build:web` | Production builds |
+| `dev:e2e` | Production SPA build, then Wrangler on :8787 (Playwright, OAuth, Stripe) |
+| `dev:kill` / `kill:servers` | Free Vite :5173-5179, Wrangler :8787, and inspector :9229 (process trees) |
+| `build:all` / `build:web` | Production builds (`tsc -b` then Vite) |
 | `deploy:staging` / `deploy:prod` / `deploy:both` / `deploy:preview` | Build + Wrangler `--env staging` / `--env production` / both / staging version upload (secrets from local env files) |
 | `release` / `release:patch` / `release:minor` / `release:major` / `release:set` | Tag a semver release, bump workspace package versions, promote `docs/changelog.md` |
 | `db:*` | generate, migrate:dev/staging/prod/all, import, import-demo, warm-routes |
@@ -381,7 +448,6 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 | `rules:sync` | Regenerate tool-specific rule files from `AGENTS.md` |
 | `test:placement` / `test:unit` / `test:integration` / `test:admin` / `test:rls` / `test:security` / `test:watch` / `test:e2e` / `test:all` / `test:report` | Placement lint, Vitest (including operator admin matrix), security catalog, Playwright, markdown report |
 | `loc` / `loc:report` | Lines-of-code summary / write `reports/loc.md` |
-| `kill:servers` | Free ports 5173 and 8787 |
 | `deps:audit` | `npm audit` (high/critical) |
 
 Edit **this file**, then run `npm run rules:sync`. Do not hand-edit generated tool rule files.
@@ -427,3 +493,4 @@ Non-negotiables:
 - Do not ship interactive chrome without hover/active/release Motion springs.
 - Do not colocate `*.test.ts` / `*.spec.ts` next to source; do not put Playwright under `tests/unit/` or Vitest under `tests/e2e/`. See [`tests/README.md`](tests/README.md).
 - Do not put user-edited place names in global `place_cache`.
+- Do not production-build the SPA in `dev:all`; do not serialize a lazy map chunk behind `/api/overview`; do not hold `withTenant` across Nominatim or OSRM; do not fetch closed-UI data (command palette) on authed mount. See **Performance** above.

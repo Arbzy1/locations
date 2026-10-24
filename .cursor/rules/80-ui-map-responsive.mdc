@@ -8,7 +8,7 @@ alwaysApply: false
 
 # ui-map-responsive
 
-Leaflet maps must stay usable when the container is small or resizes.
+MapLibre maps must stay usable when the container is small or resizes.
 
 **Controls and legend**
 

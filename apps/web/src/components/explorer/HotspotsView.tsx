@@ -369,8 +369,10 @@ export default function HotspotsView() {
     [allAreas, selectedTypes, selectedTags, favouritesOnly, rankBy, labelRows],
   );
 
-  const topAreas = filteredAreas.slice(0, 20);
-  const maxMetric = Math.max(1, ...topAreas.map((a) => placeMetric(a, rankBy)));
+  // Memoised so hotspotLabels (and the map overlays fed by it) keep a stable identity
+  // across unrelated re-renders.
+  const topAreas = useMemo(() => filteredAreas.slice(0, 20), [filteredAreas]);
+  const maxMetric = topAreas.reduce((max, a) => Math.max(max, placeMetric(a, rankBy)), 1);
 
   const heatForMap: HeatmapPoint[] = useMemo(
     () =>
