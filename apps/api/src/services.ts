@@ -78,6 +78,11 @@ import {
 import type { Env } from "./env";
 
 const OSRM_BASE_DEFAULT = "https://router.project-osrm.org/route/v1";
+/**
+ * Workers send no User-Agent by default, and the public OSRM server answers 403 without
+ * one (Nominatim's policy asks for one too, see NOMINATIM_UA).
+ */
+const OSRM_HEADERS = { "User-Agent": "LocationExplorer/1.0 (portfolio; contact via aden.website)" };
 /** OSRM and Nominatim calls give up after this, so one slow upstream cannot hang a request. */
 const EXTERNAL_FETCH_TIMEOUT_MS = 6000;
 const NOMINATIM_DEFAULT = "https://nominatim.openstreetmap.org/reverse";
@@ -216,7 +221,7 @@ export async function fetchRoute(
     `?overview=full&geometries=geojson&steps=true&annotations=duration,distance`;
 
   try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS) });
+    const resp = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS), headers: OSRM_HEADERS });
     if (!resp.ok) return fallback;
     const data = (await resp.json()) as {
       code?: string;
@@ -270,7 +275,7 @@ function osrmMatchBase(): string {
 
 async function osrmJson<T>(url: string): Promise<T | "error"> {
   try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS) });
+    const resp = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS), headers: OSRM_HEADERS });
     // OSRM answers 400 with a JSON code (NoMatch, NoRoute...) for definite failures.
     if (resp.status === 429 || resp.status >= 500) return "error";
     return (await resp.json()) as T;
