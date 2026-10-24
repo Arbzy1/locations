@@ -25,7 +25,8 @@ export class OsrmProvider implements RoutingProvider {
     const points = [req.origin, ...(req.waypoints ?? []), req.destination].map(osrmCoord);
     const path = points.join(";");
     const url = `${this.baseUrl.replace(/\/$/, "")}/route/v1/driving/${path}?overview=full&geometries=polyline&alternatives=true`;
-    const res = await this.fetchImpl(url);
+    // Workers send no User-Agent; the public OSRM server answers 403 without one.
+    const res = await this.fetchImpl(url, { headers: { "User-Agent": "LocationsJourneyCost/1.0 (+https://locations.aden.website)" } });
     if (!res.ok) {
       throw new RoutingError("upstream", `OSRM ${res.status}`);
     }

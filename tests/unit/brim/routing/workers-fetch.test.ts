@@ -10,25 +10,29 @@ import { pullCarbonIntensity } from "@locations/brim/shared/carbon/pull.js";
  */
 function workersFetch(body: unknown) {
   const calls: string[] = [];
-  const fn = function (this: unknown, input: string | URL | Request) {
+  const agents: (string | null)[] = [];
+  const fn = function (this: unknown, input: string | URL | Request, init?: RequestInit) {
     if (this !== undefined && this !== globalThis) {
       throw new TypeError("Illegal invocation: function called with incorrect `this` reference.");
     }
     calls.push(String(input));
+    agents.push(new Headers(init?.headers).get("User-Agent"));
     return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
   } as unknown as typeof fetch;
-  return { fn, calls };
+  return { fn, calls, agents };
 }
 
 describe("fetch kept on objects (Workers 'Illegal invocation')", () => {
   it("OSRM routing calls fetch unbound", async () => {
-    const { fn, calls } = workersFetch({ routes: [{ distance: 41000, duration: 2700, geometry: "_p~iF~ps|U" }] });
+    const { fn, calls, agents } = workersFetch({ routes: [{ distance: 41000, duration: 2700, geometry: "_p~iF~ps|U" }] });
     const route = await new OsrmProvider("https://osrm.example", fn).computeRoute({
       origin: { lat: 52.48, lng: -1.9 },
       destination: { lat: 52.19, lng: -2.22 },
     } as never);
     expect(route.distanceMeters).toBe(41000);
     expect(calls[0]).toContain("/route/v1/driving/");
+    // The public OSRM server answers 403 to requests without one.
+    expect(agents[0]).toMatch(/\S/);
   });
 
   it("Google address search calls fetch unbound", async () => {
