@@ -33,10 +33,29 @@ async function sendAuthEmail(
   });
 }
 
+// One Better Auth instance per isolate (per env object and signup flag). Building it
+// is not free and every authed request needs one; the HTTP driver holds no socket, so
+// sharing it across requests is safe.
+const authCache = new WeakMap<Env, Map<boolean, ReturnType<typeof buildAuth>>>();
+
 export function createAuth(env: Env, overlay?: { disableSignUp?: boolean }) {
+  const disableSignUp = overlay?.disableSignUp ?? env.DISABLE_SIGNUP === "true";
+  let byFlag = authCache.get(env);
+  if (!byFlag) {
+    byFlag = new Map();
+    authCache.set(env, byFlag);
+  }
+  let auth = byFlag.get(disableSignUp);
+  if (!auth) {
+    auth = buildAuth(env, disableSignUp);
+    byFlag.set(disableSignUp, auth);
+  }
+  return auth;
+}
+
+function buildAuth(env: Env, disableSignUp: boolean) {
   const db = createHttpDb(env.DATABASE_URL);
   const secure = env.BETTER_AUTH_URL.startsWith("https://");
-  const disableSignUp = overlay?.disableSignUp ?? env.DISABLE_SIGNUP === "true";
   const google = googleAuthEnabled(env);
 
   return betterAuth({

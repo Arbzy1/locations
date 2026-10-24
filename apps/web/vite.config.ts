@@ -21,9 +21,14 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // React gets its own chunk. Rolldown pulls a named group's dependencies into
+          // that group, so without this react-dom landed in whichever chunk claimed it.
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'react'
           if (id.includes('node_modules/maplibre-gl')) return 'maplibre'
-          if (id.includes('node_modules/recharts')) return 'recharts'
           if (id.includes('node_modules/motion')) return 'motion'
+          // No forced recharts chunk: it would also capture clsx (used by cn() in the
+          // shell), so every page preloaded the chart library. Recharts is only imported
+          // by lazy Insights views, so normal splitting keeps it off the entry.
         },
       },
     },
