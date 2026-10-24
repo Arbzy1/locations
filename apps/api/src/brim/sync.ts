@@ -114,7 +114,8 @@ async function runFuel(env: SyncBindings, nowIso: string, deps: SyncDeps): Promi
 export async function runBrimSync(
   env: SyncBindings,
   nowIso: string,
-  deps: SyncDeps = { fetch, sleep },
+  // Wrapped: called as deps.fetch(...) downstream, which Workers reject for the bare global.
+  deps: SyncDeps = { fetch: (input, init) => fetch(input, init), sleep },
 ): Promise<void> {
   const plan = syncPlan(env);
   if (!plan.carbon && !plan.fuel) {

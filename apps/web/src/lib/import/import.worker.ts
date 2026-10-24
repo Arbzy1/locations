@@ -104,6 +104,7 @@ async function handle(req: WorkerRequest): Promise<WorkerResponse> {
         next.googleMode !== (r.googleMode ?? null) ||
         next.modeDetail !== null ||
         next.railGeometry !== null ||
+        next.measuredDistanceM !== null ||
         r.hasDetail ||
         r.hasRail;
       if (changed) updates.push({ id: r.id, ...next });

@@ -1,3 +1,4 @@
+import { unboundFetch } from "../unbound-fetch.js";
 export const FUEL_FINDER_ORIGIN = "https://www.fuel-finder.service.gov.uk";
 export const FUEL_FINDER_PAGE_SIZE = 500;
 export const FUEL_FINDER_PAGE_SLEEP_MS = 4000;
@@ -67,7 +68,7 @@ async function requestToken(deps: {
   clientId: string;
   clientSecret: string;
 }): Promise<string> {
-  const res = await deps.fetch(fuelFinderTokenUrl(), {
+  const res = await unboundFetch(deps.fetch)(fuelFinderTokenUrl(), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ client_id: deps.clientId, client_secret: deps.clientSecret }),

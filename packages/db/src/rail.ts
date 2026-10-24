@@ -23,7 +23,7 @@ export type RailCoverage = {
 };
 
 /** Bump when detection rules change so stored results are recomputed. */
-export const MODE_DETECTOR_VERSION = 2;
+export const MODE_DETECTOR_VERSION = 3;
 /**
  * A fix this close to a rail line counts as on the tracks. Phone GPS on trains is rough:
  * on the user's real export only about half of train fixes fell within 40 m, most within 80 m.
@@ -492,7 +492,31 @@ export type JourneyModeFields = {
   googleMode: string | null;
   modeDetail: ModeDetection | null;
   railGeometry: [number, number][] | null;
+  /** Corrected distance when Google's is clearly wrong; null keeps Google's. */
+  measuredDistanceM: number | null;
 };
+
+/**
+ * The journey's length from its GPS fixes, when Google's distance is clearly wrong:
+ * less than half the straight line between the first and last fixes (seen: a "0.1 km"
+ * record of a 40 km train ride). Uses the rail line when there is one, else the cleaned
+ * fixes, capped at 3x the straight line so jittery fixes cannot inflate it. Null keeps
+ * Google's figure, so a second run changes nothing.
+ */
+export function measuredDistanceM(
+  row: DetectableJourney,
+  railGeometry: [number, number][] | null,
+): number | null {
+  const raw = journeyTrace(row);
+  if (!raw || raw.length < 3) return null;
+  const trace = cleanTrace(raw);
+  const first = trace[0];
+  const last = trace[trace.length - 1];
+  const straightM = haversineM(first[0], first[1], last[0], last[1]);
+  if (straightM < 1000 || (row.distanceMeters || 0) >= straightM * 0.5) return null;
+  const alongM = railGeometry && railGeometry.length >= 2 ? polylineLengthM(railGeometry) : polylineLengthM(trace);
+  return Math.round(Math.min(Math.max(alongM, straightM), straightM * 3));
+}
 
 const RAIL_MODES = new Set(["train", "subway"]);
 
@@ -508,11 +532,13 @@ export function detectedModeFields(
   const d = detectJourneyMode({ ...row, mode: original }, rail);
   const mode = d?.confidence === "high" ? d.mode : original;
   const trace = rail && RAIL_MODES.has(mode) ? journeyTrace(row) : null;
+  const railGeometry = trace && trace.length >= 3 ? snapTraceToRail(trace, rail!) : null;
   return {
     mode,
     googleMode: mode !== original ? original : null,
     modeDetail: d,
-    railGeometry: trace && trace.length >= 3 ? snapTraceToRail(trace, rail!) : null,
+    railGeometry,
+    measuredDistanceM: measuredDistanceM(row, railGeometry),
   };
 }
 
@@ -526,6 +552,12 @@ export function* journeyPoints(rows: Iterable<DetectableJourney>): Generator<[nu
 }
 
 /** Detect modes for freshly parsed journeys; returns new rows with the mode fields set. */
-export function applyModeDetection<T extends DetectableJourney>(rows: T[], rail: RailIndex | null): (T & JourneyModeFields)[] {
-  return rows.map((r) => ({ ...r, ...detectedModeFields(r, rail) }));
+export function applyModeDetection<T extends DetectableJourney>(
+  rows: T[],
+  rail: RailIndex | null,
+): (T & Omit<JourneyModeFields, "measuredDistanceM">)[] {
+  return rows.map((r) => {
+    const { measuredDistanceM: measured, ...fields } = detectedModeFields(r, rail);
+    return { ...r, ...fields, distanceMeters: measured ?? r.distanceMeters };
+  });
 }
