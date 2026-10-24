@@ -67,18 +67,23 @@ npm run deploy:staging
 
 npm run secrets:generate -- --env production
 npm run cf:sync:prod
-npm run deploy:prod
+npm run db:migrate:prod   # deploys never migrate: run this before code that needs new tables
+npm run deploy:prod       # or the "Deploy production" GitHub workflow on master
 ```
+
+Staging deploys on every push to `master`. See [docs/engineering/deploy.md](docs/engineering/deploy.md).
 
 ## What it does
 
 Full list: [docs/product/features.md](docs/product/features.md).
 
-- **Hotspots** - visit density heatmap, ranked places, date and source filters
-- **Day View** - one day on a map with a timeline (road geometry when cached)
-- **Day Trips** - days with more range or more places; filter and open in Day View
-- **Insights** - totals, monthly/yearly charts, corridors, home/work guess
-- **Settings** - Timeline JSON or zip import, sources, billing, units, delete account
+- **Map** - Heat (visit density, ranked places, tap a hotspot for its days) or Lines (Routes: every journey for a day, month, year or range, coloured by mode)
+- **Days** - one day on a map with a timeline: journeys drawn from your GPS points, coloured by transport and numbered, trains Google called drives detected and drawn along the tracks, notes and mode fixes
+- **Trips** - days with more range or more places, Google's own trips, named trips
+- **Places** - place directory with your names, hiding, deleting a place's data
+- **Insights** - any period up to all time against the same dates last year, On this day, yearly charts, corridors, home/work
+- **Journey cost** - UK trip cost for fuel or charging, tolls and clean-air charges (`/journey-cost`)
+- **Settings** - Timeline JSON or Takeout zip import (parsed in your browser), sources, exports, billing, units, delete account
 - **Account** - signup, login, forgot password, demo, dark/light theme
 
 ## Stack
@@ -90,7 +95,7 @@ Full list: [docs/product/features.md](docs/product/features.md).
 | Auth | Better Auth (email/password, public signup unless disabled) |
 | Billing | Stripe Checkout + Customer Portal |
 | DB | Neon Postgres + Drizzle ORM + FORCE RLS |
-| UI | React 19, Vite, Tailwind 4, shadcn/ui, Motion, Leaflet, Recharts |
+| UI | React 19, Vite, Tailwind 4, shadcn/ui, Motion, MapLibre GL, Recharts |
 
 ## Scripts
 
@@ -105,7 +110,8 @@ Full list: [docs/product/features.md](docs/product/features.md).
 | `npm run db:migrate:dev` | Apply schema (local `.env`) |
 | `npm run db:migrate:staging` / `db:migrate:prod` | Apply schema to staging / production |
 | `npm run db:migrate:all` | Migrate local, staging, then production |
-| `npm run db:import` | CLI JSON import |
+| `npm run db:import` | CLI JSON import (with train detection when the rail tiles are present) |
+| `npm run rail:build` | Rebuild the UK and Ireland rail tiles from OpenStreetMap (by hand only) |
 | `npm run test:placement` | Fail if tests live outside `tests/` |
 | `npm run test:unit` | Vitest unit project |
 | `npm run test:integration` | Vitest integration project |
