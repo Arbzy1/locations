@@ -7,11 +7,7 @@ import LoginPage from './components/auth/LoginPage';
 import SignupPage from './components/auth/SignupPage';
 import ForgotPage from './components/auth/ForgotPage';
 import ResetPasswordPage from './components/auth/ResetPasswordPage';
-import { CookiesRoute, PrivacyRoute, TermsRoute } from './components/legal/LegalRoutes';
 import LandingPage from './components/marketing/LandingPage';
-import PricingPage from './components/marketing/PricingPage';
-import StatusPage from './components/marketing/StatusPage';
-import ChangelogPage from './components/marketing/ChangelogPage';
 import { Toaster } from './components/ui/sonner';
 import { Loader2 } from 'lucide-react';
 
@@ -27,6 +23,14 @@ const queryClient = new QueryClient({
 });
 
 const AuthedApp = lazy(() => import('./AuthedApp'));
+// Rarely the first page anyone opens, so they stay out of the entry bundle (which
+// signed-in users also download). Landing stays eager: it is the signed-out home.
+const PricingPage = lazy(() => import('./components/marketing/PricingPage'));
+const StatusPage = lazy(() => import('./components/marketing/StatusPage'));
+const ChangelogPage = lazy(() => import('./components/marketing/ChangelogPage'));
+const PrivacyRoute = lazy(() => import('./components/legal/LegalRoutes').then((m) => ({ default: m.PrivacyRoute })));
+const TermsRoute = lazy(() => import('./components/legal/LegalRoutes').then((m) => ({ default: m.TermsRoute })));
+const CookiesRoute = lazy(() => import('./components/legal/LegalRoutes').then((m) => ({ default: m.CookiesRoute })));
 
 function bootFallback() {
   return (
@@ -90,15 +94,17 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Toaster />
-        <Routes>
-          <Route path="/privacy" element={<PrivacyRoute />} />
-          <Route path="/terms" element={<TermsRoute />} />
-          <Route path="/cookies" element={<CookiesRoute />} />
-          <Route path="/pricing" element={<PricingPage />} />
-          <Route path="/status" element={<StatusPage />} />
-          <Route path="/changelog" element={<ChangelogPage />} />
-          <Route path="/*" element={<AuthGate />} />
-        </Routes>
+        <Suspense fallback={bootFallback()}>
+          <Routes>
+            <Route path="/privacy" element={<PrivacyRoute />} />
+            <Route path="/terms" element={<TermsRoute />} />
+            <Route path="/cookies" element={<CookiesRoute />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/status" element={<StatusPage />} />
+            <Route path="/changelog" element={<ChangelogPage />} />
+            <Route path="/*" element={<AuthGate />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </QueryClientProvider>
   );

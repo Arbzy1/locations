@@ -2,13 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { visits } from "@locations/db";
 import { getHeatmap } from "@locations/api/services";
 
-// Postgres now groups stays per cell; getHeatmap merges the grouped rows. The fake returns
-// what those two queries would: rows per (cell, cluster, type), then distinct days per cell.
+// Postgres groups stays per cell in one GROUPING SETS query; getHeatmap merges the rows.
+// The fake returns what that query would: rows per (cell, cluster, type) with perCell 0,
+// plus one per-cell rollup row (perCell 1) carrying the distinct-day count.
 type Part = { lat: string; lon: string; cluster: string; semanticType: string; n: number; minutes: number };
 type Days = { lat: string; lon: string; days: number };
 
 function fakeDb(parts: Part[], dayCounts: Days[]) {
-  let visitQueries = 0;
+  const rows = [
+    ...parts.map((p) => ({ ...p, perCell: 0, days: 0 })),
+    ...dayCounts.map((d) => ({ ...d, cluster: "", semanticType: "", perCell: 1, n: 0, minutes: 0 })),
+  ];
   const chain = (rows: unknown[]) => {
     const q: Record<string, unknown> = {};
     for (const m of ["where", "groupBy", "orderBy", "innerJoin", "leftJoin"]) q[m] = () => q;
@@ -20,7 +24,7 @@ function fakeDb(parts: Part[], dayCounts: Days[]) {
   return {
     select: () => ({
       from: (table: unknown) =>
-        chain(table === visits ? (visitQueries++ % 2 === 0 ? parts : dayCounts) : []),
+        chain(table === visits ? rows : []),
     }),
     insert: () => ({
       values: () => ({ onConflictDoNothing: async () => {}, onConflictDoUpdate: async () => {} }),
