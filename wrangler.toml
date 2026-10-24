@@ -24,7 +24,7 @@ run_worker_first = ["/*", "!/assets/*"]
 enabled = true
 
 [triggers]
-crons = ["0 8 1 * *", "*/20 * * * *"]
+crons = ["*/20 * * * *"]
 
 [secrets]
 required = ["DATABASE_URL", "BETTER_AUTH_SECRET"]
@@ -84,7 +84,7 @@ queue = "locations-imports-staging"
 max_batch_size = 1
 
 [env.staging.triggers]
-crons = ["0 8 1 * *", "*/20 * * * *"]
+crons = ["*/20 * * * *"]
 
 # ----- production -----
 [env.production]
@@ -124,4 +124,4 @@ queue = "locations-imports"
 max_batch_size = 1
 
 [env.production.triggers]
-crons = ["0 8 1 * *", "*/20 * * * *"]
+crons = ["*/20 * * * *"]

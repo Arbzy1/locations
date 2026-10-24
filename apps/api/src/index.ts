@@ -1919,6 +1919,18 @@ function withAssetSecurityHeaders(
   });
 }
 
+/**
+ * The monthly jobs (retention, recap email) run on the 08:00 UTC tick of the 1st.
+ * They ride the 20-minute cron because the free plan allows only 5 cron triggers
+ * per account, shared with other Workers. Any other cron (the old "0 8 1 * *"
+ * trigger, a manual run) still means "run the monthly jobs".
+ */
+export function isMonthlyTick(controller: Pick<ScheduledController, "cron" | "scheduledTime">): boolean {
+  if (controller.cron !== BRIM_SYNC_CRON) return true;
+  const at = new Date(controller.scheduledTime);
+  return at.getUTCDate() === 1 && at.getUTCHours() === 8 && at.getUTCMinutes() === 0;
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -1936,14 +1948,17 @@ export default {
     }
   },
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    const jobs: Array<[kind: string, run: () => Promise<unknown>]> = [];
     if (controller.cron === BRIM_SYNC_CRON) {
-      await runBrimSync(env, new Date(controller.scheduledTime).toISOString());
-      return;
+      jobs.push(["brim_sync", () => runBrimSync(env, new Date(controller.scheduledTime).toISOString())]);
     }
-    // Independent jobs: one failing must not skip the other.
-    const results = await Promise.allSettled([runRetention(env), runMonthlyRecaps(env)]);
+    if (isMonthlyTick(controller)) {
+      jobs.push(["retention", () => runRetention(env)], ["monthly_recap", () => runMonthlyRecaps(env)]);
+    }
+    // Independent jobs: one failing must not skip the others.
+    const results = await Promise.allSettled(jobs.map(([, run]) => run()));
     for (const [i, r] of results.entries()) {
-      if (r.status === "rejected") console.error(JSON.stringify({ kind: i === 0 ? "retention" : "monthly_recap", ok: false }));
+      if (r.status === "rejected") console.error(JSON.stringify({ kind: jobs[i][0], ok: false }));
     }
   },
 };
