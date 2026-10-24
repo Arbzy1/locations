@@ -34,6 +34,7 @@ import type { ActivityGuessCount, BadgeSummary, FlightSummary } from '../../type
 import { useTheme } from '../../lib/theme';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { resolveCssColor } from '../../lib/map/journeyColors';
 import {
   BarChart,
   Bar,
@@ -214,7 +215,8 @@ export default function InsightsView() {
         .map(([mode, count]) => ({
           name: MODE_LABELS[mode] || mode,
           value: count,
-          color: MODE_COLORS[mode] || chart.muted,
+          // Recharts writes this into an SVG attribute, which cannot take var().
+          color: MODE_COLORS[mode] ? resolveCssColor(MODE_COLORS[mode], chart.muted) : chart.muted,
         }))
         .sort((a, b) => b.value - a.value)
     : [];

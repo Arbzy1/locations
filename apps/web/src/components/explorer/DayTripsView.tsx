@@ -187,8 +187,8 @@ export default function DayTripsView({ onSelectDate }: Props) {
               onClick={() => toggleMode(mode)}
               className="min-h-11 rounded-full px-3 py-2 text-xs font-medium transition-all duration-ui-fast ease-ui"
               style={{
-                backgroundColor: active ? `${color}33` : `${color}11`,
-                color: active ? color : `${color}88`,
+                backgroundColor: active ? `color-mix(in srgb, ${color} 20%, transparent)` : `color-mix(in srgb, ${color} 7%, transparent)`,
+                color: active ? color : `color-mix(in srgb, ${color} 53%, transparent)`,
                 border: `1.5px solid ${active ? color : 'transparent'}`,
               }}
             >
@@ -422,15 +422,15 @@ function TripCard({ trip, modeFilter, onSelect }: {
       {trip.modes.length > 0 && (
         <div className="flex gap-1.5">
           {trip.modes.map((mode) => {
-            const color = MODE_COLORS[mode] || '#8b949e';
+            const color = MODE_COLORS[mode] || 'var(--text-muted)';
             const isHighlighted = highlightedModes.includes(mode);
             return (
               <span
                 key={mode}
                 className="text-[11px] px-1.5 py-0.5 rounded-full font-medium"
                 style={{
-                  backgroundColor: isHighlighted ? `${color}33` : `${color}15`,
-                  color: isHighlighted ? color : `${color}99`,
+                  backgroundColor: isHighlighted ? `color-mix(in srgb, ${color} 20%, transparent)` : `color-mix(in srgb, ${color} 8%, transparent)`,
+                  color: isHighlighted ? color : `color-mix(in srgb, ${color} 60%, transparent)`,
                   border: isHighlighted ? `1px solid ${color}` : '1px solid transparent',
                 }}
               >

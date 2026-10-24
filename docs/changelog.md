@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Day View colours journeys by transport: every mode has its own colour (and line style) in both themes, the same on the map, the timeline, the calendar dots and Insights. Journeys are numbered on the map to match the timeline, with direction arrows from street level; a trip out and back along the same road is drawn as two lines side by side. Tap a journey (on the map or in the timeline) to bring it forward and fade the rest; a legend of the day's modes hides or shows each one. Layers has "Colour lines by: Transport / Journey" for the old per-journey colours.
+
 Trains detected from your GPS points: a journey Google called driving or a bus becomes a train (or Underground) when most of its points sit on a railway at train speeds, and it is drawn along the actual tracks in Day View and Routes. Walks at cycling speed, "drives" at walking pace and flights get fixed the same way. Each change shows a "Detected train" badge with one tap to switch back; weaker matches show "Might be a train". Your existing journeys are checked once in your browser; mileage by mode and statistics follow. Mode fixes you make now also update statistics and Routes, not only Day View. Road lines that wander away from your GPS points (or are thrown by a GPS spike) fall back to the points. Migration `0022_activity_mode_detection`.
 
 Rail map data for Great Britain, the Isle of Man and the island of Ireland ships with the site as small static tiles (`/assets/rail/v1/`), ready for spotting train journeys that Google labelled as driving. Built by hand from OpenStreetMap with `npm run rail:build`; served as plain files, so they cost no Worker time. Rail data © OpenStreetMap contributors, ODbL (see `docs/legal/credits.md` and the Terms page).

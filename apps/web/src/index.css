@@ -58,6 +58,16 @@
   --visit: #bc8cff;
   --admin: var(--visit);
   --destructive: #f85149;
+  /* Transport modes on maps and mode chips: one hue each, apart from each other and from
+     stays (--visit) and selection (--accent). */
+  --mode-walking: #3fb950;
+  --mode-cycling: #2dd4bf;
+  --mode-car: #6e9bff;
+  --mode-bus: #e3b341;
+  --mode-train: #ff6b6b;
+  --mode-subway: #f472d0;
+  --mode-flying: #c9d1d9;
+  --mode-unknown: #8b949e;
   --background: var(--bg);
   --foreground: var(--text);
   --primary: var(--accent);
@@ -88,6 +98,14 @@
   --visit: #8250df;
   --admin: var(--visit);
   --destructive: #cf222e;
+  --mode-walking: #1a7f37;
+  --mode-cycling: #0f766e;
+  --mode-car: #1f4fbf;
+  --mode-bus: #9a6700;
+  --mode-train: #cf222e;
+  --mode-subway: #a8248f;
+  --mode-flying: #3d444d;
+  --mode-unknown: #6e7781;
   --background: var(--bg);
   --foreground: var(--text);
   --primary: var(--accent);
