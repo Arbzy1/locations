@@ -59,6 +59,7 @@ Three read-only audits (UX/layout, product, performance/reliability) fed this pl
 - [x] Day View: colour by transport, numbered journeys, separate out-and-back lanes, focus, mode legend.
 - [x] Insights for any period up to all time without hitting the CPU limit.
 - [x] Performance pass: smaller entry bundle, lazy marketing and legal pages, fewer round trips, per-group map overlay sync, bounded concurrency for routing and place names.
-- [ ] Production migrations for Journey cost (`0020_brim`, `0021_brim_rls`): deploys do not run migrations.
+- [x] Production migrations and reference data for Journey cost (`0020_brim`, `0021_brim_rls`, zones, tolls, VCA, carbon), run by hand on 2026-10-24: deploys do not run migrations.
+- [ ] **Google Maps API key for Journey cost on production** (`GOOGLE_MAPS_API_KEY` Worker secret). Without it address search only knows the built-in sample places and routing uses OSRM. Restrict the key to the Routes and Places APIs; `ROUTING_CEILING_USD` is the spend guard. Also unset on production: `DVLA_VES_API_KEY` (plate lookup), `VRM_ENCRYPTION_KEY` (stored plates), `FUEL_FINDER_CLIENT_ID` / `FUEL_FINDER_CLIENT_SECRET` (forecourt prices).
 - [ ] Split a walk, train, walk recorded as one journey (drawing only).
 - [ ] Dashed segments where GPS had a long gap (tunnels, phone asleep).
