@@ -4,6 +4,7 @@ import {
   detectJourneyMode,
   distanceToPolylineM,
   haversineM,
+  journeyTrace,
   RailIndex,
   snapTraceToRail,
   type DetectableJourney,
@@ -123,5 +124,27 @@ describe("snapTraceToRail", () => {
   it("returns null when the fixes are nowhere near rail", () => {
     const road = (t: number): [number, number] => [arc(t)[0] + 0.01, arc(t)[1]];
     expect(snapTraceToRail(fixes(road, 6, 60), rail)).toBeNull();
+  });
+});
+
+describe("broken Google records", () => {
+  it("leaves out a start point Google put at the destination, so the line is not drawn there and back", () => {
+    const path = fixes(arc, 12, 45);
+    const [eLat, eLon] = arc(1);
+    // Google: "walking, 0.1 km", starting where the journey actually ended.
+    const broken = { ...journey(path, "walking"), startLat: eLat, startLon: eLon, distanceMeters: 100 };
+    const trace = journeyTrace(broken)!;
+    expect(trace[0]).toEqual(path[0]);
+    expect(trace.at(-1)?.slice(0, 2)).toEqual([eLat, eLon]);
+  });
+
+  it("calls a 'walk' along the railway at train speed a train", () => {
+    const [eLat, eLon] = arc(1);
+    const broken = { ...journey(fixes(arc, 12, 45), "walking"), startLat: eLat, startLon: eLon, distanceMeters: 100 };
+    expect(detectJourneyMode(broken, rail)).toMatchObject({ mode: "train", confidence: "high", by: "rail" });
+  });
+
+  it("does not turn a real walk beside the tracks into a train", () => {
+    expect(detectJourneyMode(journey(fixes(arc, 12, 900), "walking", 900), rail)).toBeNull();
   });
 });
