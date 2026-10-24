@@ -1,3 +1,4 @@
+import { unboundFetch, type FetchFn } from "../../shared/unbound-fetch.js";
 import type { RouteAlternative, RouteRequest, RouteResponse, RoutingProvider } from "../types.js";
 import { RoutingError } from "../types.js";
 import { osrmCoord } from "../place.js";
@@ -11,10 +12,14 @@ export class OsrmProvider implements RoutingProvider {
     alternatives: true,
   } as const;
 
+  private readonly fetchImpl: FetchFn;
+
   constructor(
     private readonly baseUrl: string,
-    private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+    fetchImpl: FetchFn = fetch,
+  ) {
+    this.fetchImpl = unboundFetch(fetchImpl);
+  }
 
   async computeRoute(req: RouteRequest): Promise<RouteResponse> {
     const points = [req.origin, ...(req.waypoints ?? []), req.destination].map(osrmCoord);

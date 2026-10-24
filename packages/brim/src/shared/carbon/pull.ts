@@ -1,3 +1,4 @@
+import { unboundFetch } from "../unbound-fetch.js";
 import { parseCarbonIntensity } from "./parse.js";
 import type { CarbonIntensityPeriod } from "./types.js";
 
@@ -31,7 +32,7 @@ export async function pullCarbonIntensity(input: {
 }): Promise<{ periods: CarbonIntensityPeriod[]; raw: unknown }> {
   const window = carbonWindow(input.nowIso);
   const url = carbonIntensityRangeUrl(window.fromIso, window.toIso);
-  const res = await input.fetch(url, { headers: { Accept: "application/json" } });
+  const res = await unboundFetch(input.fetch)(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
     throw new Error(`Carbon Intensity HTTP ${res.status}`);
   }

@@ -1,3 +1,4 @@
+import { unboundFetch, type FetchFn } from "../../shared/unbound-fetch.js";
 import type { AutocompleteOpts, GeocodeHit, Geocoder, PlaceSuggestion } from "./types.js";
 import { RoutingError } from "../types.js";
 
@@ -14,10 +15,14 @@ function placeResource(placeId: string): string {
 }
 
 export class GoogleGeocoder implements Geocoder {
+  private readonly fetchImpl: FetchFn;
+
   constructor(
     private readonly apiKey: string,
-    private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+    fetchImpl: FetchFn = fetch,
+  ) {
+    this.fetchImpl = unboundFetch(fetchImpl);
+  }
 
   async autocomplete(query: string, opts?: AutocompleteOpts): Promise<PlaceSuggestion[]> {
     if (query.trim().length < 2) return [];

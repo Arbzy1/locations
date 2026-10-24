@@ -1,3 +1,4 @@
+import { unboundFetch, type FetchFn } from "../../shared/unbound-fetch.js";
 import type {
   LatLng,
   RouteAlternative,
@@ -68,10 +69,14 @@ function parseRoute(route: GoogleRoute, index: number, advanced: boolean): Route
 export class GoogleRoutesProvider implements RoutingProvider {
   readonly name = "google";
 
+  private readonly fetchImpl: FetchFn;
+
   constructor(
     private readonly apiKey: string,
-    private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+    fetchImpl: FetchFn = fetch,
+  ) {
+    this.fetchImpl = unboundFetch(fetchImpl);
+  }
 
   get capabilities() {
     return {
