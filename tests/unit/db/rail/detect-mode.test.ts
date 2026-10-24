@@ -5,6 +5,8 @@ import {
   distanceToPolylineM,
   haversineM,
   journeyTrace,
+  measuredDistanceM,
+  applyModeDetection,
   RailIndex,
   snapTraceToRail,
   type DetectableJourney,
@@ -146,5 +148,30 @@ describe("broken Google records", () => {
 
   it("does not turn a real walk beside the tracks into a train", () => {
     expect(detectJourneyMode(journey(fixes(arc, 12, 900), "walking", 900), rail)).toBeNull();
+  });
+});
+
+describe("measuredDistanceM", () => {
+  it("replaces Google's distance when it is clearly wrong", () => {
+    const [eLat, eLon] = arc(1);
+    const broken = { ...journey(fixes(arc, 12, 45), "walking"), startLat: eLat, startLon: eLon, distanceMeters: 100 };
+    const measured = measuredDistanceM(broken, null)!;
+    expect(measured).toBeGreaterThan(9000);
+    expect(measured).toBeLessThan(13000);
+  });
+
+  it("keeps a believable distance, so running again changes nothing", () => {
+    expect(measuredDistanceM(journey(fixes(arc, 12, 45)), null)).toBeNull();
+    const [eLat, eLon] = arc(1);
+    const fixed = { ...journey(fixes(arc, 12, 45), "walking"), startLat: eLat, startLon: eLon, distanceMeters: 10_800 };
+    expect(measuredDistanceM(fixed, null)).toBeNull();
+  });
+
+  it("is applied to imported rows", () => {
+    const [eLat, eLon] = arc(1);
+    const broken = { ...journey(fixes(arc, 12, 45), "walking"), startLat: eLat, startLon: eLon, distanceMeters: 100 };
+    const [row] = applyModeDetection([broken], rail);
+    expect(row.mode).toBe("train");
+    expect(row.distanceMeters).toBeGreaterThan(9000);
   });
 });

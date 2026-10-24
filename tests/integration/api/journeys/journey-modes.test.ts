@@ -73,6 +73,7 @@ describe("journey mode detection routes", () => {
     const [, tenant, chunk] = vi.mocked(applyModeUpdates).mock.calls[0]!;
     expect(tenant).toBe("user-a");
     expect(chunk.updates[0].modeDetail).toEqual(detail);
+    expect(chunk.updates[0].measuredDistanceM).toBeNull();
     expect(chunk.doneVersion).toBe(1);
   });
 
@@ -86,6 +87,8 @@ describe("journey mode detection routes", () => {
     expect((await post({ updates: [{ ...update, railGeometry: long }] })).status).toBe(400);
     expect((await post({ updates: [{ ...update, railGeometry: [[91, 0], [0, 0]] }] })).status).toBe(400);
     expect((await post({ updates: Array.from({ length: 251 }, () => update) })).status).toBe(400);
+    expect((await post({ updates: [{ ...update, measuredDistanceM: -5 }] })).status).toBe(400);
+    expect((await post({ updates: [{ ...update, measuredDistanceM: "far" }] })).status).toBe(400);
     expect((await post("{not json")).status).toBe(400);
     expect(applyModeUpdates).not.toHaveBeenCalled();
   });

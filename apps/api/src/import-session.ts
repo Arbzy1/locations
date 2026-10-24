@@ -652,7 +652,7 @@ export async function modeDetectInputPage(db: Db, tenant: TenantId, afterId: num
     .limit(limit);
 }
 
-export type ModeUpdate = { id: number; mode: string } & ModeFieldsInput;
+export type ModeUpdate = { id: number; mode: string; measuredDistanceM: number | null } & ModeFieldsInput;
 
 /** Validate a detection write: at most IMPORT_BATCH_ROWS updates, plus an optional finish marker. */
 export function checkModeUpdates(body: unknown): Check<{ updates: ModeUpdate[]; doneVersion: number | null }> {
@@ -667,7 +667,11 @@ export function checkModeUpdates(body: unknown): Check<{ updates: ModeUpdate[]; 
     if (typeof u.mode !== "string" || !MODES.has(u.mode)) return { ok: false, error: "unknown journey mode" };
     const fields = checkModeFields(u);
     if (!fields.ok) return fields;
-    updates.push({ id: u.id as number, mode: u.mode, ...fields.value });
+    const measured = u.measuredDistanceM;
+    if (measured !== null && measured !== undefined && !num(measured, 0, 40_075_000)) {
+      return { ok: false, error: "measured distance out of range" };
+    }
+    updates.push({ id: u.id as number, mode: u.mode, measuredDistanceM: (measured as number | null | undefined) ?? null, ...fields.value });
   }
   const done = body.doneVersion;
   if (done !== null && done !== undefined && !(Number.isInteger(done) && num(done, 1, 1000))) {
@@ -689,9 +693,9 @@ export async function applyModeUpdates(
   if (chunk.updates.length) {
     const result = await db.execute(sql`
       update activities a set mode = x.mode, google_mode = x."googleMode", mode_detail = x."modeDetail",
-        rail_geometry = x."railGeometry"
+        rail_geometry = x."railGeometry", distance_meters = coalesce(x."measuredDistanceM", a.distance_meters)
       from jsonb_to_recordset(${JSON.stringify(chunk.updates)}::jsonb) as x(
-        id integer, mode text, "googleMode" text, "modeDetail" jsonb, "railGeometry" jsonb)
+        id integer, mode text, "googleMode" text, "modeDetail" jsonb, "railGeometry" jsonb, "measuredDistanceM" real)
       where a.tenant = ${tenant} and a.id = x.id`);
     changed = (result as { rowCount?: number }).rowCount ?? chunk.updates.length;
     if (changed) await markAggregatesStale(db, tenant);
