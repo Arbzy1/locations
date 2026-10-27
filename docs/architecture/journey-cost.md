@@ -19,6 +19,8 @@ Product summary: [product/journey-cost.md](../product/journey-cost.md). This fea
 
 `@locations/brim/engine` is a calculator, not a service. It never reads the clock, env, network, or filesystem. The API gathers time, forecast temperature, prices, route, and charges, and passes them in. That keeps tests deterministic (golden fixtures under `tests/fixtures/brim/golden`) and lets charge windows be tested across DST without mocking the clock.
 
+`engine/what-if` (`playFuelFromText`) is the same kind of calculator for the play panel: miles, pump price, mpg, and steady speed in, litres and cost out. The browser runs it so those controls do not spend a Worker request. Tolls and zone charges are passed through unchanged.
+
 ## Tenancy and RLS
 
 Tenant tables carry `tenant` (from `tenantForUser`, never from the request) and FORCE RLS on `app.tenant`:
