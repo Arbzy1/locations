@@ -1,41 +1,47 @@
-import { animate, useMotionValue, useTransform, useReducedMotion } from "motion/react";
+import { animate, useMotionValue, useReducedMotion } from "motion/react";
 import { useEffect, useState } from "react";
 
 type PumpReadoutProps = {
   value: number;
   currency?: string;
   unit?: string;
+  fractionDigits?: number;
 };
 
-export function PumpReadout({ value, currency = "£", unit }: PumpReadoutProps) {
+function formatPump(value: number, fractionDigits: number): string {
+  if (fractionDigits > 0) return value.toFixed(fractionDigits);
+  return String(Math.round(value)).padStart(3, " ");
+}
+
+export function PumpReadout({ value, currency = "£", unit, fractionDigits = 0 }: PumpReadoutProps) {
   const reduce = useReducedMotion();
   const mv = useMotionValue(0);
-  const shown = useTransform(mv, (v) => Math.round(v));
-  const [digits, setDigits] = useState("0");
+  const [digits, setDigits] = useState(() => formatPump(0, fractionDigits));
   const [announce, setAnnounce] = useState("");
 
   useEffect(() => {
-    const unsub = shown.on("change", (v) => setDigits(String(v)));
+    const unsub = mv.on("change", (next) => setDigits(formatPump(next, fractionDigits)));
     return () => unsub();
-  }, [shown]);
+  }, [mv, fractionDigits]);
 
   useEffect(() => {
+    const spoken = `${currency}${formatPump(value, fractionDigits).trim()}${unit ? ` ${unit}` : ""}`;
     setAnnounce("");
     if (reduce) {
       mv.set(value);
-      setDigits(String(Math.round(value)));
-      setAnnounce(`${currency}${Math.round(value)}${unit ? ` ${unit}` : ""}`);
+      setDigits(formatPump(value, fractionDigits));
+      setAnnounce(spoken);
       return;
     }
     const controls = animate(mv, value, {
       duration: 0.6,
       ease: [0.16, 1, 0.3, 1],
       onComplete: () => {
-        setAnnounce(`${currency}${Math.round(value)}${unit ? ` ${unit}` : ""}`);
+        setAnnounce(spoken);
       },
     });
     return () => controls.stop();
-  }, [value, currency, unit, reduce, mv]);
+  }, [value, currency, unit, fractionDigits, reduce, mv]);
 
   return (
     <div className="inline-block">

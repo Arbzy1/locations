@@ -2,6 +2,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -49,8 +50,10 @@ import { type CatalogueVehicle } from "./VehicleCatalogue";
 import { useBreakpoint } from "../../hooks/useBreakpoint";
 import { useSession } from "../../lib/auth";
 import { readLastEstimate, writeLastEstimate } from "../../lib/brim/estimate/last-estimate";
+import { FuelPlay, type FuelPlayReport } from "./estimate/FuelPlay";
 import { PinHud } from "./estimate/PinHud";
 import { TripComposer } from "./estimate/TripComposer";
+import { seedFuelPlay, type PlayFuelSuccess } from "@locations/brim/engine/what-if";
 import type {
   EvNetworkRow,
   FocusStop,
@@ -86,7 +89,7 @@ type Estimate = {
     energyPence: { point: number };
     chargesPence: number;
   };
-  consumption: { label: string; display: string };
+  consumption: { label: string; display: string; value?: number; unit?: string };
   reasons: string[];
   warnings: Array<{ message: string }>;
   energy: {
@@ -240,6 +243,12 @@ export function EstimateView() {
   const [recents, setRecents] = useState<Place[]>([]);
   const [mapBias, setMapBias] = useState<MapBias | undefined>();
   const [resultOpen, setResultOpen] = useState(false);
+  const [play, setPlay] = useState<PlayFuelSuccess | null>(null);
+  const [playEngaged, setPlayEngaged] = useState(false);
+  const onPlayReport = useCallback((report: FuelPlayReport) => {
+    setPlay(report.result);
+    setPlayEngaged(report.engaged);
+  }, []);
   const [stationId, setStationId] = useState<string | undefined>();
   const [priceStrategy, setPriceStrategy] = useState<string | undefined>();
   const [nearbyStations, setNearbyStations] = useState<NearbyStation[]>([]);
@@ -254,6 +263,12 @@ export function EstimateView() {
     selectedVehicle?.propulsion === "bev" || selectedVehicle?.propulsion === "phev";
   const savedBev = selectedVehicle?.propulsion === "bev";
   const electricTrip = propulsion === "bev" || propulsion === "phev" || savedElectric;
+
+  useEffect(() => {
+    if (!electricTrip) return;
+    setPlay(null);
+    setPlayEngaged(false);
+  }, [electricTrip]);
 
   const fillStations = useMemo(() => {
     const byId = new Map<string, { id: string; name: string }>();
@@ -726,8 +741,16 @@ export function EstimateView() {
 
 
   const money = estimate ? formatEstimateMoney(estimate.cost.totalPence) : { pounds: 0, band: "" };
-  const pounds = money.pounds;
-  const band = money.band;
+  const fuelName = propulsion === "diesel" ? "diesel" : "petrol";
+  const playOk = !electricTrip && play ? play : null;
+  const pounds = playOk ? playOk.totalPence / 100 : money.pounds;
+  const band = playOk
+    ? playEngaged
+      ? playOk.chargesPence > 0
+        ? `£${(playOk.fuelPence / 100).toFixed(2)} ${fuelName} + £${(playOk.chargesPence / 100).toFixed(2)} charges`
+        : `£${(playOk.fuelPence / 100).toFixed(2)} of ${fuelName}`
+      : money.band
+    : money.band;
   const hmrc = useMemo(() => {
     if (!estimate?.hmrc) return null;
     const allow = `HMRC would allow £${(estimate.hmrc.approvedPence / 100).toFixed(2)} (${estimate.hmrc.ytdMiles.toFixed(0)} miles this tax year).`;
@@ -962,6 +985,46 @@ export function EstimateView() {
     />
   );
 
+  const fuelSeed = useMemo(
+    () =>
+      seedFuelPlay({
+        distanceMeters: estimate?.distanceMeters ?? 0,
+        durationSeconds: estimate?.durationSeconds ?? 0,
+        consumptionDisplay: estimate?.consumption.display,
+        consumptionValue: estimate?.consumption.value,
+        consumptionUnit: estimate?.consumption.unit,
+        pricePence: estimate?.price?.pence,
+        priceUnit: estimate?.price?.unit,
+        fallbackMpg: Number(mpg) > 0 ? Number(mpg) : 40,
+        fallbackPricePence: 140,
+      }),
+    [
+      estimate?.distanceMeters,
+      estimate?.durationSeconds,
+      estimate?.consumption.display,
+      estimate?.consumption.value,
+      estimate?.consumption.unit,
+      estimate?.price?.pence,
+      estimate?.price?.unit,
+      mpg,
+    ],
+  );
+  const fuelSeedKey = `${fuelSeed.mpg}|${fuelSeed.price}|${fuelSeed.speed}|${fuelSeed.referenceMph}|${estimate?.distanceMeters ?? 0}`;
+  const showFuelPlay = !electricTrip && (wide || Boolean(estimate) || Boolean(error));
+  const playSlot = showFuelPlay ? (
+    <FuelPlay
+      routeMeters={estimate?.distanceMeters ?? 0}
+      seed={fuelSeed}
+      seedKey={fuelSeedKey}
+      chargesPence={estimate?.cost.chargesPence ?? 0}
+      propulsion={propulsion === "diesel" ? "diesel" : "petrol"}
+      {...(estimate?.price?.source === "hardcoded-fallback"
+        ? { priceNote: "Live pump prices are not connected, so this starts at 140 p per litre. Type the price on the sign." }
+        : {})}
+      onReport={onPlayReport}
+    />
+  ) : null;
+
   const shouldStagger = Boolean(estimate) && !revealed.current && !reduce;
   const showResultDetail = wide || resultOpen;
   const result: ReactNode =
@@ -982,11 +1045,12 @@ export function EstimateView() {
       >
         {loading ? <div className="absolute inset-0 z-10 bg-bg/40" aria-busy="true" /> : null}
         <motion.div variants={revealMotion}>
-          <PumpReadout value={pounds} />
+          <PumpReadout value={pounds} fractionDigits={playOk ? 2 : 0} />
         </motion.div>
         <motion.p variants={revealMotion} className="tabular-nums font-mono mt-2 text-text-muted">
           {band}
         </motion.p>
+        {playSlot}
         {estimate.warnings.map((w) => (
           <p key={w.message} className="mt-2 text-train">
             {w.message}
@@ -1197,16 +1261,18 @@ export function EstimateView() {
           <div className="absolute right-3 top-3 z-10 max-h-[calc(100%-1.5rem)] w-[min(20rem,calc(100%-1.5rem))] overflow-y-auto">
             {errorLine}
             {resultSlot}
+            {estimate ? null : playSlot}
           </div>
         ) : null}
       </div>
 
       {wide ? null : (
         <>
-          {error || loading || estimate ? (
+          {error || loading || estimate || showFuelPlay ? (
             <div className="max-h-[45%] shrink-0 overflow-y-auto border-t border-border bg-surface">
               {errorLine}
               {resultSlot}
+              {estimate ? null : playSlot}
             </div>
           ) : null}
           <div className="shrink-0 border-t border-border bg-surface px-3 pb-3 pt-2">

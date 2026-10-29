@@ -8,7 +8,7 @@ It does not need imported Timeline data, so it is available before onboarding fi
 
 | Path | What it does |
 |------|--------------|
-| `/journey-cost` | Estimate a trip. Type an address or tap Pin and then the map. Pick a car (saved, from the VCA catalogue, from a UK registration, or typed in). Shows the total, a low/high band, energy, charges, CO2, the cheapest forecourt along the route, and the HMRC mileage allowance for the tax year. |
+| `/journey-cost` | Estimate a trip. Type an address or tap Pin and then the map. Pick a car (saved, from the VCA catalogue, from a UK registration, or typed in). Shows the total, a low/high band, energy, charges, CO2, the cheapest forecourt along the route, and the HMRC mileage allowance for the tax year. After the route (or if you type the miles), pump price, mpg, and steady speed update the fuel figures immediately. |
 | `/journey-cost/garage` | Saved cars, EV tariffs, and fill-ups. Three brim-to-brim (or full-charge) fill-ups calibrate the car's real consumption, which then replaces the brochure figure. |
 | `/journey-cost/history` | Saved journeys (frozen snapshots), the tax-year mileage tally, and a CSV export. |
 | Settings > Journey cost | Home and work (one-tap trip ends), default car, calibration status, journey export. |
