@@ -36,6 +36,7 @@ import {
 } from '../../lib/map/mapStyle';
 import { dashClass, extendBounds, getArrowPoints, lineCoords, pointAlong, toLngLat } from '../../lib/map/mapGeometry';
 import { journeyColor, resolveCssColor, useJourneyColoring } from '../../lib/map/journeyColors';
+import { journeyPieces } from '../../lib/map/journeyPieces';
 import { activityPopupHtml, connectorPopupHtml, routeLinePopupHtml, visitPopupHtml } from '../../lib/map/mapPopups';
 import { pathLengthMeters } from '../../lib/map/mapMeasure';
 import { spiderfyOffsets } from '../../lib/map/mapSpiderfy';
@@ -562,7 +563,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       const shownActivities = sortedActivities
         .map((a, i) => ({ a, i }))
         .filter(({ a }) => !hiddenDayModes.includes(a.mode));
-      const actFeatures = (pointsMode ? [] : shownActivities).map(({ a, i }) => {
+      const walkColor = literalColor(journeyColor({ mode: 'walking' }, 0, 1, coloring));
+      const actFeatures = (pointsMode ? [] : shownActivities).flatMap(({ a, i }) => {
         const positions: [number, number][] = a.route_geometry?.length
           ? a.route_geometry.map((c) => [c[0], c[1]])
           : [
@@ -570,21 +572,25 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
               [a.end_lat, a.end_lon],
             ];
         const color = colorForActivity(a, i);
-        const solid = dashClass(a.mode) === 'solid';
-        return {
-          type: 'Feature' as const,
-          id: i,
-          properties: {
-            dash: dashClass(a.mode),
-            color,
-            start: a.start,
-            // Lines not backed by recorded GPS points are guesses: drawn fainter.
-            op: lineOpacity(a),
-            w: (solid ? 4 : 3) + (focusedStart === a.start ? 2 : 0),
-            html: activityPopupHtml(a, i, totalJourneys, color, unit),
-          },
-          geometry: { type: 'LineString' as const, coordinates: lineCoords(positions) },
-        };
+        const html = activityPopupHtml(a, i, totalJourneys, color, unit);
+        const focusWidth = focusedStart === a.start ? 2 : 0;
+        // Walks to and from the platform draw as walking; long gaps in the GPS as a faint dash.
+        return journeyPieces(positions, a.gps_fixes, a.mode).map((piece) => {
+          const dash = piece.kind === 'gap' ? 'gap' : piece.kind === 'walk' ? 'walk' : dashClass(a.mode);
+          return {
+            type: 'Feature' as const,
+            properties: {
+              dash,
+              color: piece.kind === 'walk' && coloring === 'mode' ? walkColor : color,
+              start: a.start,
+              // Lines not backed by recorded GPS points are guesses: drawn fainter.
+              op: lineOpacity(a) * (piece.kind === 'gap' ? 0.6 : 1),
+              w: (dash === 'solid' ? 4 : 3) + focusWidth,
+              html,
+            },
+            geometry: { type: 'LineString' as const, coordinates: lineCoords(piece.coords) },
+          };
+        });
       });
       upsertSource(map, 'loc-activities', { type: 'FeatureCollection', features: actFeatures });
       const dashLayers: { id: string; dash: string; dasharray?: number[] }[] = [
@@ -595,6 +601,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         { id: 'loc-act-rail', dash: 'rail', dasharray: [4, 2, 1, 2] },
         { id: 'loc-act-fly', dash: 'fly', dasharray: [1.5, 2.5] },
         { id: 'loc-act-unknown', dash: 'unknown', dasharray: [1, 1] },
+        { id: 'loc-act-gap', dash: 'gap', dasharray: [0.6, 2.4] },
       ];
       for (const spec of dashLayers) {
         ensureLayer(map, {
@@ -1057,7 +1064,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         const start = f?.properties?.start as string | undefined;
         if (start) focusJourneyRef.current(start);
       };
-      const journeyLayers = ['loc-act-solid', 'loc-act-walk', 'loc-act-cycle', 'loc-act-bus', 'loc-act-rail', 'loc-act-fly', 'loc-act-unknown'];
+      const journeyLayers = ['loc-act-solid', 'loc-act-walk', 'loc-act-cycle', 'loc-act-bus', 'loc-act-rail', 'loc-act-fly', 'loc-act-unknown', 'loc-act-gap'];
       map.on('click', (e) => {
         if (measureRef.current) return;
         const present = journeyLayers.filter((id) => map.getLayer(id));
@@ -1076,6 +1083,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         'loc-act-rail',
         'loc-act-fly',
         'loc-act-unknown',
+        'loc-act-gap',
         'loc-period',
         'loc-period-guess',
         'loc-fixes',
