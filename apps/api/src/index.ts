@@ -1716,6 +1716,9 @@ app.post("/api/billing/checkout", async (c) => {
     customer: existing?.stripeCustomerId || undefined,
     customer_email: existing?.stripeCustomerId ? undefined : user.email,
     line_items: [{ price: priceId, quantity: 1 }],
+    custom_text: {
+      submit: { message: `Renews automatically until cancelled. Cancel in Settings > Billing > Manage billing. UK/EU statutory cancellation rights apply; immediate access does not waive them. Terms: ${c.env.BETTER_AUTH_URL}/terms Privacy: ${c.env.BETTER_AUTH_URL}/privacy Cookies: ${c.env.BETTER_AUTH_URL}/cookies` },
+    },
     success_url: `${c.env.BETTER_AUTH_URL}/settings?billing=success`,
     cancel_url: `${c.env.BETTER_AUTH_URL}/settings?billing=cancel`,
     client_reference_id: tenant,

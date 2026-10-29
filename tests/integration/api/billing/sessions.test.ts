@@ -123,6 +123,7 @@ describe("POST /api/billing/checkout", () => {
         mode: "subscription",
         customer_email: "a@example.com",
         line_items: [{ price: "price_yearly", quantity: 1 }],
+        custom_text: { submit: { message: expect.stringContaining('immediate access does not waive them') } },
         client_reference_id: "user-a",
         metadata: { tenant: "user-a" },
         subscription_data: { metadata: { tenant: "user-a" } },

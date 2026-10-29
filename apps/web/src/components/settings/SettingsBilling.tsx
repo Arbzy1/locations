@@ -1,3 +1,4 @@
+import { LegalFooter } from '../legal/LegalFooter';
 import { useUnits } from "../../lib/units";
 import { Button } from "../ui/button";
 import { Card, CardTitle } from "../ui/card";
@@ -90,7 +91,9 @@ export default function SettingsBilling({ onError }: Props) {
       <Card>
         <CardTitle className="text-base">Actions</CardTitle>
         <p className="mt-1 mb-4 text-sm text-text-muted">Checkout opens Stripe in this window.</p>
-        <div className="flex flex-wrap gap-2">
+        <p className="mb-3 text-sm text-text-muted">Plans renew automatically monthly or yearly until cancelled. Stripe shows the total, currency and taxes before payment. UK/EU consumers may cancel within 14 days where applicable; starting access does not waive this right. Cancel renewal in Manage billing. Read the Terms for refunds and the support cancellation route.</p>
+        <LegalFooter />
+        <div className="mt-3 flex flex-wrap gap-2">
           <Button type="button" title="Subscribe monthly" onClick={() => void startCheckout("monthly")}>
             Subscribe monthly
           </Button>

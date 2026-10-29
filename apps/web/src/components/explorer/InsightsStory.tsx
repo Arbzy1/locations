@@ -1,3 +1,4 @@
+import { preferenceStorage } from '../../lib/preference-storage';
 import { useMemo, useState } from 'react';
 import {
   Area,
@@ -419,7 +420,7 @@ function WalkGoalCard({
           title="Reset walk goal on this device"
           onClick={() => {
             setGoal(null);
-            localStorage.removeItem(WALK_GOAL_KEY);
+            preferenceStorage.removeItem(WALK_GOAL_KEY);
             setTargetInput('20');
           }}
         >

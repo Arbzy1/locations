@@ -1,3 +1,4 @@
+import { LegalFooter } from '../legal/LegalFooter';
 import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { Button } from "../ui/button";
@@ -188,6 +189,7 @@ export default function SettingsPrivacy({ onMessage, onError }: Props) {
           </div>
         </DialogContent>
       </Dialog>
+      <LegalFooter />
     </div>
   );
 }

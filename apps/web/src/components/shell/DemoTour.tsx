@@ -1,3 +1,4 @@
+import { preferenceStorage } from '../../lib/preference-storage';
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
@@ -44,7 +45,7 @@ export default function DemoTour() {
   useEffect(() => {
     if (!enabled) return;
     try {
-      if (window.localStorage.getItem(STORAGE_KEY) === 'done') return;
+      if (preferenceStorage.getItem(STORAGE_KEY) === 'done') return;
     } catch {
       /* ignore quota */
     }
@@ -59,7 +60,7 @@ export default function DemoTour() {
 
   const finish = () => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, 'done');
+      preferenceStorage.setItem(STORAGE_KEY, 'done');
     } catch {
       /* ignore quota */
     }

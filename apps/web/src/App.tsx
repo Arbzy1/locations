@@ -1,3 +1,4 @@
+import StorageChoices from './components/legal/StorageChoices';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
@@ -31,6 +32,14 @@ const ChangelogPage = lazy(() => import('./components/marketing/ChangelogPage'))
 const PrivacyRoute = lazy(() => import('./components/legal/LegalRoutes').then((m) => ({ default: m.PrivacyRoute })));
 const TermsRoute = lazy(() => import('./components/legal/LegalRoutes').then((m) => ({ default: m.TermsRoute })));
 const CookiesRoute = lazy(() => import('./components/legal/LegalRoutes').then((m) => ({ default: m.CookiesRoute })));
+
+const DpaRoute = lazy(() => import('./components/legal/LegalRoutes').then((m) => ({ default: m.DpaRoute })));
+
+const AccessibilityRoute = lazy(() => import('./components/legal/LegalRoutes').then((m) => ({ default: m.AccessibilityRoute })));
+
+const ImpressumRoute = lazy(() => import('./components/legal/LegalRoutes').then((m) => ({ default: m.ImpressumRoute })));
+
+const SubprocessorsRoute = lazy(() => import('./components/legal/LegalRoutes').then((m) => ({ default: m.SubprocessorsRoute })));
 
 function bootFallback() {
   return (
@@ -94,8 +103,13 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Toaster />
+        <StorageChoices />
         <Suspense fallback={bootFallback()}>
           <Routes>
+            <Route path="/dpa" element={<DpaRoute />} />
+            <Route path="/accessibility" element={<AccessibilityRoute />} />
+            <Route path="/impressum" element={<ImpressumRoute />} />
+            <Route path="/subprocessors" element={<SubprocessorsRoute />} />
             <Route path="/privacy" element={<PrivacyRoute />} />
             <Route path="/terms" element={<TermsRoute />} />
             <Route path="/cookies" element={<CookiesRoute />} />

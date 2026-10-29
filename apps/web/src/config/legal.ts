@@ -1,0 +1,50 @@
+/** Public disclosures only. Replace every TODO before accepting paying customers. */
+export const legalConfig = {
+  updated: '29 October 2026',
+  operator: {
+    name: 'TODO: full legal operator name',
+    address: 'TODO: physical service address',
+    email: 'TODO: monitored support and privacy email',
+    company: 'TODO: company number and register, or confirm sole trader status',
+    vat: 'TODO: VAT number or confirm not VAT registered',
+    ico: 'TODO: ICO registration number or applicable exemption',
+    representative: 'TODO: assess EU/UK representative and DPO requirements',
+  },
+  minimumAge: 18,
+  vendors: [
+    { name: 'Cloudflare', purpose: 'Hosting, security, R2 imports and exports; request IP and device metadata', region: 'Global edge network; storage jurisdiction must be confirmed', safeguard: 'Verify executed DPA, EU SCCs and UK Addendum for the account' },
+    { name: 'Neon', purpose: 'Account, session, private Timeline and Journey cost database', region: 'Deployment region must be confirmed', safeguard: 'Verify executed DPA, region, subprocessors and transfer mechanism' },
+    { name: 'Stripe', purpose: 'Payment details, customer email, tenant and subscription identifiers', region: 'International, including US', safeguard: 'Processor / independent-controller roles vary; verify Stripe terms and transfer safeguards' },
+    { name: 'Resend', purpose: 'Email address and transactional authentication/billing messages when configured', region: 'International, including US', safeguard: 'Verify executed DPA and EU SCCs / UK Addendum' },
+    { name: 'Google', purpose: 'Optional OAuth identity and tokens; Journey cost Places/Routes/Roads queries', region: 'International, including US', safeguard: 'Verify applicable Google account and Maps terms; do not assume processor status' },
+    { name: 'Configured map, routing and geocode providers', purpose: 'Tile viewport and IP; routing coordinates and address queries. Defaults include CARTO, OSRM and Nominatim', region: 'Depends on configured hosts', safeguard: 'TODO: name deployed vendors, locations, retention and contractual safeguards before launch' },
+    { name: 'DVLA', purpose: 'UK vehicle registration lookup when requested', region: 'UK', safeguard: 'Independent public authority; Vehicle Enquiry Service terms' },
+    { name: 'Open-Meteo', purpose: 'Journey origin coordinates for temperature and EV estimates', region: 'Provider infrastructure must be confirmed', safeguard: 'Verify service terms and applicable transfer assessment' },
+  ],
+  data: [
+    ['Account identity and provider IDs', 'Account management', '6(1)(b): contract', 'Account deletion; legal-claim exceptions'],
+    ['Password hashes, sessions and OAuth tokens', 'Authentication and security', '6(1)(b): contract; 6(1)(f): security interests', 'Token expiry/revocation for validity; account deletion for stored records'],
+    ['Timeline, GPS, visits, activities and user annotations', 'Private maps, history and insights', '6(1)(b): contract', 'Source/history/account deletion or selected monthly retention'],
+    ['Vehicles, encrypted plates, places, tariffs and journeys', 'Journey cost and garage', '6(1)(b): contract', 'Item or account deletion'],
+    ['Jobs, uploads, export objects and derived caches', 'Import, export and reliability', '6(1)(b): contract; 6(1)(f): reliability', 'Processing cleanup, download expiry or account deletion; see limitations below'],
+    ['Stripe IDs, status, webhook IDs and financial records', 'Payment and entitlements', '6(1)(b): contract; 6(1)(c): applicable accounting duties', 'Account deletion request; statutory/provider retention may continue'],
+    ['Browser preferences and locally saved journeys', 'Remember requested preferences', '6(1)(a): optional persistence consent', 'Withdrawal, overwrite or browser data clearing'],
+  ],
+  storage: [
+    ['better-auth.session_token', 'Cookie', 'Authentication (essential)', '7 days; renewed by authentication library, or browser session if remember-me is disabled'],
+    ['better-auth.dont_remember', 'Cookie', 'Session-only sign-in choice (essential)', 'Browser session'],
+    ['better-auth.state / better-auth.oauth_state', 'Cookie', 'Optional Google OAuth security (essential)', 'state: 5 minutes; oauth_state: 10 minutes; cleared on callback'],
+    ['locations-storage-consent', 'localStorage', 'Remember storage choice (essential)', 'Until changed or browser data cleared'],
+    ['locations-theme / locations-mood', 'localStorage', 'Optional saved appearance', 'Until withdrawn or browser data cleared'],
+    ['locations-map-mode / locations-journey-colour', 'localStorage', 'Optional saved map display', 'Until withdrawn or browser data cleared'],
+    ['locations-nav-expanded / locations-recent-places / locations-filter-presets', 'localStorage', 'Optional navigation and saved filters; recent places can identify locations', 'Until withdrawn or browser data cleared'],
+    ['locations-personality-dismissed / locations-walk-goal / locations-demo-tour', 'localStorage', 'Optional feature choices and tour dismissal', 'Until withdrawn or browser data cleared'],
+    ['locations-journey-cost:last-estimate', 'localStorage', 'Optional last estimate, including journey information', 'Until overwritten, withdrawn or browser data cleared'],
+    ['debugMap', 'localStorage', 'Developer diagnostic flag, manually set only', 'Until manually removed or browser data cleared'],
+  ],
+} as const;
+export const legalLinks = [
+  ['/privacy', 'Privacy Policy'], ['/terms', 'Terms of Service'], ['/cookies', 'Cookies'],
+  ['/subprocessors', 'Service providers'], ['/dpa', 'Data processing'],
+  ['/accessibility', 'Accessibility'], ['/impressum', 'Operator details'],
+] as const;

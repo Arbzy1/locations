@@ -1,3 +1,4 @@
+import { preferenceStorage } from './preference-storage';
 import {
   createContext,
   useCallback,
@@ -35,7 +36,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function readStoredTheme(): Theme | null {
   try {
-    const stored = localStorage.getItem(THEME_KEY);
+    const stored = preferenceStorage.getItem(THEME_KEY);
     if (stored === 'dark' || stored === 'light') return stored;
   } catch {
     /* ignore */
@@ -45,7 +46,7 @@ function readStoredTheme(): Theme | null {
 
 function readStoredMood(): MoodId {
   try {
-    return resolveMoodId(localStorage.getItem(MOOD_KEY));
+    return resolveMoodId(preferenceStorage.getItem(MOOD_KEY));
   } catch {
     return DEFAULT_MOOD_ID;
   }
@@ -113,7 +114,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setTheme = useCallback((next: Theme) => {
     setHasExplicitChoice(true);
     try {
-      localStorage.setItem(THEME_KEY, next);
+      preferenceStorage.setItem(THEME_KEY, next);
     } catch {
       /* ignore */
     }
@@ -127,7 +128,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setMood = useCallback((next: MoodId) => {
     const id = resolveMoodId(next);
     try {
-      localStorage.setItem(MOOD_KEY, id);
+      preferenceStorage.setItem(MOOD_KEY, id);
     } catch {
       /* ignore */
     }

@@ -51,3 +51,5 @@ Index of product, architecture, security, legal, and engineering docs. Agent con
 - [changelog.md](changelog.md)
 
 The previous `docs/OWN_DATA.md` and `docs/SECURITY.md` content now lives under product/takeout-import and security/.
+
+Legal implementation findings and operator launch actions: [Legal audit](legal/audit.md). Public policies use the sources under `docs/legal/` and the public inventory in `apps/web/src/config/legal.ts`.

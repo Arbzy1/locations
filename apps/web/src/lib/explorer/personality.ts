@@ -1,8 +1,9 @@
+import { preferenceStorage } from '../preference-storage';
 export const PERSONALITY_DISMISS_KEY = 'locations-personality-dismissed';
 
 export function loadDismissedPersonality(): string[] {
   try {
-    const raw = localStorage.getItem(PERSONALITY_DISMISS_KEY);
+    const raw = preferenceStorage.getItem(PERSONALITY_DISMISS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
@@ -13,7 +14,7 @@ export function loadDismissedPersonality(): string[] {
 }
 
 export function saveDismissedPersonality(ids: string[]): void {
-  localStorage.setItem(PERSONALITY_DISMISS_KEY, JSON.stringify([...new Set(ids)]));
+  preferenceStorage.setItem(PERSONALITY_DISMISS_KEY, JSON.stringify([...new Set(ids)]));
 }
 
 export function visiblePersonality<T extends { id: string }>(

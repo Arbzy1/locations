@@ -1,36 +1,33 @@
 # Privacy Policy
 
-Last updated: 15 August 2026
+## Who is responsible
+Locations is a private location-history explorer and Journey cost calculator. The operator named below is controller for accounts, security, billing and operating this consumer service. A business may be controller for uploaded third-party data only under an agreed Data Processing Agreement. Contact the operator using the details below. Information marked TODO is not yet supplied by the operator.
 
-Locations (“we”) provides a hosted map journal for **your** Google Timeline export.
+## Personal data, purposes, lawful bases and retention
+Account identity: name, email, verification status, profile image, account role and provider IDs let us create and manage your account. Basis: Article 6(1)(b), contract. Retention: until account deletion, except records needed for a specific legal claim or legal obligation.
 
-## What we collect
+Authentication: password hashes, session tokens, IP address, user agent, OAuth access/refresh/ID tokens and token expiry enable sign-in and account security. Basis: contract for authentication; Article 6(1)(f), legitimate interests for abuse prevention. We balance account protection against privacy by restricting staff access and avoiding location payloads in logs. Sessions normally expire after seven days and may renew; expiration is not a promise that database records are immediately purged. Account deletion removes associated auth records. OTP and magic-link validity is five minutes.
 
-- Account: email, name, password hash, session metadata
-- Timeline: visits, activities, inferred place names, travel modes, source labels
-- Billing: Stripe customer and subscription ids (card data stays with Stripe)
-- Uploads: Takeout JSON/zip stored briefly on R2 then deleted after parse
-- Export packs: ZIP of your Timeline stored briefly on R2 then deleted after download
-- Journey cost: cars you save (make, model, efficiency, an encrypted registration plate if you enter one), fill-ups, tariffs, home and work places, and journeys you choose to save. Trip ends are sent to the routing and address search provider to price a trip. A registration plate is sent to the DVLA only when you ask for a lookup.
+Private history: uploaded Google Timeline files, coordinates, timestamps, paths, visits, activities, inferred modes, place names, source labels, day statistics, labels, named trips, life chapters and manual overrides provide the requested maps and insights. Basis: contract. Retention: until source/history or account deletion, or the monthly retention job where you select a history limit. Inferences can be wrong. Location may reveal sensitive matters; avoid importing unnecessary third-party or sensitive data. Business controllers must identify any required Article 9 condition themselves.
 
-We do not sell location data. We do not put coordinates, place names, day routes, or Takeout payloads in email. Mail is transactional only (verify, reset, magic link, OTP, import status, billing status, account deleted). There is no marketing list. See the product [email catalog](../product/email.md).
+Journey cost: saved vehicles, encrypted registration plates, calibrations, fill-ups, energy tariffs, preferences, saved places and journey estimates provide estimates and your garage. Basis: contract. Retention: until you remove the item or delete the account. Registration lookup sends the entered plate to DVLA; selected routing, address and weather services receive the queries necessary for your request.
 
-## Legal basis (UK GDPR)
+Operational records: source/import/export job IDs, progress, errors, analytics caches and settings maintain the service. Basis: contract, and legitimate interests for reliability. Retention: until their deletion with the source/account or replacement of derived caches. Raw uploads are deleted after processing succeeds or fails; failed cleanup and abandoned uploads depend on deployment lifecycle configuration. Export objects and download links are temporary; download does not itself guarantee immediate object deletion. Request deletion if cleanup fails.
 
-Contract (providing the service) and legitimate interests (security, fraud). Precise location is provided by you as the export owner.
+Billing: Stripe customer/subscription identifiers, status, renewal periods and webhook event IDs prevent duplicate billing and determine access. Basis: contract and Article 6(1)(c) where tax/accounting laws require retention. Stripe receives payment details directly. Account deletion requests removal of the Stripe customer; processor/legal financial record retention can continue. The operator must confirm its statutory accounting schedule and deployed backup/log expiry before launch, rather than promise an unverified number.
 
-## Retention
+Browser preferences: display, navigation, recent places, walking goals and last estimates are described in Cookies. Optional persistence uses Article 6(1)(a), consent. Withdraw using Storage choices; preferences then work in memory for the open page. Downloaded files remain under your control.
 
-Active account: until you delete it. Account delete runs inside the tenant GUC (FORCE RLS) so Timeline rows, labels, jobs, and settings are actually erased, then auth rows and verification tokens. Import files: deleted after parse or via R2 lifecycle (prefix delete pages until empty). Export packs: deleted after download. Backups: limited TTL on Neon.
+## Sources, recipients and transfers
+We receive data from you, Google when you choose OAuth, payment status from Stripe and responses from mapping/data services. There is no public user feed. Private uploads are not published; demo journeys are shared examples. Providers may receive request IP/device information and map viewport or routing coordinates. Do not assume every mapping request is anonymous. Service providers lists the actual integrations and unresolved deployment details. International access may occur. The operator must verify vendor agreements, hosting regions, adequacy decisions or EU SCCs with the UK Addendum/IDTA as appropriate, and provide copies of applicable safeguards on request. Certification or UK/EU-only hosting is not assumed.
 
-## Your rights
+## Your choices and rights
+Settings provides account correction, session management, exports, retention settings and account deletion. To request access, correction, erasure, restriction, portability, objection to legitimate-interest processing, or withdrawal of consent, contact the operator below. Withdrawing consent does not affect prior lawful processing. We verify identity proportionately and normally respond within one month under UK/EU GDPR, explaining any lawful extension. You may complain to the UK ICO at https://ico.org.uk/make-a-complaint/ or your local EU supervisory authority without contacting us first.
 
-Access, rectification, erasure, a JSON summary (`GET /api/account/export`), a GDPR pack ZIP from Settings (visits and activities; download only, never emailed), objection. Email the privacy contact on the site.
+Where applicable, California and Texas residents can request to know/access, correct, delete and obtain portable data; use an authorized agent where permitted, appeal a refusal, and exercise rights without discrimination. We do not sell personal data, share it for cross-context behavioural advertising, or use it for targeted advertising. We do not use precise location for advertising or unrelated profiling, and do not require an opt-out to stop a practice we do not conduct. We honour applicable universal opt-out signals for any future covered use. Contact us for an appeal; if unresolved, complain to your state attorney general. Applicable statutory timelines and exceptions apply, normally 45 days for state requests.
 
-## Children
+## Children and automated processing
+Accounts are for adults aged 18 or over. Do not upload children's location histories. If we learn an account belongs to a child or contains unauthorized child data, we restrict processing, investigate and delete it promptly unless preservation is legally required. Contact the operator to report this without sending location history by email. The service has no runtime generative AI or chatbot and makes no solely automated decisions with legal or similarly significant effects. Mode and place inferences and cost estimates are computational aids that you can inspect and correct.
 
-Not for under 16.
-
-## Subprocessors
-
-See [subprocessors](../security/subprocessors.md).
+## Security and updates
+Tenant filters and Postgres FORCE RLS isolate private records, with session-based authorization and restricted operator roles. Transport security and provider encryption must be verified for each deployment; registration plates are encrypted in the application. No system is guaranteed secure. Backups may temporarily retain deleted records until the configured provider expiry; the operator must confirm that expiry. Transactional email must not include routes, coordinates or place names. Policy changes are dated and material changes will be communicated before new processing begins.

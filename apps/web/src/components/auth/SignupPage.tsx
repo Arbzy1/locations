@@ -1,3 +1,4 @@
+import { legalConfig } from '../../config/legal';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { authClient, signUp, continueWithGoogle } from '../../lib/auth';
@@ -120,6 +121,7 @@ export default function SignupPage() {
         </div>
       ) : (
         <>
+          <p className="mb-4 text-sm text-text-muted">By creating an account, including with Google, you confirm you are at least {legalConfig.minimumAge} and agree to the Terms of Service linked below. The Privacy Policy explains how your data is used.</p>
           {googleAuth ? (
             <>
               <GoogleButton disabled={loading || googleLoading} onClick={() => void tryGoogle()} />

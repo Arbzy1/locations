@@ -1,3 +1,4 @@
+import { preferenceStorage } from '../preference-storage';
 import { useSyncExternalStore } from 'react';
 import { getJourneyColor } from './mapPopups';
 
@@ -43,7 +44,7 @@ let memoryColoring: JourneyColoring = 'mode';
 
 function readColoring(): JourneyColoring {
   try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
+    const stored = preferenceStorage.getItem(STORAGE_KEY);
     return stored === 'journey' || stored === 'mode' ? stored : memoryColoring;
   } catch {
     return memoryColoring;
@@ -62,7 +63,7 @@ function subscribe(onChange: () => void) {
 export function setJourneyColoring(next: JourneyColoring) {
   memoryColoring = next;
   try {
-    window.localStorage.setItem(STORAGE_KEY, next);
+    preferenceStorage.setItem(STORAGE_KEY, next);
   } catch {
     // Storage blocked: memoryColoring holds it.
   }

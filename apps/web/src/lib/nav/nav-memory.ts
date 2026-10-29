@@ -1,3 +1,4 @@
+import { preferenceStorage } from '../preference-storage';
 export const RECENT_PLACES_KEY = "locations-recent-places";
 export const FILTER_PRESETS_KEY = "locations-filter-presets";
 export const NAV_EXPANDED_KEY = "locations-nav-expanded";
@@ -10,7 +11,7 @@ const MAX_PRESETS = 8;
 
 function readJson<T>(key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = preferenceStorage.getItem(key);
     if (!raw) return fallback;
     return JSON.parse(raw) as T;
   } catch {
@@ -20,7 +21,7 @@ function readJson<T>(key: string, fallback: T): T {
 
 export function loadNavExpanded(): boolean {
   try {
-    return localStorage.getItem(NAV_EXPANDED_KEY) === "1";
+    return preferenceStorage.getItem(NAV_EXPANDED_KEY) === "1";
   } catch {
     return false;
   }
@@ -28,7 +29,7 @@ export function loadNavExpanded(): boolean {
 
 export function saveNavExpanded(expanded: boolean): void {
   try {
-    localStorage.setItem(NAV_EXPANDED_KEY, expanded ? "1" : "0");
+    preferenceStorage.setItem(NAV_EXPANDED_KEY, expanded ? "1" : "0");
   } catch {
     /* ignore */
   }
@@ -53,7 +54,7 @@ export function rememberRecentPlace(cluster: string, label: string): void {
     { cluster: key, label: (label || key).slice(0, 200), at: Date.now() },
     ...loadRecentPlaces().filter((r) => r.cluster !== key),
   ].slice(0, MAX_RECENTS);
-  localStorage.setItem(RECENT_PLACES_KEY, JSON.stringify(next));
+  preferenceStorage.setItem(RECENT_PLACES_KEY, JSON.stringify(next));
 }
 
 export function loadFilterPresets(): FilterPreset[] {
@@ -75,12 +76,12 @@ export function saveFilterPreset(name: string, path: string): FilterPreset[] {
     { name: trimmed, path },
     ...loadFilterPresets().filter((p) => p.name !== trimmed),
   ].slice(0, MAX_PRESETS);
-  localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(next));
+  preferenceStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(next));
   return next;
 }
 
 export function deleteFilterPreset(name: string): FilterPreset[] {
   const next = loadFilterPresets().filter((p) => p.name !== name);
-  localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(next));
+  preferenceStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(next));
   return next;
 }
