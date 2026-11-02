@@ -1,0 +1,16 @@
+name: Idea or feature request
+description: Suggest something new or better
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: The problem it solves or what you would use it for.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Sketches, examples from other apps, or alternatives you thought about. Please leave out real locations.
