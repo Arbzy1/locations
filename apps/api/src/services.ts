@@ -1106,7 +1106,7 @@ export async function enrichHeatmapSettlements(
     }
   }
 
-  // Unnamed hotspots borrow the closest named one: "Near Partridge Road".
+  // Unnamed hotspots borrow the closest named one: "Near Mill Lane".
   const named = points.filter((p) => p.name || p.street || p.settlement);
   const cellOf = (lat: number, lon: number) => `${Math.floor(lat * 50)},${Math.floor(lon * 30)}`;
   const grid = new Map<string, HeatmapPoint[]>();

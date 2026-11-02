@@ -115,20 +115,20 @@ describe('placeLabelLookup', () => {
 describe("hotspotSubtitle", () => {
   it("shows the street under Home and the town, without repeating the title", async () => {
     const { hotspotSubtitle } = await import("@locations/web/lib/explorer/hotspots");
-    expect(hotspotSubtitle({ label: "Home", street: "Silvergate", settlement: "Epsom and Ewell" })).toBe(
-      "Silvergate · Epsom and Ewell",
+    expect(hotspotSubtitle({ label: "Home", street: "Orchard Close", settlement: "Townsville" })).toBe(
+      "Orchard Close · Townsville",
     );
-    expect(hotspotSubtitle({ label: "Partridge Road", street: "Partridge Road", settlement: "Epsom" })).toBe("Epsom");
-    expect(hotspotSubtitle({ label: "Near Epsom", street: null, settlement: "Epsom" })).toBe("");
+    expect(hotspotSubtitle({ label: "Mill Lane", street: "Mill Lane", settlement: "Townsville" })).toBe("Townsville");
+    expect(hotspotSubtitle({ label: "Near Townsville", street: null, settlement: "Townsville" })).toBe("");
   });
 
   it("matches saved names on the hotspot's own place first", async () => {
     const { findPlaceLabel } = await import("@locations/web/lib/explorer/hotspots");
     const labels = [
       { placeKey: "51.5°N 0.5°W", label: "Old grid name" },
-      { placeKey: "c:51.330,-0.260", label: "Gran's" },
+      { placeKey: "c:52.000,-1.000", label: "Gran's house" },
     ] as never;
-    const hit = findPlaceLabel({ placeKey: "c:51.330,-0.260", cluster: "51.5°N 0.5°W", lat: 51.33, lon: -0.26, count: 1 }, labels) as { label: string };
-    expect(hit.label).toBe("Gran's");
+    const hit = findPlaceLabel({ placeKey: "c:52.000,-1.000", cluster: "51.5°N 0.5°W", lat: 52.0, lon: -1.0, count: 1 }, labels) as { label: string };
+    expect(hit.label).toBe("Gran's house");
   });
 });
