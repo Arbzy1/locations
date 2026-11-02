@@ -174,6 +174,10 @@ export interface HeatmapPoint {
   street?: string | null;
   totalDurationMinutes?: number;
   uniqueDays?: number;
+  /** Totals for the whole place (every cell it spans), when the cell has a placeKey. */
+  place?: { count: number; totalDurationMinutes: number; uniqueDays: number } | null;
+  /** How many heatmap cells were merged into this row (Hotspots list only). */
+  cells?: number;
   topTypes?: string[];
   /** Heat intensity; defaults to `count` when omitted */
   weight?: number;

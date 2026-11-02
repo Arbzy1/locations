@@ -34,6 +34,7 @@ import {
   findPlaceLabel,
   isPlaceColorToken,
   hotspotSubtitle,
+  mergeByPlace,
   placeMetric,
   sourceTokenVar,
   toggleChip,
@@ -361,6 +362,9 @@ export default function HotspotsView() {
     return near ? (near.settlement && !near.label.includes(near.settlement) ? `${near.label} (${near.settlement})` : near.label) : `Near ${spot.lat.toFixed(4)}, ${spot.lon.toFixed(4)}`;
   }, [spot, allAreas]);
 
+  // The ranked list shows each real place once; the heatmap below still uses every cell.
+  const placeAreas = useMemo(() => mergeByPlace(allAreas), [allAreas]);
+
   const typeOptions = useMemo(() => uniqueTopTypes(allAreas), [allAreas]);
   const tagOptions = useMemo(() => uniqueLabelTags(labelRows), [labelRows]);
   const hiddenLabels = useMemo(() => labelRows.filter((l) => l.hidden), [labelRows]);
@@ -377,9 +381,21 @@ export default function HotspotsView() {
     [allAreas, selectedTypes, selectedTags, favouritesOnly, rankBy, labelRows],
   );
 
+  const listAreas = useMemo(
+    () =>
+      filterAndRankPlaces(placeAreas, {
+        types: selectedTypes,
+        tags: selectedTags,
+        favouritesOnly,
+        rankBy,
+        labels: labelRows,
+      }),
+    [placeAreas, selectedTypes, selectedTags, favouritesOnly, rankBy, labelRows],
+  );
+
   // Memoised so hotspotLabels (and the map overlays fed by it) keep a stable identity
   // across unrelated re-renders.
-  const topAreas = useMemo(() => filteredAreas.slice(0, 20), [filteredAreas]);
+  const topAreas = useMemo(() => listAreas.slice(0, 20), [listAreas]);
   const maxMetric = topAreas.reduce((max, a) => Math.max(max, placeMetric(a, rankBy)), 1);
 
   const heatForMap: HeatmapPoint[] = useMemo(
@@ -473,7 +489,7 @@ export default function HotspotsView() {
       </h2>
       <p className="mt-1 text-sm text-text-muted">
         {heatmapPoints
-          ? `${filteredAreas.length} of ${heatmapPoints.length} locations`
+          ? `${listAreas.length} of ${placeAreas.length} places`
           : isError
             ? 'Heatmap did not load.'
             : 'Loading...'}
