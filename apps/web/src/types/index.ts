@@ -168,6 +168,10 @@ export interface HeatmapPoint {
   cluster?: string;
   /** Town / city / village guessed from coordinates (Nominatim) */
   settlement?: string | null;
+  /** The cell's most common real place: your names, hiding and tags key on it. */
+  placeKey?: string | null;
+  /** Street or building at the spot, when known (shown under Home / Work and your names). */
+  street?: string | null;
   totalDurationMinutes?: number;
   uniqueDays?: number;
   topTypes?: string[];
