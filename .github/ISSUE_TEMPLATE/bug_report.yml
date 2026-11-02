@@ -1,0 +1,33 @@
+name: Bug report
+description: Something is broken or looks wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please do **not** paste your Timeline data, coordinates, addresses or screenshots that show where you live or travel. Describe the problem, or reproduce it with the demo account.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Page
+      description: For example Day View, Hotspots, Routes, Insights, Journey cost, Settings.
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      options:
+        - Desktop browser
+        - Phone
+        - Tablet
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Browser, theme (dark or light), error messages.

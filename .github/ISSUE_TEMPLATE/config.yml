@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Arbzy1/locations/blob/master/docs/SECURITY.md
+    about: Please report security issues privately, not as a public issue.
+  - name: Try the demo
+    url: https://locations.aden.website
+    about: Explore the app with sample data.
