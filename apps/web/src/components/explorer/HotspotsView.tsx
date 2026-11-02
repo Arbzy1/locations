@@ -33,6 +33,7 @@ import {
   filterAndRankPlaces,
   findPlaceLabel,
   isPlaceColorToken,
+  hotspotSubtitle,
   placeMetric,
   sourceTokenVar,
   toggleChip,
@@ -96,7 +97,8 @@ function AreaDetails({
   const [label, setLabel] = useState(area.label);
   const [tagDraft, setTagDraft] = useState('');
   const [saving, setSaving] = useState(false);
-  const placeKey = area.cluster || `${area.lat.toFixed(5)},${area.lon.toFixed(5)}`;
+  // The hotspot's own place, not its 0.5 degree grid square (which covers a whole town).
+  const placeKey = area.placeKey || `${area.lat.toFixed(5)},${area.lon.toFixed(5)}`;
   const favourite = Boolean(meta?.favourite);
   const tags = meta?.tags ?? [];
   const color = meta?.color ?? null;
@@ -119,7 +121,7 @@ function AreaDetails({
     <div className="rounded-lg border border-border bg-bg/50 p-3">
       <div className="mb-2 text-sm font-semibold leading-snug text-text">{area.label}</div>
       <Button variant="outline" size="sm" asChild title="Open place page" className="mb-2">
-        <Link to={placePath(area.cluster)}>Place page</Link>
+        <Link to={placePath(area.placeKey || area.cluster)}>Place page</Link>
       </Button>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
         <dt className="text-text-muted">Visits</dt>
@@ -128,6 +130,12 @@ function AreaDetails({
         <dd className="text-right font-mono">{area.uniqueDays}</dd>
         <dt className="text-text-muted">Time there</dt>
         <dd className="text-right font-mono">{formatDuration(area.totalDurationMinutes)}</dd>
+        {area.street && area.street !== area.label && (
+          <>
+            <dt className="text-text-muted">Street</dt>
+            <dd className="text-right">{area.street}</dd>
+          </>
+        )}
         {area.settlement && (
           <>
             <dt className="text-text-muted">Area</dt>
@@ -685,12 +693,9 @@ export default function HotspotsView() {
                       )}
                       <span className="truncate">{area.label}</span>
                     </div>
-                    {area.settlement &&
-                      !area.label.toLowerCase().includes(area.settlement.toLowerCase()) && (
-                        <div className="mb-1 truncate text-[11px] text-text-muted">
-                          {area.settlement}
-                        </div>
-                      )}
+                    {hotspotSubtitle(area) && (
+                      <div className="mb-1 truncate text-[11px] text-text-muted">{hotspotSubtitle(area)}</div>
+                    )}
                     <div className="h-2 overflow-hidden rounded-full bg-bg">
                       <div
                         className="h-full rounded-full transition-[width] duration-ui-emphasis ease-ui"

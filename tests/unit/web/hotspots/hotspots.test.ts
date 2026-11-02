@@ -111,3 +111,24 @@ describe('placeLabelLookup', () => {
     expect(lookup(home)?.label).toBe('By coords');
   });
 });
+
+describe("hotspotSubtitle", () => {
+  it("shows the street under Home and the town, without repeating the title", async () => {
+    const { hotspotSubtitle } = await import("@locations/web/lib/explorer/hotspots");
+    expect(hotspotSubtitle({ label: "Home", street: "Silvergate", settlement: "Epsom and Ewell" })).toBe(
+      "Silvergate · Epsom and Ewell",
+    );
+    expect(hotspotSubtitle({ label: "Partridge Road", street: "Partridge Road", settlement: "Epsom" })).toBe("Epsom");
+    expect(hotspotSubtitle({ label: "Near Epsom", street: null, settlement: "Epsom" })).toBe("");
+  });
+
+  it("matches saved names on the hotspot's own place first", async () => {
+    const { findPlaceLabel } = await import("@locations/web/lib/explorer/hotspots");
+    const labels = [
+      { placeKey: "51.5°N 0.5°W", label: "Old grid name" },
+      { placeKey: "c:51.330,-0.260", label: "Gran's" },
+    ] as never;
+    const hit = findPlaceLabel({ placeKey: "c:51.330,-0.260", cluster: "51.5°N 0.5°W", lat: 51.33, lon: -0.26, count: 1 }, labels) as { label: string };
+    expect(hit.label).toBe("Gran's");
+  });
+});

@@ -896,6 +896,9 @@ export async function getHeatmap(
       n: sql<number>`count(*)::int`,
       minutes: sql<number>`coalesce(sum(${visits.durationMinutes}::text::float8), 0)`,
       days: sql<number>`count(distinct ${visits.date})::int`,
+      // The cell's most common real place (labels, hiding) and Google's own name for it.
+      placeKey: sql<string | null>`mode() within group (order by ${visits.placeKey})`,
+      googleName: sql<string | null>`mode() within group (order by ${visits.googleName})`,
     })
     .from(visits)
     .where(and(...filters))
@@ -909,6 +912,8 @@ export async function getHeatmap(
     days: number;
     clusters: Map<string, number>;
     types: Map<string, number>;
+    placeKey: string | null;
+    googleName: string | null;
   };
   const cells = new Map<string, Cell>();
   const keyOf = (lat: number, lon: number) => `${lat},${lon}`;
@@ -916,7 +921,17 @@ export async function getHeatmap(
     const key = keyOf(lat, lon);
     let cell = cells.get(key);
     if (!cell) {
-      cell = { lat, lon, count: 0, totalDurationMinutes: 0, days: 0, clusters: new Map(), types: new Map() };
+      cell = {
+        lat,
+        lon,
+        count: 0,
+        totalDurationMinutes: 0,
+        days: 0,
+        clusters: new Map(),
+        types: new Map(),
+        placeKey: null,
+        googleName: null,
+      };
       cells.set(key, cell);
     }
     return cell;
@@ -925,6 +940,8 @@ export async function getHeatmap(
     const cell = cellFor(Number(p.lat), Number(p.lon));
     if (Number(p.perCell) !== 0) {
       cell.days = p.days;
+      cell.placeKey = p.placeKey;
+      cell.googleName = p.googleName?.trim() || null;
       continue;
     }
     cell.count += p.n;
@@ -937,6 +954,18 @@ export async function getHeatmap(
   const topKey = (m: Map<string, number>) =>
     [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k]) => k);
 
+  // Your own names for places (Hotspots renames, Places page) win over everything.
+  const userLabels = new Map(
+    (
+      await db
+        .select({ placeKey: placeLabels.placeKey, label: placeLabels.label })
+        .from(placeLabels)
+        .where(eq(placeLabels.tenant, tenant))
+    )
+      .filter((l) => l.label?.trim())
+      .map((l) => [l.placeKey, l.label!.trim()]),
+  );
+
   const points = [...cells.values()]
     .map((cell) => {
       const clusterRank = topKey(cell.clusters);
@@ -944,24 +973,34 @@ export async function getHeatmap(
       const types =
         typeRank.length > 0 ? typeRank.slice(0, 3) : topKey(cell.types).slice(0, 3);
       const cluster = clusterRank[0] || "";
-      const coordFallback = `Near ${cell.lat.toFixed(4)}, ${cell.lon.toFixed(4)}`;
-      return {
+      const name = (cell.placeKey && userLabels.get(cell.placeKey)) || cell.googleName || null;
+      const point = {
         lat: cell.lat,
         lon: cell.lon,
         count: cell.count,
-        label: cluster || coordFallback,
+        label: "",
         cluster,
+        placeKey: cell.placeKey,
+        /** Your name or Google's for the place; null when neither exists. */
+        name,
+        /** Home or work, from Google's place types. */
+        kind: placeKind(types),
+        /** Street or building from the shared place cache (filled in by enrichment). */
+        street: null as string | null,
         totalDurationMinutes: Math.round(cell.totalDurationMinutes),
         uniqueDays: cell.days,
         topTypes: types,
         settlement: null as string | null,
       };
+      point.label = hotspotTitle(point);
+      return point;
     })
     .sort((a, b) => b.count - a.count || a.lat - b.lat || a.lon - b.lon);
 
   return points
     .filter((p) => {
       const coordKey = `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
+      // Grid labels are still honoured for places hidden before hotspots had place keys.
       return !hidden.has(p.cluster) && !hidden.has(coordKey) && !hidden.has(p.label);
     })
     .map(({ cluster, ...rest }) => ({ ...rest, cluster: cluster || undefined }));
@@ -969,37 +1008,133 @@ export async function getHeatmap(
 
 export type HeatmapPoint = Awaited<ReturnType<typeof getHeatmap>>[number];
 
-const TOP_SETTLEMENT = 20;
-const MAX_LIVE_SETTLEMENT = 4;
+/** Home or work from Google's place types ("Home", "Inferred Home", "Inferred Work", ...). */
+export function placeKind(types: string[]): "home" | "work" | null {
+  const top = (types[0] ?? "").toLowerCase();
+  if (top.endsWith("home")) return "home";
+  if (top.endsWith("work")) return "work";
+  return null;
+}
 
-/** Cache lookups then limited Nominatim, outside the tenant transaction. */
+/**
+ * The most specific useful title for a hotspot: your name for it, Google's, Home / Work,
+ * the street or building, "Near" its town, else "Near" a nearby named hotspot (set by
+ * enrichment), and coordinates only as a last resort. The 0.5 degree grid label is not
+ * shown: it is the same for every place in a town.
+ */
+export function hotspotTitle(p: {
+  lat: number;
+  lon: number;
+  name: string | null;
+  kind: "home" | "work" | null;
+  street: string | null;
+  settlement: string | null;
+  near?: string | null;
+}): string {
+  if (p.name) return p.name;
+  if (p.kind) return p.kind === "home" ? "Home" : "Work";
+  if (p.street) return p.street;
+  if (p.settlement) return `Near ${p.settlement}`;
+  if (p.near) return `Near ${p.near}`;
+  return `Near ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`;
+}
+
+/** Hotspots that get a town and, when needed, a live street-level lookup. */
+const TOP_SETTLEMENT = 30;
+/** Live Nominatim calls per heatmap request (1 per second): names fill in over visits. */
+const MAX_LIVE_SETTLEMENT = 4;
+/** An unnamed hotspot is called "Near" a named one up to this far away. */
+const NEAR_NAMED_M = 1500;
+
+const usefulName = (name: string | undefined | null) =>
+  name && name !== "Unknown" && name !== SETTLEMENT_MISS ? name : null;
+
+/**
+ * Names for hotspots, outside the tenant transaction (shared caches only):
+ * - every hotspot: its street or building from place_cache (Day View fills it), one read
+ *   of names only
+ * - the top hotspots: their town (cached, else live) and, when they still have no name, a
+ *   street-level lookup that gives the street and the town in one call
+ * - the rest: "Near" the closest named hotspot within 1.5 km
+ * Then each title is recomputed (`hotspotTitle`).
+ */
 export async function enrichHeatmapSettlements(
   db: ReturnType<typeof createDb>,
   points: HeatmapPoint[],
 ): Promise<HeatmapPoint[]> {
+  if (!points.length) return points;
+
+  const streetKeys = points.map((p) => makeCoordPlaceKey(p.lat, p.lon));
+  const streetRows = await db
+    .select({ placeId: placeCache.placeId, name: placeCache.name })
+    .from(placeCache)
+    .where(inArray(placeCache.placeId, [...new Set(streetKeys)]));
+  const streetByKey = new Map(streetRows.map((r) => [r.placeId, usefulName(r.name)]));
+  points.forEach((p, i) => {
+    p.street = streetByKey.get(streetKeys[i]) ?? null;
+  });
+
   const top = points.slice(0, TOP_SETTLEMENT);
-  if (!top.length) return points;
-  const ids = [
-    ...new Set(top.flatMap((p) => [makeSettlementPlaceKey(p.lat, p.lon), makeCoordPlaceKey(p.lat, p.lon)])),
-  ];
-  const rows = await db.select().from(placeCache).where(inArray(placeCache.placeId, ids));
+  const rows = await db
+    .select()
+    .from(placeCache)
+    .where(inArray(placeCache.placeId, [...new Set(top.map((p) => makeSettlementPlaceKey(p.lat, p.lon)))]));
   const prefetch = new Map<string, PlaceCacheHit>(
     rows.map((r) => [
       r.placeId,
       { placeId: r.placeId, name: r.name, address: r.address, data: r.data },
     ]),
   );
-  let liveLookups = 0;
+  const budget: LiveLookupBudget = { live: MAX_LIVE_SETTLEMENT };
   for (const point of top) {
-    const { settlement, fetched } = await resolveSettlement(db, point.lat, point.lon, {
-      allowLive: liveLookups < MAX_LIVE_SETTLEMENT,
-      prefetch,
-    });
-    if (fetched) liveLookups += 1;
-    if (settlement) {
-      point.settlement = settlement;
-      if (!point.cluster) point.label = settlement;
+    const unnamed = !point.name && !point.kind && !point.street;
+    if (unnamed && budget.live > 0) {
+      // One street-level call gives both the street or building and the town.
+      const found = await resolveCoords(db, point.lat, point.lon, budget);
+      point.street = usefulName(found.name);
+      const town = settlementFromAddress((found.data as { address?: Record<string, string> }).address);
+      if (town) point.settlement = town;
     }
+    if (!point.settlement) {
+      // The shared budget also spaces the calls to Nominatim's 1 request per second.
+      const { settlement } = await resolveSettlement(db, point.lat, point.lon, {
+        allowLive: budget.live > 0,
+        prefetch,
+        budget,
+      });
+      if (settlement) point.settlement = settlement;
+    }
+  }
+
+  // Unnamed hotspots borrow the closest named one: "Near Partridge Road".
+  const named = points.filter((p) => p.name || p.street || p.settlement);
+  const cellOf = (lat: number, lon: number) => `${Math.floor(lat * 50)},${Math.floor(lon * 30)}`;
+  const grid = new Map<string, HeatmapPoint[]>();
+  for (const p of named) {
+    const k = cellOf(p.lat, p.lon);
+    const list = grid.get(k);
+    if (list) list.push(p);
+    else grid.set(k, [p]);
+  }
+  for (const p of points) {
+    let near: string | null = null;
+    if (!p.name && !p.kind && !p.street && !p.settlement) {
+      const bi = Math.floor(p.lat * 50);
+      const bj = Math.floor(p.lon * 30);
+      let bestM = NEAR_NAMED_M;
+      for (let i = bi - 1; i <= bi + 1; i++) {
+        for (let j = bj - 1; j <= bj + 1; j++) {
+          for (const q of grid.get(`${i},${j}`) ?? []) {
+            const m = haversineM(p.lat, p.lon, q.lat, q.lon);
+            if (m < bestM) {
+              bestM = m;
+              near = q.name ?? q.street ?? q.settlement;
+            }
+          }
+        }
+      }
+    }
+    p.label = hotspotTitle({ ...p, near });
   }
   return points;
 }
