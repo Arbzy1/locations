@@ -149,6 +149,47 @@ export function filterAndRankPlaces<T extends RankablePlace>(
   return opts.limit ? ranked.slice(0, opts.limit) : ranked;
 }
 
+type MergeablePlace = RankablePlace & {
+  uniqueDays?: number;
+  place?: { count: number; totalDurationMinutes: number; uniqueDays: number } | null;
+  cells?: number;
+};
+
+/**
+ * One row per real place: heatmap cells that share a placeKey (a place often spans a few
+ * cells) collapse into the busiest cell, which takes the place's true totals. Cells
+ * without a placeKey stay as they are. The heatmap itself keeps every cell.
+ */
+export function mergeByPlace<T extends MergeablePlace>(points: T[]): T[] {
+  const groups = new Map<string, T[]>();
+  const out: T[] = [];
+  for (const p of points) {
+    if (!p.placeKey) {
+      out.push(p);
+      continue;
+    }
+    const group = groups.get(p.placeKey);
+    if (group) group.push(p);
+    else groups.set(p.placeKey, [p]);
+  }
+  for (const group of groups.values()) {
+    let lead = group[0];
+    let count = 0;
+    let minutes = 0;
+    let days = 0;
+    for (const p of group) {
+      if (p.count > lead.count) lead = p;
+      count += p.count;
+      minutes += p.totalDurationMinutes ?? 0;
+      days = Math.max(days, p.uniqueDays ?? 0);
+    }
+    // The server's per-place totals count each visit once; summing cells is the fallback.
+    const totals = lead.place ?? { count, totalDurationMinutes: minutes, uniqueDays: days };
+    out.push({ ...lead, ...totals, cells: group.length });
+  }
+  return out;
+}
+
 export function toggleChip(selected: string[], value: string): string[] {
   return selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value];
 }

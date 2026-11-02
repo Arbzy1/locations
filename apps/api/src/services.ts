@@ -884,8 +884,9 @@ export async function getHeatmap(
   const cellLon = sql<number>`floor(${visits.lon}::text::float8 * 100000 + 0.5) / 100000`;
   const cluster = sql<string>`coalesce(trim(${visits.cluster}), '')`;
   const semanticType = sql<string>`coalesce(trim(${visits.semanticType}), '')`;
-  // One scan: grouping sets give the (cell, cluster, type) breakdown and, on the
-  // per-cell rollup rows (perCell = 1), the distinct-day count for each cell.
+  // One scan: grouping sets give the (cell, cluster, type) breakdown, per-cell rollup
+  // rows (perCell = 1) with each cell's distinct-day count, and per-place rows
+  // (perPlace = 1) with true totals for each real place, which can span several cells.
   const rows = await db
     .select({
       lat: cellLat,
@@ -893,6 +894,8 @@ export async function getHeatmap(
       cluster,
       semanticType,
       perCell: sql<number>`grouping(${cluster}, ${semanticType})`,
+      perPlace: sql<number>`grouping(${cellLat})`,
+      place: visits.placeKey,
       n: sql<number>`count(*)::int`,
       minutes: sql<number>`coalesce(sum(${visits.durationMinutes}::text::float8), 0)`,
       days: sql<number>`count(distinct ${visits.date})::int`,
@@ -902,7 +905,9 @@ export async function getHeatmap(
     })
     .from(visits)
     .where(and(...filters))
-    .groupBy(sql`grouping sets ((${cellLat}, ${cellLon}, ${cluster}, ${semanticType}), (${cellLat}, ${cellLon}))`);
+    .groupBy(
+      sql`grouping sets ((${cellLat}, ${cellLon}, ${cluster}, ${semanticType}), (${cellLat}, ${cellLon}), (${visits.placeKey}))`,
+    );
 
   type Cell = {
     lat: number;
@@ -936,7 +941,12 @@ export async function getHeatmap(
     }
     return cell;
   };
+  const placeTotals = new Map<string, { count: number; minutes: number; days: number }>();
   for (const p of rows) {
+    if (Number(p.perPlace) === 1) {
+      if (p.place) placeTotals.set(p.place, { count: p.n, minutes: Number(p.minutes), days: p.days });
+      continue;
+    }
     const cell = cellFor(Number(p.lat), Number(p.lon));
     if (Number(p.perCell) !== 0) {
       cell.days = p.days;
@@ -966,6 +976,11 @@ export async function getHeatmap(
       .map((l) => [l.placeKey, l.label!.trim()]),
   );
 
+  const placeTotal = (key: string | null) => {
+    const t = key ? placeTotals.get(key) : undefined;
+    return t ? { count: t.count, totalDurationMinutes: Math.round(t.minutes), uniqueDays: t.days } : null;
+  };
+
   const points = [...cells.values()]
     .map((cell) => {
       const clusterRank = topKey(cell.clusters);
@@ -989,6 +1004,8 @@ export async function getHeatmap(
         street: null as string | null,
         totalDurationMinutes: Math.round(cell.totalDurationMinutes),
         uniqueDays: cell.days,
+        /** Totals for the whole place (all its cells), so a list can show it once. */
+        place: placeTotal(cell.placeKey),
         topTypes: types,
         settlement: null as string | null,
       };

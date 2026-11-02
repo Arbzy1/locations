@@ -132,3 +132,31 @@ describe("hotspotSubtitle", () => {
     expect(hit.label).toBe("Gran's house");
   });
 });
+
+describe("mergeByPlace", () => {
+  it("lists a place once, using its true totals, and keeps unkeyed cells", async () => {
+    const { mergeByPlace } = await import("@locations/web/lib/explorer/hotspots");
+    const place = { count: 30, totalDurationMinutes: 900, uniqueDays: 12 };
+    const merged = mergeByPlace([
+      { lat: 52.0, lon: -1.0, count: 10, placeKey: "p:home", label: "Home", place },
+      { lat: 52.0001, lon: -1.0, count: 25, placeKey: "p:home", label: "Home", place },
+      { lat: 52.1, lon: -1.1, count: 4, label: "Mill Lane" },
+    ]);
+    expect(merged).toHaveLength(2);
+    const home = merged.find((p) => p.placeKey === "p:home")!;
+    expect(home.lat).toBe(52.0001);
+    expect(home.count).toBe(30);
+    expect(home.totalDurationMinutes).toBe(900);
+    expect(home.cells).toBe(2);
+  });
+
+  it("sums the cells when the server sent no place totals", async () => {
+    const { mergeByPlace } = await import("@locations/web/lib/explorer/hotspots");
+    const [only] = mergeByPlace([
+      { lat: 1, lon: 1, count: 3, totalDurationMinutes: 10, placeKey: "p:a" },
+      { lat: 1.0001, lon: 1, count: 2, totalDurationMinutes: 5, placeKey: "p:a" },
+    ]);
+    expect(only.count).toBe(5);
+    expect(only.totalDurationMinutes).toBe(15);
+  });
+});
