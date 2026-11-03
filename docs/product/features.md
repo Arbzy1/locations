@@ -4,7 +4,7 @@ What the hosted app does today. Nothing here is a roadmap.
 
 ## Maps
 
-- **Hotspots:** visit-density heatmap, ranked places, date range, filter by Timeline source; multiple sources draw as coloured heat layers
+- **Hotspots:** visit-density heatmap, ranked places (each real place listed once, with totals across every square it covers), date range, filter by Timeline source; multiple sources draw as coloured heat layers
 - Rank by visit count or time spent
 - Filter by Google place type, favourite, and your tags
 - Heatmap on/off, opacity, and strength

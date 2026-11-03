@@ -1,146 +1,135 @@
+<div align="center">
+
 # Locations
 
-Explore **your** Google Timeline as a private map journal: heatmaps, day views, trips, and insights.
+**Your Google Timeline as a private map journal.**
+Heatmaps of where you spend your time, every journey drawn from your own GPS points, trains spotted even when Google called them drives, and insights for any period.
 
-Hosted SaaS on **Cloudflare Workers**, **Neon**, **Better Auth**, and **Stripe**.
+[![CI](https://github.com/Arbzy1/locations/actions/workflows/ci.yml/badge.svg)](https://github.com/Arbzy1/locations/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)
+![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-f38020?logo=cloudflare&logoColor=white)
 
-![Locations](docs/screenshot.png)
+[**Try the live demo**](https://locations.aden.website) · [Features](docs/product/features.md) · [Architecture](docs/architecture/overview.md) · [Self-host](#self-host)
 
-## Live site
+<img src="docs/screenshots/day-view.webp" alt="Day View: a day of subway and walking journeys in Manhattan, each coloured by transport mode and numbered to match the timeline" width="900">
 
-[locations.aden.website](https://locations.aden.website):
+</div>
 
-1. **Public demo** - click “Try the demo” for sample journeys (password stays on the server)
-2. **Your account** - sign up, verify email, import Timeline JSON or a Takeout zip, subscribe if billing is enabled
+> Screenshots use the built-in demo data (a few days of New York and Boston landmarks). Click **Try the demo** on the live site to explore it yourself; your own data stays private to your account.
 
-Tenants are isolated in the app layer and with FORCE RLS (`app.tenant`). Demo users map to tenant `demo`.
+## What it does
+
+| | |
+|---|---|
+| <img src="docs/screenshots/hotspots.webp" alt="Hotspots: ranked places with names and a heatmap" width="440"> | <img src="docs/screenshots/routes.webp" alt="Routes: every journey in a date range, coloured by mode" width="440"> |
+| **Hotspots.** A heatmap of where you spend time, with every spot named after the real place: Home, Work, the street or building, or your own name for it. | **Routes.** Every journey for a day, month, year or any range, coloured by transport, with mileage per mode. |
+| <img src="docs/screenshots/day-view-light.webp" alt="Day View in light theme with bus, cycling and subway journeys" width="440"> | |
+| **Day View.** One day on a map with its timeline. Journeys follow your recorded GPS points, matched to roads or the railway, numbered and coloured by mode, with faint dashes where the GPS went quiet. | **And more.** Insights for any period against the same dates last year, On this day, trips, a place directory, GPX and GeoJSON export, and Journey cost: UK trip cost for fuel or charging, tolls and clean-air zones. |
+
+### Highlights
+
+- **Trains detected from GPS.** Google often labels a train ride as driving. Locations checks each journey's GPS points against OpenStreetMap railway lines (Great Britain and Ireland) and its speed, relabels it, and draws it along the actual tracks. One tap undoes it.
+- **Honest lines.** A route is only drawn on roads when it stays with your GPS points; otherwise you see the points themselves. Impossible start or end points from Google are ignored, and long gaps are drawn as a guess.
+- **Imports of any size on a free plan.** Your browser parses the export and works out the statistics in a Web Worker; the server only stores small checked batches.
+- **Private by design.** Every table is isolated per account by the app and by Postgres row-level security. Coordinates and place names never go into logs or emails. Delete your account and everything goes with it.
+- **Dark and light, desktop and phone.** Built with shadcn/ui and Motion, with a bottom-sheet layout on phones.
+
+## How it works
+
+```mermaid
+flowchart LR
+  subgraph Browser
+    UI[React app<br/>MapLibre GL]
+    WW[Web Worker<br/>parse, detect modes,<br/>compute statistics]
+    RT[(Rail tiles<br/>static OSM data)]
+  end
+  subgraph Cloudflare[Cloudflare Workers]
+    API[Hono API]
+    CRON[Cron: data sync,<br/>monthly jobs]
+  end
+  DB[(Neon Postgres<br/>FORCE RLS per account)]
+  EXT[OSRM routing<br/>Nominatim place names]
+
+  UI --> API
+  UI --> WW
+  WW --> RT
+  WW -- small checked batches --> API
+  API -- withTenant --> DB
+  API -- after the tenant transaction,<br/>cached and capped --> EXT
+  CRON --> DB
+```
+
+The Worker runs within Cloudflare's free plan (10 ms of CPU and 50 outbound requests per request), so heavy work happens in the browser and every API route is a handful of database statements. More in [docs/architecture](docs/architecture/overview.md).
+
+| Layer | Tech |
+|-------|------|
+| Edge | Cloudflare Workers and static assets (Wrangler) |
+| API | [Hono](https://hono.dev) |
+| Auth | [Better Auth](https://better-auth.com): email and password, magic links, codes, optional Google |
+| Database | [Neon](https://neon.tech) Postgres, [Drizzle ORM](https://orm.drizzle.team), FORCE row-level security |
+| UI | React 19, Vite, Tailwind 4, shadcn/ui, Motion, MapLibre GL, Recharts |
+| Billing | Stripe Checkout and Customer Portal (optional) |
 
 ## Self-host
 
-### What you need
-
-- Node 20+
-- [Neon](https://neon.tech) Postgres
-- (Optional) Cloudflare account, Stripe, Resend, commercial map tiles
-
-### Export from Google
-
-1. Open [Google Takeout](https://takeout.google.com/)
-2. Select **Location History** / Timeline only
-3. Upload the zip in Settings, or extract Timeline.json / Records.json
-4. Keep real exports **outside** git
-
-### One-command setup
+**You need** Node 20+, a [Neon](https://neon.tech) Postgres database, and optionally a Cloudflare account (to deploy), Resend (email), Stripe (billing) and commercial map tiles or routing.
 
 ```bash
 git clone https://github.com/Arbzy1/locations.git
 cd locations
 npm install
-npm run setup:project
+npm run setup:project   # interactive: database, sample import, first admin user
+npm run dev:all         # app on http://localhost:5173, API on http://localhost:8787
 ```
 
-Then:
+**Get your data:** export your Timeline from Google Maps on your phone, or **Location History** from [Google Takeout](https://takeout.google.com/), then upload the JSON file or zip in Settings ([supported files](docs/product/takeout-import.md)). Keep real exports outside git.
 
-```bash
-npm run dev:all    # UI http://localhost:5173 (HMR), API http://localhost:8787
-```
+**Deploy:** staging and production are named Wrangler environments. Database migrations are a separate step from deploys. See [docs/engineering/deploy.md](docs/engineering/deploy.md).
 
-Magic links, Google OAuth, Stripe returns, and Playwright use the production-like SPA on :8787:
-
-```bash
-npm run dev:e2e          # typecheck + Vite build, then Wrangler on :8787
-npm run dev:kill         # free leftover Vite / Wrangler / inspector ports
-```
-
-Set `DISABLE_SIGNUP=true` if you want invite-only again (`npm run auth:create-user`).
-
-### Deploy
-
-See [docs/engineering/deploy.md](docs/engineering/deploy.md). Staging and production are named Wrangler environments. Never run a bare `wrangler deploy`.
-
-```bash
-npx wrangler login
-npm run secrets:generate -- --env staging
-npm run cf:sync:staging
-npm run deploy:staging
-# GET https://locations-staging.aden.website/api/health
-
-npm run secrets:generate -- --env production
-npm run cf:sync:prod
-npm run db:migrate:prod   # deploys never migrate: run this before code that needs new tables
-npm run deploy:prod       # or the "Deploy production" GitHub workflow on master
-```
-
-Staging deploys on every push to `master`. See [docs/engineering/deploy.md](docs/engineering/deploy.md).
-
-## What it does
-
-Full list: [docs/product/features.md](docs/product/features.md).
-
-- **Map** - Heat (visit density, ranked places, tap a hotspot for its days) or Lines (Routes: every journey for a day, month, year or range, coloured by mode)
-- **Days** - one day on a map with a timeline: journeys drawn from your GPS points, coloured by transport and numbered, trains Google called drives detected and drawn along the tracks, notes and mode fixes
-- **Trips** - days with more range or more places, Google's own trips, named trips
-- **Places** - place directory with your names, hiding, deleting a place's data
-- **Insights** - any period up to all time against the same dates last year, On this day, yearly charts, corridors, home/work
-- **Journey cost** - UK trip cost for fuel or charging, tolls and clean-air charges (`/journey-cost`)
-- **Settings** - Timeline JSON or Takeout zip import (parsed in your browser), sources, exports, billing, units, delete account
-- **Account** - signup, login, forgot password, demo, dark/light theme
-
-## Stack
-
-| Layer | Tech |
-|-------|------|
-| Edge | Cloudflare Workers + Static Assets |
-| API | Hono |
-| Auth | Better Auth (email/password, public signup unless disabled) |
-| Billing | Stripe Checkout + Customer Portal |
-| DB | Neon Postgres + Drizzle ORM + FORCE RLS |
-| UI | React 19, Vite, Tailwind 4, shadcn/ui, Motion, MapLibre GL, Recharts |
-
-## Scripts
+<details>
+<summary><b>Useful scripts</b></summary>
 
 | Script | Purpose |
 |--------|---------|
-| `npm run setup:project` | Interactive first-time Neon + import + admin user |
-| `npm run deploy:staging` | Build web + `wrangler deploy --env staging` |
-| `npm run deploy:prod` | Build web + `wrangler deploy --env production` |
-| `npm run deploy:both` | Build once, then staging, then production |
-| `npm run release` / `release:patch` / `release:minor` / `release:major` | Tag a semver release and promote `docs/changelog.md` |
-| `npm run release:set -- v1.2.3` | Tag a specific version |
-| `npm run db:migrate:dev` | Apply schema (local `.env`) |
-| `npm run db:migrate:staging` / `db:migrate:prod` | Apply schema to staging / production |
-| `npm run db:migrate:all` | Migrate local, staging, then production |
-| `npm run db:import` | CLI JSON import (with train detection when the rail tiles are present) |
-| `npm run rail:build` | Rebuild the UK and Ireland rail tiles from OpenStreetMap (by hand only) |
-| `npm run test:placement` | Fail if tests live outside `tests/` |
-| `npm run test:unit` | Vitest unit project |
-| `npm run test:integration` | Vitest integration project |
-| `npm run test:rls` | RLS leak tests (loads `.env` / `.dev.vars`; skips if `DATABASE_URL` is still unset) |
-| `npm run test:e2e` | Playwright (requires API at `:8787`; start with `dev:e2e`) |
-| `npm run dev:kill` | Free leftover Vite, Wrangler, and inspector ports |
-| `npm run rules:sync` | Regenerate AI tool rule files from `AGENTS.md` |
+| `npm run dev:all` | Vite with hot reload and Wrangler, together |
+| `npm run dev:e2e` | Production build served by Wrangler (OAuth, Stripe, Playwright) |
+| `npm run dev:kill` | Free leftover dev-server ports |
+| `npm run typecheck:all` | TypeScript across every workspace |
+| `npm run test:unit` / `test:integration` / `test:security` | Vitest projects and the security catalog |
+| `npm run test:e2e` | Playwright against `dev:e2e` |
+| `npm run db:migrate:dev` / `db:migrate:prod` | Apply the schema |
+| `npm run db:import` | Import a Timeline file from the command line |
+| `npm run rail:build` | Rebuild the UK and Ireland rail tiles from OpenStreetMap |
+| `npm run release` | Tag a release and promote the changelog |
 
-## Testing
+</details>
 
-```bash
-npm run test:placement
-npm run test:unit
-npm run test:integration
-npm run test:rls
+## Project layout
 
-npm run dev:e2e
-# other terminal:
-npm run test:e2e
+```
+apps/web/        React app (Vite, Tailwind, shadcn/ui, MapLibre)
+apps/api/        Cloudflare Worker (Hono)
+packages/db/     Schema, migrations, Timeline parsing, statistics, mode detection
+packages/brim/   Journey cost engine and UK reference data
+docs/            Product, architecture, security, engineering and legal docs
+tests/           Every test lives here (unit, integration, RLS, e2e)
 ```
 
-Security: [docs/security/README.md](docs/security/README.md). Agent conventions: `AGENTS.md`.
+## Documentation
 
-## Privacy
+- [Features](docs/product/features.md) and [changelog](docs/changelog.md)
+- [Architecture](docs/architecture/overview.md): [import pipeline](docs/architecture/import-pipeline.md), [maps and routing](docs/architecture/maps-and-routing.md), [tenancy and RLS](docs/architecture/tenancy-and-rls.md), [Journey cost](docs/architecture/journey-cost.md)
+- [API routes](docs/api/routes.md)
+- [Security](docs/security/README.md) and [reporting a vulnerability](docs/SECURITY.md)
+- [Local setup](docs/engineering/local-setup.md), [testing](docs/engineering/testing.md), [deploy](docs/engineering/deploy.md), [roadmap](docs/engineering/roadmap.md)
 
-- Real Takeout JSON is gitignored. Only sample data ships in the repo.
-- Do not commit `.env`, `.env.staging`, `.env.production`, `.dev.vars*`, or database credentials.
-- Delete account in Settings wipes Neon rows, R2 uploads, and the Stripe customer.
+## Contributing
 
-## License
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the short version of the house rules; `AGENTS.md` has the full set used by AI coding tools too.
 
-MIT. See [LICENSE](LICENSE).
+## Credits and license
+
+Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, rail tiles under the ODbL ([credits](docs/legal/credits.md)). Basemap by [OpenFreeMap](https://openfreemap.org). Routing by [OSRM](https://project-osrm.org), place names by [Nominatim](https://nominatim.org).
+
+Released under the [MIT License](LICENSE).

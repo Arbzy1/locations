@@ -168,8 +168,16 @@ export interface HeatmapPoint {
   cluster?: string;
   /** Town / city / village guessed from coordinates (Nominatim) */
   settlement?: string | null;
+  /** The cell's most common real place: your names, hiding and tags key on it. */
+  placeKey?: string | null;
+  /** Street or building at the spot, when known (shown under Home / Work and your names). */
+  street?: string | null;
   totalDurationMinutes?: number;
   uniqueDays?: number;
+  /** Totals for the whole place (every cell it spans), when the cell has a placeKey. */
+  place?: { count: number; totalDurationMinutes: number; uniqueDays: number } | null;
+  /** How many heatmap cells were merged into this row (Hotspots list only). */
+  cells?: number;
   topTypes?: string[];
   /** Heat intensity; defaults to `count` when omitted */
   weight?: number;

@@ -33,6 +33,8 @@ import {
   filterAndRankPlaces,
   findPlaceLabel,
   isPlaceColorToken,
+  hotspotSubtitle,
+  mergeByPlace,
   placeMetric,
   sourceTokenVar,
   toggleChip,
@@ -96,7 +98,8 @@ function AreaDetails({
   const [label, setLabel] = useState(area.label);
   const [tagDraft, setTagDraft] = useState('');
   const [saving, setSaving] = useState(false);
-  const placeKey = area.cluster || `${area.lat.toFixed(5)},${area.lon.toFixed(5)}`;
+  // The hotspot's own place, not its 0.5 degree grid square (which covers a whole town).
+  const placeKey = area.placeKey || `${area.lat.toFixed(5)},${area.lon.toFixed(5)}`;
   const favourite = Boolean(meta?.favourite);
   const tags = meta?.tags ?? [];
   const color = meta?.color ?? null;
@@ -119,7 +122,7 @@ function AreaDetails({
     <div className="rounded-lg border border-border bg-bg/50 p-3">
       <div className="mb-2 text-sm font-semibold leading-snug text-text">{area.label}</div>
       <Button variant="outline" size="sm" asChild title="Open place page" className="mb-2">
-        <Link to={placePath(area.cluster)}>Place page</Link>
+        <Link to={placePath(area.placeKey || area.cluster)}>Place page</Link>
       </Button>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
         <dt className="text-text-muted">Visits</dt>
@@ -128,6 +131,12 @@ function AreaDetails({
         <dd className="text-right font-mono">{area.uniqueDays}</dd>
         <dt className="text-text-muted">Time there</dt>
         <dd className="text-right font-mono">{formatDuration(area.totalDurationMinutes)}</dd>
+        {area.street && area.street !== area.label && (
+          <>
+            <dt className="text-text-muted">Street</dt>
+            <dd className="text-right">{area.street}</dd>
+          </>
+        )}
         {area.settlement && (
           <>
             <dt className="text-text-muted">Area</dt>
@@ -353,6 +362,9 @@ export default function HotspotsView() {
     return near ? (near.settlement && !near.label.includes(near.settlement) ? `${near.label} (${near.settlement})` : near.label) : `Near ${spot.lat.toFixed(4)}, ${spot.lon.toFixed(4)}`;
   }, [spot, allAreas]);
 
+  // The ranked list shows each real place once; the heatmap below still uses every cell.
+  const placeAreas = useMemo(() => mergeByPlace(allAreas), [allAreas]);
+
   const typeOptions = useMemo(() => uniqueTopTypes(allAreas), [allAreas]);
   const tagOptions = useMemo(() => uniqueLabelTags(labelRows), [labelRows]);
   const hiddenLabels = useMemo(() => labelRows.filter((l) => l.hidden), [labelRows]);
@@ -369,9 +381,21 @@ export default function HotspotsView() {
     [allAreas, selectedTypes, selectedTags, favouritesOnly, rankBy, labelRows],
   );
 
+  const listAreas = useMemo(
+    () =>
+      filterAndRankPlaces(placeAreas, {
+        types: selectedTypes,
+        tags: selectedTags,
+        favouritesOnly,
+        rankBy,
+        labels: labelRows,
+      }),
+    [placeAreas, selectedTypes, selectedTags, favouritesOnly, rankBy, labelRows],
+  );
+
   // Memoised so hotspotLabels (and the map overlays fed by it) keep a stable identity
   // across unrelated re-renders.
-  const topAreas = useMemo(() => filteredAreas.slice(0, 20), [filteredAreas]);
+  const topAreas = useMemo(() => listAreas.slice(0, 20), [listAreas]);
   const maxMetric = topAreas.reduce((max, a) => Math.max(max, placeMetric(a, rankBy)), 1);
 
   const heatForMap: HeatmapPoint[] = useMemo(
@@ -465,7 +489,7 @@ export default function HotspotsView() {
       </h2>
       <p className="mt-1 text-sm text-text-muted">
         {heatmapPoints
-          ? `${filteredAreas.length} of ${heatmapPoints.length} locations`
+          ? `${listAreas.length} of ${placeAreas.length} places`
           : isError
             ? 'Heatmap did not load.'
             : 'Loading...'}
@@ -685,12 +709,9 @@ export default function HotspotsView() {
                       )}
                       <span className="truncate">{area.label}</span>
                     </div>
-                    {area.settlement &&
-                      !area.label.toLowerCase().includes(area.settlement.toLowerCase()) && (
-                        <div className="mb-1 truncate text-[11px] text-text-muted">
-                          {area.settlement}
-                        </div>
-                      )}
+                    {hotspotSubtitle(area) && (
+                      <div className="mb-1 truncate text-[11px] text-text-muted">{hotspotSubtitle(area)}</div>
+                    )}
                     <div className="h-2 overflow-hidden rounded-full bg-bg">
                       <div
                         className="h-full rounded-full transition-[width] duration-ui-emphasis ease-ui"

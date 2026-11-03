@@ -251,7 +251,7 @@ export function detectJourneyMode(a: DetectableJourney, rail: RailIndex | null):
   const avgKmh = Math.round((lengthM / 1000 / hours) * 10) / 10;
   const base = { avgKmh, v: MODE_DETECTOR_VERSION };
 
-  // Thresholds tuned on a real export (London area): with 75% of fixes within 80 m of a
+  // Thresholds tuned on a real export: with 75% of fixes within 80 m of a
   // railway, a median distance of 50 m or less and over 20 km/h, 50 of 69 Google-labelled
   // trains matched against 4 of 1,425 cars and 5 of 264 buses (likely mislabelled trains).
   // The fixes must really travel: GPS noise around a home next to the tracks can sit

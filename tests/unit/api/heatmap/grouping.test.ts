@@ -84,3 +84,35 @@ describe("getHeatmap", () => {
     expect(a[0].topTypes).toEqual(["Cafe", "Shop"]);
   });
 });
+
+describe("getHeatmap place totals", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 503 })));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("attaches each place's own totals and skips the per-place rows as cells", async () => {
+    const rows = [
+      { lat: "52.0", lon: "-1.0", cluster: "Home", semanticType: "Home", n: 4, minutes: 100, perCell: 0, perPlace: 0, days: 0, placeKey: "p:home" },
+      { lat: "52.0", lon: "-1.0", cluster: "", semanticType: "", n: 0, minutes: 0, perCell: 1, perPlace: 0, days: 3, placeKey: "p:home" },
+      { lat: null, lon: null, cluster: "", semanticType: "", n: 9, minutes: 250, perCell: 1, perPlace: 1, days: 5, place: "p:home" },
+    ];
+    const q: Record<string, unknown> = {};
+    for (const m of ["where", "groupBy", "orderBy", "innerJoin", "leftJoin"]) q[m] = () => q;
+    q.limit = async () => [];
+    q.then = (resolve: (v: unknown) => void) => Promise.resolve(rows).then(resolve);
+    const empty: Record<string, unknown> = { ...q, limit: async () => [], then: (r: (v: unknown) => void) => Promise.resolve([]).then(r) };
+    for (const m of ["where", "groupBy", "orderBy", "innerJoin", "leftJoin"]) empty[m] = () => empty;
+    const db = {
+      select: () => ({ from: (t: unknown) => (t === visits ? q : empty) }),
+      insert: () => ({ values: () => ({ onConflictDoNothing: async () => {}, onConflictDoUpdate: async () => {} }) }),
+    } as never;
+    const points = await getHeatmap(db, "t1" as never, {});
+    expect(points).toHaveLength(1);
+    expect(points[0]).toMatchObject({
+      count: 4,
+      placeKey: "p:home",
+      place: { count: 9, totalDurationMinutes: 250, uniqueDays: 5 },
+    });
+  });
+});

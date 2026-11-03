@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Hotspots are named after the actual place: your own name for it, Google's, Home or Work, or the street or building there (a road, a shop or a station), with the street and town underneath. Unnamed spots say "Near" their town or the closest named hotspot. The 0.5 degree grid label ("51.5°N 0.5°W"), which was the same for every place in a town, is gone. Renaming, tagging or hiding a hotspot now applies to that place only, not every hotspot in the same grid square, and "Place page" opens the place itself. The ranked list shows each place once (a place that covers a few heatmap squares used to appear several times, for example Home three times), with visits, time and days counted across all of it; the heatmap still shows every square.
+
 Day View shows where GPS went quiet: a stretch of a journey with no GPS point for over 10 minutes is drawn as a faint dash, so you can see which part of the line is a guess. Train journeys that Google recorded with the walk to and from the platform draw those ends as walking.
 
 Journey cost can be played with after a route (or with miles you type). Pump price, mpg, and steady speed change litres, fuel cost, time, and CO2 immediately, without another request. "Litres to save" shows the slower steady speed, and the mpg, that would use that much less fuel. Tolls and clean-air charges stay as estimated. The speed model is steady driving only: stops are not included. Bad figures (empty, zero, out of range) are rejected in the panel instead of producing a cost.

@@ -15,7 +15,7 @@ Keep Drizzle tenant filters **and** FORCE RLS. Full classes:
 ## Auth
 
 - Verified email before import (always on, including when signup is disabled). Session cookies HttpOnly, Secure on HTTPS, SameSite=Lax.
-- Password reset and email change revoke other sessions. Email OTPs are stored hashed (3 attempts). Better Auth 1.6.
+- Password reset and email change revoke other sessions. Email OTPs are stored hashed (3 attempts). Better Auth 1.7.
 - Rate-limit `/api/auth/*`, `/api/import`, `/api/search`, `/api/billing/checkout`, `/api/billing/portal`, and `/api/place/:id` in the Worker. Those in-memory maps are **per isolate** and are a backstop only.
 - In production, add Cloudflare Rate Limiting / WAF rules for the same paths (and `/api/auth/demo`). Dashboard WAF is the hard edge control.
 - Demo password lives in Worker env, not the JS bundle.
