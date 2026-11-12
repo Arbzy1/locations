@@ -74,8 +74,6 @@ export const API_ROUTE_CATALOG: ApiRoute[] = [
   { method: "PATCH", path: "/api/sources/:id", samplePath: "/api/sources/other-tenant-id", auth: "session", demo: "denyWrite", idScope: "tenantRow", rateLimited: false },
   { method: "DELETE", path: "/api/sources/:id", samplePath: "/api/sources/other-tenant-id", auth: "session", demo: "denyWrite", idScope: "tenantRow", rateLimited: false },
   { method: "GET", path: "/api/import/status", samplePath: "/api/import/status", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
-  { method: "POST", path: "/api/import/preview", samplePath: "/api/import/preview", auth: "session", demo: "denyWrite", idScope: "none", rateLimited: false },
-  { method: "POST", path: "/api/import", samplePath: "/api/import", auth: "session", demo: "denyWrite", idScope: "none", rateLimited: true },
   { method: "GET", path: "/api/search", samplePath: "/api/search?q=park", auth: "session", demo: "allow", idScope: "none", rateLimited: true },
   { method: "GET", path: "/api/clusters", samplePath: "/api/clusters", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
   { method: "GET", path: "/api/clusters/:key/visits", samplePath: "/api/clusters/other-tenant-id/visits", auth: "session", demo: "allow", idScope: "none", rateLimited: false },

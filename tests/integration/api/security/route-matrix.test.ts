@@ -285,17 +285,19 @@ describe("API threat matrix", () => {
     expect(resolveCoords).toHaveBeenCalledWith(expect.anything(), 51.50735, -0.12776);
   });
 
-  it("returns 409 when an import is already running and 400 for mbox", async () => {
+  it("returns 409 when an import is already running and 400 for a malformed start", async () => {
     getSession.mockResolvedValue(sessionUser({ id: "user-a", emailVerified: true }));
-    vi.mocked(getActiveImportJob).mockResolvedValue({ id: "job-open", status: "processing" } as never);
-    const busy = await request("/api/import", { method: "POST", body: new FormData() });
+    const json = (body: unknown): RequestInit => ({
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    // The import-session mock's startImportJob reports an open job.
+    const busy = await request("/api/import/start", json({ visitCount: 1, activityCount: 0, parsedCount: 1 }));
     expect(busy.status).toBe(409);
 
-    vi.mocked(getActiveImportJob).mockResolvedValue(null);
-    const form = new FormData();
-    form.append("file", new File(["From: x"], "mail.mbox", { type: "application/mbox" }));
-    const mbox = await request("/api/import", { method: "POST", body: form });
-    expect(mbox.status).toBe(400);
+    const bad = await request("/api/import/start", json({ visitCount: "many" }));
+    expect(bad.status).toBe(400);
   });
 
   it("wipes the session tenant on account delete", async () => {

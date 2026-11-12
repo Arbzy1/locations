@@ -32,15 +32,11 @@ A changed journey keeps Google's label in `activities.google_mode`, the reason i
 
 Road lines also use the fixes: GPS spikes are dropped before map matching (`cleanTrace`), and a matched road line whose median distance from the fixes is over 80 m (or with under 70% of fixes within 100 m) is replaced by the fixes themselves (`roadFollowsFixes`).
 
-## Upload import (legacy, small files)
+## Upload import (removed)
 
-1. `POST /api/import/preview` sniffs JSON or unzip (bounded). No R2 write and no DB insert. Response is counts, chosen file name, date overlap, and a timezone warning.
-2. `POST /api/import` sniffs JSON or unzip (bounded), writes R2 `uploads/{userId}/{jobId}.json`, inserts `import_jobs` with `merge` and `chosen_file`.
-3. The Worker publishes to the import queue for that environment (`locations-imports-staging` or `locations-imports`), or `waitUntil` if the queue binding is missing. The message may include `skipOverlappingDays`.
-4. The consumer parses, replaces or merges the source (optionally skipping days already stored), rebuilds tenant aggregates, updates job counts, deletes the R2 object, and emails `import_ready` or `import_failed` (counts only; no place names). `import_jobs.notified_at` prevents a queue retry from sending twice.
-5. The UI polls `GET /api/import/status` (includes `chosenFile` and `timezoneWarning`).
+The older path uploaded the file to R2 and parsed it in the Worker through a queue (`POST /api/import/preview`, `POST /api/import`). It could not fit the free plan's CPU limit and the website stopped calling it, so the routes and the job runner were removed. The CLI (`db:import`) still parses files directly. `wrangler.toml` still binds the import queues; the Worker's queue handler only acknowledges messages until those bindings are removed.
 
-Zip extract prefers `Timeline.json`, then semantic JSON, then `Records.json`. Errors list JSON names found.
+The UI polls `GET /api/import/status` (includes `chosenFile` and `timezoneWarning`).
 
 Progress fields: `status`, `parsedCount`, `visitCount`, `activityCount`, `chosenFile`, `error`.
 

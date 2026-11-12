@@ -12,9 +12,8 @@ import {
   type TenantId,
   type PlaceColorToken,
 } from "@locations/db";
-import { countTimelineRecords } from "@locations/db/timeline-parse";
 import { APP_VERSION } from "./version";
-import { googleAuthEnabled, type Env, type ImportQueueMessage } from "./env";
+import { googleAuthEnabled, type Env } from "./env";
 import { createAuth } from "./auth";
 import { corsOriginFor } from "./cors";
 import { blockDemo, isDemoBlockedAuthPath } from "./guards";
@@ -43,9 +42,6 @@ import {
 } from "./billing";
 import {
   configureGeoEndpoints,
-  createImportJob,
-  ensureDataSource,
-  getActiveImportJob,
   getAnalytics,
   loadDayRows,
   buildDay,
@@ -57,10 +53,8 @@ import {
   getImportStatus,
   getOverview,
   getRouteProgress,
-  getSourceById,
   getSubscription,
   getUserSettings,
-  importSourceData,
   listPlaceLabels,
   listSources,
   removeSource,
@@ -99,7 +93,6 @@ import {
   deleteChapter,
   listImportJobs,
   patchSource,
-  previewImport,
   deleteTenantDateRange,
   rewarmRoutes,
   pingDatabase,
@@ -921,215 +914,6 @@ app.post("/api/journeys/modes", async (c) => {
   return c.json({ ok: true, changed });
 });
 
-app.post("/api/import/preview", async (c) => {
-  const blocked = blockDemo(c.get("user"));
-  if (blocked) return c.json(blocked, 403);
-
-  const user = c.get("user")!;
-  const tenant = c.get("tenant");
-  const ip = clientIp(c.req.raw.headers);
-  const limited = rateLimit({
-    key: `import-preview:${user.id}:${ip}`,
-    limit: 20,
-    windowMs: 60 * 60_000,
-  });
-  if (!limited.ok) {
-    c.header("Retry-After", String(limited.retryAfterSec));
-    return c.json({ error: "Too many import requests. Try again later." }, 429);
-  }
-
-  const db = requestDb(c);
-  const sessionUser = c.get("user")!;
-  const verified = Boolean(
-    (await createAuth(c.env).api.getSession({ headers: c.req.raw.headers }))?.user
-      ?.emailVerified ?? sessionUser.role === "demo",
-  );
-  if (!verified && sessionUser.role !== "demo") {
-    return c.json({ error: "Verify your email before importing Timeline data" }, 403);
-  }
-
-  const sub = await withTenant(db, tenant, (tx) => getSubscription(tx, tenant));
-  const entitled =
-    isEntitled(sub, { isDemo: false }) || isStaffRole(sessionUser.role);
-  if (c.env.STRIPE_SECRET_KEY && !entitled) {
-    return c.json({ error: "An active subscription is required to import" }, 402);
-  }
-  const quota = quotaForEntitled(Boolean(c.env.STRIPE_SECRET_KEY) ? entitled : true);
-
-  let form: FormData;
-  try {
-    form = await c.req.formData();
-  } catch {
-    return c.json({ error: "Expected multipart form data with a file" }, 400);
-  }
-  const file = form.get("file");
-  if (!isUploadFile(file)) {
-    return c.json({ error: "file is required (Timeline JSON or zip)" }, 400);
-  }
-
-  const uploaded = await readTimelineUpload(file, quota.maxUploadBytes);
-  if (!uploaded.ok) return c.json({ error: uploaded.error }, uploaded.status);
-
-  let records: unknown;
-  try {
-    records = JSON.parse(uploaded.value.jsonText);
-  } catch {
-    return c.json({ error: "Invalid JSON file" }, 400);
-  }
-
-  const sourceIdField = String(form.get("sourceId") ?? "").trim();
-  let sourceId: string | undefined;
-  if (sourceIdField) {
-    const existing = await withTenant(db, tenant, (tx) => getSourceById(tx, tenant, sourceIdField));
-    if (!existing) return c.json({ error: "Source not found" }, 404);
-    sourceId = existing.id;
-  }
-
-  const chosenPath = uploaded.value.chosenPath
-    ? zipBasename(uploaded.value.chosenPath)
-    : null;
-
-  try {
-    const preview = await withTenant(db, tenant, async (tx) => {
-      const settings = await getUserSettings(tx, tenant);
-      return previewImport(tx, tenant, {
-        records,
-        sourceId,
-        timezone: settings.timezone,
-        chosenPath: uploaded.value.chosenPath,
-        candidates: uploaded.value.candidates,
-      });
-    });
-    return c.json(preview);
-  } catch (err) {
-    return c.json({ error: err instanceof Error ? err.message : "Could not preview file" }, 400);
-  }
-});
-
-app.post("/api/import", async (c) => {
-  const blocked = blockDemo(c.get("user"));
-  if (blocked) return c.json(blocked, 403);
-
-  const user = c.get("user")!;
-  const tenant = c.get("tenant");
-  const ip = clientIp(c.req.raw.headers);
-  const limited = rateLimit({
-    key: `import:${user.id}:${ip}`,
-    limit: 5,
-    windowMs: 60 * 60_000,
-  });
-  if (!limited.ok) {
-    c.header("Retry-After", String(limited.retryAfterSec));
-    return c.json({ error: "Too many import requests. Try again later." }, 429);
-  }
-
-  const db = requestDb(c);
-  const sessionUser = c.get("user")!;
-  const verified = Boolean(
-    (await createAuth(c.env).api.getSession({ headers: c.req.raw.headers }))?.user
-      ?.emailVerified ?? sessionUser.role === "demo",
-  );
-  if (!verified && sessionUser.role !== "demo") {
-    return c.json({ error: "Verify your email before importing Timeline data" }, 403);
-  }
-
-  const sub = await withTenant(db, tenant, (tx) => getSubscription(tx, tenant));
-  const entitled =
-    isEntitled(sub, { isDemo: false }) || isStaffRole(sessionUser.role);
-  if (c.env.STRIPE_SECRET_KEY && !entitled) {
-    return c.json({ error: "An active subscription is required to import" }, 402);
-  }
-  const quota = quotaForEntitled(Boolean(c.env.STRIPE_SECRET_KEY) ? entitled : true);
-
-  const activeImport = await withTenant(db, tenant, (tx) => getActiveImportJob(tx, tenant));
-  if (activeImport) {
-    return c.json({ error: "An import is already running", jobId: activeImport.id }, 409);
-  }
-
-  let form: FormData;
-  try {
-    form = await c.req.formData();
-  } catch {
-    return c.json({ error: "Expected multipart form data with a file" }, 400);
-  }
-
-  const file = form.get("file");
-  if (!isUploadFile(file)) {
-    return c.json({ error: "file is required (Timeline JSON or zip)" }, 400);
-  }
-
-  const uploaded = await readTimelineUpload(file, quota.maxUploadBytes);
-  if (!uploaded.ok) return c.json({ error: uploaded.error }, uploaded.status);
-  const jsonText = uploaded.value.jsonText;
-  const chosenFile = uploaded.value.chosenPath
-    ? zipBasename(uploaded.value.chosenPath)
-    : null;
-
-  const merge = String(form.get("merge") ?? "") === "1" || String(form.get("merge") ?? "") === "true";
-  const skipOverlappingDays =
-    String(form.get("skipOverlappingDays") ?? "") === "1" ||
-    String(form.get("skipOverlappingDays") ?? "") === "true";
-  const sourceIdField = String(form.get("sourceId") ?? "").trim();
-  const labelField = String(form.get("label") ?? "").trim();
-
-  let sourceId: string;
-  let label: string;
-
-  const sources = await withTenant(db, tenant, (tx) => listSources(tx, tenant));
-  if (!sourceIdField && sources.length >= quota.maxSources) {
-    return c.json({ error: "Source limit reached for this plan" }, 403);
-  }
-
-  if (sourceIdField) {
-    const existing = await withTenant(db, tenant, (tx) => getSourceById(tx, tenant, sourceIdField));
-    if (!existing) return c.json({ error: "Source not found" }, 404);
-    sourceId = existing.id;
-    label = existing.label;
-  } else {
-    label = labelField || `Google account ${sources.length + 1}`;
-    const source = await withTenant(db, tenant, (tx) => ensureDataSource(tx, { tenant, label }));
-    sourceId = source.id;
-  }
-
-  const jobId = crypto.randomUUID();
-  const r2Key = `uploads/${user.id}/${jobId}.json`;
-
-  await c.env.UPLOADS.put(r2Key, jsonText, {
-    httpMetadata: { contentType: "application/json" },
-  });
-
-  await withTenant(db, tenant, (tx) =>
-    createImportJob(tx, {
-      id: jobId,
-      tenant,
-      sourceId,
-      userId: user.id,
-      r2Key,
-      status: "pending",
-      merge,
-      chosenFile,
-    }),
-  );
-
-  const message: ImportQueueMessage = {
-    jobId,
-    tenant,
-    userId: user.id,
-    r2Key,
-    sourceId,
-    merge,
-    skipOverlappingDays: merge && skipOverlappingDays,
-  };
-
-  if (c.env.IMPORT_QUEUE) {
-    await c.env.IMPORT_QUEUE.send(message);
-  } else {
-    c.executionCtx.waitUntil(runImportJob(c.env, message));
-  }
-
-  return c.json({ jobId, sourceId, label, chosenFile });
-});
-
 app.get("/api/search", async (c) => {
   const user = c.get("user")!;
   const ip = clientIp(c.req.raw.headers);
@@ -1855,54 +1639,6 @@ async function notifyImportJob(
   }
 }
 
-async function runImportJob(env: Env, message: ImportQueueMessage): Promise<void> {
-  const jobDb = getDb(env);
-  const { jobId, tenant, r2Key, sourceId, merge, skipOverlappingDays } = message;
-  try {
-    await withTenant(jobDb, tenant, (tx) =>
-      updateImportJob(tx, jobId, { status: "processing" }, tenant),
-    );
-    const obj = await env.UPLOADS.get(r2Key);
-    if (!obj) throw new Error("Uploaded file missing from storage");
-    const text = await obj.text();
-    let records: unknown;
-    try {
-      records = JSON.parse(text);
-    } catch {
-      throw new Error("Invalid JSON file");
-    }
-    const parsedCount = countTimelineRecords(records);
-    await withTenant(jobDb, tenant, (tx) =>
-      updateImportJob(tx, jobId, { status: "processing", parsedCount }, tenant),
-    );
-    const result = await withTenant(jobDb, tenant, (tx) =>
-      importSourceData(tx, { tenant, sourceId, records, merge, skipOverlappingDays, aggregates: "mark-stale" }),
-    );
-    await withTenant(jobDb, tenant, (tx) =>
-      updateImportJob(
-        tx,
-        jobId,
-        {
-          status: "ready",
-          visitCount: result.visitCount,
-          activityCount: result.activityCount,
-          parsedCount,
-        },
-        tenant,
-      ),
-    );
-    await notifyImportJob(env, jobDb, tenant, jobId);
-  } catch (err) {
-    const messageText = err instanceof Error ? err.message : String(err);
-    await withTenant(jobDb, tenant, (tx) =>
-      updateImportJob(tx, jobId, { status: "error", error: messageText }, tenant),
-    ).catch(() => undefined);
-    await notifyImportJob(env, jobDb, tenant, jobId).catch(() => undefined);
-  } finally {
-    await env.UPLOADS.delete(r2Key).catch(() => undefined);
-  }
-}
-
 function withAssetSecurityHeaders(
   response: Response,
   env: Env,
@@ -1944,11 +1680,10 @@ export default {
     const asset = await env.ASSETS.fetch(request);
     return withAssetSecurityHeaders(asset, env, request.url);
   },
-  async queue(batch: MessageBatch<ImportQueueMessage>, env: Env): Promise<void> {
-    for (const msg of batch.messages) {
-      await runImportJob(env, msg.body);
-      msg.ack();
-    }
+  // The upload import that fed this queue is gone (imports run in the browser). The
+  // consumer stays while wrangler.toml still binds the queue; it only clears messages.
+  async queue(batch: MessageBatch<unknown>): Promise<void> {
+    batch.ackAll();
   },
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     const jobs: Array<[kind: string, run: () => Promise<unknown>]> = [];

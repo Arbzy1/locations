@@ -46,14 +46,3 @@ export type Env = {
 export function googleAuthEnabled(env: Pick<Env, "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET">): boolean {
   return Boolean(env.GOOGLE_CLIENT_ID?.trim() && env.GOOGLE_CLIENT_SECRET?.trim());
 }
-
-export type ImportQueueMessage = {
-  kind?: "import";
-  jobId: string;
-  tenant: string;
-  userId: string;
-  r2Key: string;
-  sourceId: string;
-  merge?: boolean;
-  skipOverlappingDays?: boolean;
-};

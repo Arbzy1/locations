@@ -19,6 +19,12 @@ vi.mock("@locations/api/services", async () => {
   return factory();
 });
 
+// startImportJob answers 409 (an import is already running), so no database is needed.
+vi.mock("@locations/api/import-session", async () => {
+  const { createImportSessionMock } = await import("@tests/helpers/import-session-mock");
+  return createImportSessionMock();
+});
+
 import { app } from "@locations/api/index";
 import {
   getOverview,
@@ -42,6 +48,13 @@ const env = testEnv();
 async function request(path: string, init?: RequestInit, requestEnv: Env = env) {
   return requestApp(app, path, init, requestEnv);
 }
+
+/** A well-formed browser import start. */
+const importStart: RequestInit = {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ visitCount: 1, activityCount: 0, parsedCount: 1 }),
+};
 
 describe("API auth boundaries", () => {
   beforeEach(() => {
@@ -135,9 +148,9 @@ describe("API auth boundaries", () => {
     expect(removeSource).not.toHaveBeenCalled();
   });
 
-  it("blocks demo users from POST /api/import", async () => {
+  it("blocks demo users from POST /api/import/start", async () => {
     getSession.mockResolvedValue(sessionUser({ role: "demo", id: "demo-1" }));
-    const res = await request("/api/import", { method: "POST" });
+    const res = await request("/api/import/start", importStart);
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({
       error: "Demo accounts cannot import or manage data sources",
@@ -184,7 +197,7 @@ describe("API auth boundaries", () => {
       sessionUser({ id: "user-pay", emailVerified: true, role: "user" }),
     );
     const stripeEnv = { ...env, STRIPE_SECRET_KEY: "sk_test_x" };
-    const res = await request("/api/import", { method: "POST" }, stripeEnv);
+    const res = await request("/api/import/start", importStart, stripeEnv);
     expect(res.status).toBe(402);
     expect(await res.json()).toEqual({
       error: "An active subscription is required to import",
@@ -196,9 +209,9 @@ describe("API auth boundaries", () => {
       sessionUser({ id: "user-admin", emailVerified: true, role: "admin" }),
     );
     const stripeEnv = { ...env, STRIPE_SECRET_KEY: "sk_test_x" };
-    const res = await request("/api/import", { method: "POST" }, stripeEnv);
+    const res = await request("/api/import/start", importStart, stripeEnv);
     expect(res.status).not.toBe(402);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
   });
 
   it("skips the Stripe import gate for developer", async () => {
@@ -210,9 +223,9 @@ describe("API auth boundaries", () => {
       }),
     );
     const stripeEnv = { ...env, STRIPE_SECRET_KEY: "sk_test_x" };
-    const res = await request("/api/import", { method: "POST" }, stripeEnv);
+    const res = await request("/api/import/start", importStart, stripeEnv);
     expect(res.status).not.toBe(402);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
   });
 
   it("marks staff entitled on /api/me without a subscription", async () => {
