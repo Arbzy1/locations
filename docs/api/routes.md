@@ -62,8 +62,6 @@ All other `/api/*` require a session.
 | GET | `/api/sources` | |
 | PATCH/DELETE | `/api/sources/:id` | not demo; PATCH `label` and/or allowlisted `color` |
 | GET | `/api/import/status` | includes `chosenFile`, `timezoneWarning` |
-| POST | `/api/import/preview` | not demo; entitlement; no R2 |
-| POST | `/api/import` | not demo; entitlement; `merge`, `skipOverlappingDays`; 409 if an import is already running |
 | GET | `/api/import/existing` | not demo; days and stay count already stored for `sourceId` (404 if not the tenant's) |
 | POST | `/api/import/start` | not demo; verified; entitlement; row and source quotas; opens a browser import job; 409 if one is running |
 | POST | `/api/import/:jobId/rows` | not demo; validated batch of up to 250 rows / 256 KB; 404 unless the tenant's open job |

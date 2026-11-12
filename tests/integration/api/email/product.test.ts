@@ -1,12 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requestApp, sessionUser } from "@tests/helpers/api-app";
-import { testEnv } from "@tests/helpers/env";
-import {
-  parseResendCall,
-  queueMessage,
-  stubResendFetch,
-} from "@tests/helpers/vendors";
-import type { ImportQueueMessage } from "@locations/api/env";
+import { testEnv, testExecutionCtx } from "@tests/helpers/env";
+import { flushWaitUntil, parseResendCall, stubResendFetch } from "@tests/helpers/vendors";
+import type { Env } from "@locations/api/env";
 
 const getSession = vi.fn();
 
@@ -22,18 +18,29 @@ vi.mock("@locations/api/services", async () => {
   return createServicesMock();
 });
 
-import worker, { app } from "@locations/api/index";
-import {
-  emailForTenant,
-  getImportJob,
-  importSourceData,
-  updateImportJob,
-  wipeTenantData,
-} from "@locations/api/services";
-
-const r2Object = (text: string) => ({
-  text: async () => text,
+vi.mock("@locations/api/import-session", async () => {
+  const { createImportSessionMock } = await import("@tests/helpers/import-session-mock");
+  return createImportSessionMock();
 });
+
+import { app } from "@locations/api/index";
+import { emailForTenant, getImportJob, updateImportJob, wipeTenantData } from "@locations/api/services";
+import { openImportJob } from "@locations/api/import-session";
+
+/** Finish a browser import and wait for the notification the route sends afterwards. */
+async function finishImport(env: Env, jobId: string) {
+  vi.mocked(openImportJob).mockResolvedValue({ id: jobId, sourceId: "src-1", status: "processing" } as never);
+  const ctx = testExecutionCtx();
+  const res = await requestApp(
+    app,
+    `/api/import/${jobId}/finish`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+    env,
+    ctx,
+  );
+  await flushWaitUntil(ctx);
+  return res;
+}
 
 describe("product emails", () => {
   beforeEach(() => {
@@ -42,7 +49,7 @@ describe("product emails", () => {
     vi.mocked(emailForTenant).mockReset();
     vi.mocked(getImportJob).mockReset();
     vi.mocked(updateImportJob).mockReset();
-    vi.mocked(importSourceData).mockReset();
+    vi.mocked(openImportJob).mockReset();
     vi.mocked(emailForTenant).mockResolvedValue({ email: "a@example.com", role: "user" });
   });
 
@@ -77,100 +84,54 @@ describe("product emails", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("sends import_ready with counts only after a successful queue job", async () => {
+  it("sends import_ready with counts only after a browser import finishes", async () => {
     const fetchMock = stubResendFetch();
+    getSession.mockResolvedValue(sessionUser({ id: "user-a", email: "a@example.com" }));
     const env = testEnv({ RESEND_API_KEY: "re_test" });
-    vi.mocked(env.UPLOADS.get).mockResolvedValue(
-      r2Object(JSON.stringify([{ visit: {} }])) as never,
-    );
-    vi.mocked(importSourceData).mockResolvedValue({ visitCount: 12, activityCount: 4 } as never);
     vi.mocked(getImportJob).mockResolvedValue({
       status: "ready",
       notifiedAt: null,
       visitCount: 12,
       activityCount: 4,
     } as never);
-    const msg = queueMessage<ImportQueueMessage>({
-      jobId: "job-1",
-      tenant: "user-a",
-      userId: "user-a",
-      r2Key: "uploads/user-a/job-1.json",
-      sourceId: "src-1",
-    });
-    await worker.queue({ messages: [msg] } as never, env);
+    const res = await finishImport(env, "job-1");
+    expect(res.status).toBe(200);
     const { body, headers } = parseResendCall(fetchMock);
     expect(body.tags[0].value).toBe("import_ready");
     expect(body.text).toContain("12 visits");
     expect(body.text).toContain("4 journeys");
     expect(body.text).not.toMatch(/40\.7|-74/);
     expect(headers["Idempotency-Key"]).toBe("import:job-1");
-    expect(env.UPLOADS.delete).toHaveBeenCalledWith("uploads/user-a/job-1.json");
     expect(updateImportJob).toHaveBeenCalledWith(
       expect.anything(),
       "job-1",
       expect.objectContaining({ notifiedAt: expect.any(Date) }),
       "user-a",
     );
-    expect(msg.ack).toHaveBeenCalled();
-  });
-
-  it("sends import_failed when the uploaded object is missing", async () => {
-    const fetchMock = stubResendFetch();
-    const env = testEnv({ RESEND_API_KEY: "re_test" });
-    vi.mocked(env.UPLOADS.get).mockResolvedValue(null);
-    vi.mocked(getImportJob).mockResolvedValue({
-      status: "error",
-      notifiedAt: null,
-    } as never);
-    const msg = queueMessage<ImportQueueMessage>({
-      jobId: "job-miss",
-      tenant: "user-a",
-      userId: "user-a",
-      r2Key: "uploads/user-a/job-miss.json",
-      sourceId: "src-1",
-    });
-    await worker.queue({ messages: [msg] } as never, env);
-    expect(parseResendCall(fetchMock).body.tags[0].value).toBe("import_failed");
-    expect(env.UPLOADS.delete).toHaveBeenCalledWith("uploads/user-a/job-miss.json");
-    expect(msg.ack).toHaveBeenCalled();
   });
 
   it("does not mark notifiedAt when Resend returns 500", async () => {
     stubResendFetch({ status: 500, body: "down" });
+    getSession.mockResolvedValue(sessionUser({ id: "user-a", email: "a@example.com" }));
     const env = testEnv({ RESEND_API_KEY: "re_test" });
-    vi.mocked(env.UPLOADS.get).mockResolvedValue(r2Object("[]") as never);
-    vi.mocked(importSourceData).mockResolvedValue({ visitCount: 1, activityCount: 0 } as never);
     vi.mocked(getImportJob).mockResolvedValue({
       status: "ready",
       notifiedAt: null,
       visitCount: 1,
       activityCount: 0,
     } as never);
-    await worker.queue(
-      {
-        messages: [
-          queueMessage<ImportQueueMessage>({
-            jobId: "job-fail-mail",
-            tenant: "user-a",
-            userId: "user-a",
-            r2Key: "uploads/user-a/job-fail-mail.json",
-            sourceId: "src-1",
-          }),
-        ],
-      } as never,
-      env,
-    );
+    await finishImport(env, "job-fail-mail");
     expect(updateImportJob).not.toHaveBeenCalledWith(
       expect.anything(),
       "job-fail-mail",
       expect.objectContaining({ notifiedAt: expect.anything() }),
       "user-a",
     );
-    expect(env.UPLOADS.delete).toHaveBeenCalled();
   });
 
   it("skips import mail for demo recipients", async () => {
     const fetchMock = stubResendFetch();
+    getSession.mockResolvedValue(sessionUser({ id: "user-a", email: "a@example.com" }));
     vi.mocked(emailForTenant).mockResolvedValue({
       email: "demo@locations.app",
       role: "demo",
@@ -179,28 +140,13 @@ describe("product emails", () => {
       RESEND_API_KEY: "re_test",
       DEMO_EMAIL: "demo@locations.app",
     });
-    vi.mocked(env.UPLOADS.get).mockResolvedValue(r2Object("[]") as never);
-    vi.mocked(importSourceData).mockResolvedValue({ visitCount: 1, activityCount: 0 } as never);
     vi.mocked(getImportJob).mockResolvedValue({
       status: "ready",
       notifiedAt: null,
       visitCount: 1,
       activityCount: 0,
     } as never);
-    await worker.queue(
-      {
-        messages: [
-          queueMessage<ImportQueueMessage>({
-            jobId: "job-demo",
-            tenant: "demo",
-            userId: "demo-1",
-            r2Key: "uploads/demo-1/job-demo.json",
-            sourceId: "src-1",
-          }),
-        ],
-      } as never,
-      env,
-    );
+    await finishImport(env, "job-demo");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

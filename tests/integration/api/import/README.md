@@ -1,1 +1,1 @@
-Put `app.request()` tests for `/api/import` (401, demo 403, entitlement 402, R2 put, queue / waitUntil, owner happy path) here.
+Put `app.request()` tests for import-adjacent routes here (route warming). Browser import routes (`/api/import/start`, `/rows`, `/finish`) are tested in `../import-session/`.
