@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { stream } from "hono/streaming";
+import { HTTPException } from "hono/http-exception";
 import { endTime, startTime, timing, type TimingVariables } from "hono/timing";
 import {
   tenantForUser,
@@ -154,6 +155,28 @@ type Variables = {
 type AppEnv = { Bindings: Env; Variables: Variables & TimingVariables };
 
 export const app = new Hono<AppEnv>();
+
+/**
+ * Last-resort handler for anything a route did not catch. The client gets a generic
+ * message and a request id; the log gets the route pattern and the error's class name
+ * only. Never the message, stack, path or query: Postgres errors can carry bound
+ * parameters (coordinates, place names), and paths can carry place keys.
+ */
+app.onError((err, c) => {
+  if (err instanceof HTTPException) return err.getResponse();
+  const requestId = c.req.header("cf-ray") ?? crypto.randomUUID();
+  console.error(
+    JSON.stringify({
+      kind: "api_error",
+      ok: false,
+      requestId,
+      method: c.req.method,
+      route: c.req.routePath,
+      error: err instanceof Error ? err.name : "unknown",
+    }),
+  );
+  return c.json({ error: "Something went wrong. Try again in a moment.", requestId }, 500);
+});
 
 /**
  * Pool-backed DB for this request; the pool is closed after the response. One pool
@@ -461,6 +484,7 @@ app.get("/api/days", async (c) => {
 
 app.get("/api/day/:date", async (c) => {
   const date = c.req.param("date");
+  if (!ISO_DATE.test(date)) return c.json({ error: "date must be YYYY-MM-DD" }, 400);
   const tenant = c.get("tenant");
   const sourceIds = parseSourceIds(c.req.query("sources"));
   // compare=1 also fetches the OSRM-predicted route for each journey.
@@ -532,12 +556,17 @@ app.get("/api/heatmap", async (c) => {
   const db = requestDb(c);
   const tenant = c.get("tenant");
   const sources = c.req.query("sources");
+  const from = c.req.query("from") || undefined;
+  const to = c.req.query("to") || undefined;
+  if ((from && !ISO_DATE.test(from)) || (to && !ISO_DATE.test(to))) {
+    return c.json({ error: "from and to must be YYYY-MM-DD" }, 400);
+  }
   const points = await timed(c, "db", () =>
     withTenant(db, tenant, (tx) =>
       getHeatmap(tx, tenant, {
         sourceIds: sources ? sources.split(",").filter(Boolean) : undefined,
-        from: c.req.query("from") || undefined,
-        to: c.req.query("to") || undefined,
+        from,
+        to,
       }),
     ),
   );
@@ -1238,6 +1267,7 @@ app.get("/api/on-this-day", async (c) => {
   const tenant = c.get("tenant");
   // The client sends its local date so "today" matches the user's calendar.
   const date = (c.req.query("date") ?? new Date().toISOString().slice(0, 10)).trim();
+  if (!ISO_DATE.test(date)) return c.json({ error: "date must be YYYY-MM-DD" }, 400);
   const result = await withTenant(db, tenant, (tx) => getOnThisDay(tx, tenant, { date }));
   if (isErrorResult(result)) return c.json(result, 400);
   return c.json(result);
@@ -1272,7 +1302,9 @@ app.get("/api/export/:format", async (c) => {
   // Home is guessed from all of the range's stays, before anything is blurred.
   const data =
     c.req.query("blur_home") === "1" ? blurHome(result, guessHomePlace(result.visits)) : result;
-  const span = [c.req.query("from"), c.req.query("to")].filter(Boolean).join("_to_") || "all";
+  // Only well-formed dates reach the download filename (it is a response header).
+  const span =
+    [c.req.query("from"), c.req.query("to")].filter((d): d is string => !!d && ISO_DATE.test(d)).join("_to_") || "all";
   const name = `locations-${span}`;
   if (format === "gpx") {
     c.header("Content-Type", "application/gpx+xml; charset=utf-8");
