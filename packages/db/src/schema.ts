@@ -195,6 +195,8 @@ export const visits = pgTable(
     placeKey: text("place_key"),
     /** Google's name for the place, when the export includes one (older Takeout). */
     googleName: text("google_name"),
+    /** Browser import that wrote this row; lets a replace keep old rows until it finishes. */
+    importJobId: text("import_job_id"),
   },
   (t) => [
     index("visits_tenant_date_idx").on(t.tenant, t.date),
@@ -228,6 +230,8 @@ export const activities = pgTable(
     modeDetail: jsonb("mode_detail").$type<ModeDetection>(),
     /** Line along the railway between the fixes, for detected or labelled trains. */
     railGeometry: jsonb("rail_geometry").$type<[number, number][]>(),
+    /** Browser import that wrote this row; lets a replace keep old rows until it finishes. */
+    importJobId: text("import_job_id"),
   },
   (t) => [
     index("activities_tenant_date_idx").on(t.tenant, t.date),

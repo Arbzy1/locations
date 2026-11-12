@@ -306,8 +306,9 @@ export async function existingImportDays(db: Db, tenant: TenantId, sourceId?: st
 }
 
 /**
- * Open a browser import: resolve or create the source, clear it unless merging, and
- * create a processing job. Returns an HTTP-ish status for the route.
+ * Open a browser import: resolve or create the source and create a processing job.
+ * A replace keeps the source's old rows until finishImportJob, so an import that
+ * never finishes loses nothing. Returns an HTTP-ish status for the route.
  */
 export async function startImportJob(
   db: Db,
@@ -324,7 +325,7 @@ export async function startImportJob(
 ): Promise<{ status: 200; jobId: string; sourceId: string; label: string } | { status: 403 | 404 | 409 }> {
   // A job that has not moved for 15 minutes died (e.g. an old upload killed by the CPU
   // limit, or a closed tab); fail it so it cannot block a new import forever.
-  await db
+  const stale = await db
     .update(importJobs)
     .set({ status: "error", error: "Import stopped without finishing. Upload the file again.", updatedAt: new Date() })
     .where(
@@ -333,7 +334,9 @@ export async function startImportJob(
         sql`${importJobs.status} in ('pending', 'processing')`,
         sql`${importJobs.updatedAt} < now() - interval '15 minutes'`,
       ),
-    );
+    )
+    .returning({ id: importJobs.id, sourceId: importJobs.sourceId });
+  for (const job of stale) await discardImportJobRows(db, tenant, job);
   const [active] = await db
     .select({ id: importJobs.id })
     .from(importJobs)
@@ -361,11 +364,6 @@ export async function startImportJob(
     label = opts.label || `Google account ${n + 1}`;
     sourceId = (await ensureDataSource(db, { tenant, label })).id;
   }
-  // Replace: clear this source now; rows then arrive in batches.
-  if (!opts.merge) {
-    await db.delete(visits).where(and(eq(visits.tenant, tenant), eq(visits.sourceId, sourceId)));
-    await db.delete(activities).where(and(eq(activities.tenant, tenant), eq(activities.sourceId, sourceId)));
-  }
   const jobId = crypto.randomUUID();
   const now = new Date();
   await db.insert(importJobs).values({
@@ -384,6 +382,21 @@ export async function startImportJob(
     updatedAt: now,
   });
   return { status: 200, jobId, sourceId, label };
+}
+
+/**
+ * Remove the rows a failed or abandoned import wrote, so a retry does not duplicate
+ * them. Rows from finished imports and older rows (no job id) are untouched.
+ */
+export async function discardImportJobRows(db: Db, tenant: TenantId, job: { id: string; sourceId: string }) {
+  await db
+    .delete(visits)
+    .where(and(eq(visits.tenant, tenant), eq(visits.sourceId, job.sourceId), eq(visits.importJobId, job.id)));
+  await db
+    .delete(activities)
+    .where(
+      and(eq(activities.tenant, tenant), eq(activities.sourceId, job.sourceId), eq(activities.importJobId, job.id)),
+    );
 }
 
 /** A job this tenant owns that is still accepting rows, else null (route answers 404). */
@@ -408,9 +421,10 @@ export async function appendImportRows(
   if (rows.visits.length) {
     await db.execute(sql`
       insert into visits (tenant, source_id, start, "end", date, lat, lon, cluster, semantic_type, place_id,
-        duration_minutes, fix_lat, fix_lon, fix_count, place_key, google_name)
+        duration_minutes, fix_lat, fix_lon, fix_count, place_key, google_name, import_job_id)
       select ${tenant}, ${job.sourceId}, x.start, x."end", x.date, x.lat, x.lon, x.cluster, x."semanticType",
-        x."placeId", x."durationMinutes", x."fixLat", x."fixLon", x."fixCount", x."placeKey", x."googleName"
+        x."placeId", x."durationMinutes", x."fixLat", x."fixLon", x."fixCount", x."placeKey", x."googleName",
+        ${job.id}
       from jsonb_to_recordset(${JSON.stringify(rows.visits)}::jsonb) as x(
         start text, "end" text, date text, lat real, lon real, cluster text, "semanticType" text, "placeId" text,
         "durationMinutes" real, "fixLat" real, "fixLon" real, "fixCount" integer, "placeKey" text, "googleName" text)`);
@@ -418,9 +432,10 @@ export async function appendImportRows(
   if (rows.activities.length) {
     await db.execute(sql`
       insert into activities (tenant, source_id, start, "end", date, start_lat, start_lon, end_lat, end_lon, mode,
-        distance_meters, duration_minutes, path, google_mode, mode_detail, rail_geometry)
+        distance_meters, duration_minutes, path, google_mode, mode_detail, rail_geometry, import_job_id)
       select ${tenant}, ${job.sourceId}, x.start, x."end", x.date, x."startLat", x."startLon", x."endLat", x."endLon",
-        x.mode, x."distanceMeters", x."durationMinutes", x.path, x."googleMode", x."modeDetail", x."railGeometry"
+        x.mode, x."distanceMeters", x."durationMinutes", x.path, x."googleMode", x."modeDetail", x."railGeometry",
+        ${job.id}
       from jsonb_to_recordset(${JSON.stringify(rows.activities)}::jsonb) as x(
         start text, "end" text, date text, "startLat" real, "startLon" real, "endLat" real, "endLon" real, mode text,
         "distanceMeters" real, "durationMinutes" real, path jsonb, "googleMode" text, "modeDetail" jsonb,
@@ -436,13 +451,40 @@ export async function appendImportRows(
     .where(and(eq(importJobs.tenant, tenant), eq(importJobs.id, job.id)));
 }
 
-/** Finish: Google's trips become named trips, aggregates are flagged, the job is ready. */
+/**
+ * Finish: a replace swaps out the source's old rows, Google's trips become named trips,
+ * aggregates are flagged, the job is ready. Runs inside the caller's transaction, so the
+ * swap and the status change land together.
+ */
 export async function finishImportJob(
   db: Db,
   tenant: TenantId,
-  job: { id: string; sourceId: string },
+  job: { id: string; sourceId: string; merge?: boolean; visitCount?: number | null; activityCount?: number | null },
   memories: TimelineMemory[],
 ) {
+  // Replace: drop everything in this source that this job did not write. Skipped when
+  // the job stored nothing, so an empty upload cannot wipe a source.
+  const stored = (job.visitCount ?? 0) + (job.activityCount ?? 0);
+  if (job.merge === false && stored > 0) {
+    await db
+      .delete(visits)
+      .where(
+        and(
+          eq(visits.tenant, tenant),
+          eq(visits.sourceId, job.sourceId),
+          sql`${visits.importJobId} is distinct from ${job.id}`,
+        ),
+      );
+    await db
+      .delete(activities)
+      .where(
+        and(
+          eq(activities.tenant, tenant),
+          eq(activities.sourceId, job.sourceId),
+          sql`${activities.importJobId} is distinct from ${job.id}`,
+        ),
+      );
+  }
   const trips = namedTripsFromMemories(memories, job.sourceId);
   for (let i = 0; i < trips.length; i += 200) {
     await db
