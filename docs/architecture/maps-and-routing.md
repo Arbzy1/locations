@@ -8,7 +8,7 @@ Env (Worker secrets/vars):
 - `MAP_STYLE_DARK_URL` / `MAP_STYLE_LIGHT_URL` (optional vector style JSON URLs; enables 3D buildings)
 - `MAP_CUSTOM_TILE_HOSTS` (comma-separated hostnames; empty disables Settings custom tiles)
 - `MAP_TILE_ATTR`
-- `OSRM_BASE` (self-hosted or paid routing; public OSRM is local-dev fallback)
+- `OSRM_BASE` (self-hosted or paid routing; public OSRM is local-dev fallback). Set it to the server root, for example `https://osrm.example.com`. The explorer, journey cost and the admin probe all read it through `osrmRoot` (`apps/api/src/osrm-base.ts`), which also accepts the older `.../route/v1` form.
 - `GEOCODE_BASE` (Nominatim-compatible reverse geocode; public Nominatim is local-dev fallback)
 
 Keys never go in `VITE_*`. The SPA reads tile and style URLs from `GET /api/config` (non-secret URL templates only). Vector style stays env-only; users cannot paste a style JSON URL.

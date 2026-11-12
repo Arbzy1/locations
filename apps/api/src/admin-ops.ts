@@ -37,6 +37,7 @@ import {
   updateImportJob,
   wipeTenantData,
 } from "./services";
+import { osrmRoot } from "./osrm-base";
 import {
   EMAIL_TEST_KINDS,
   lastAdminDemoteBlocked,
@@ -1058,7 +1059,7 @@ function tileProbeUrl(template?: string): string | null {
 }
 
 export async function getOpsMapsProbe(env: Env): Promise<{ probes: ProbeResult[] }> {
-  const osrm = env.OSRM_BASE?.replace(/\/$/, "") ?? "";
+  const osrm = osrmRoot(env.OSRM_BASE) ?? "";
   const geocode = env.GEOCODE_BASE?.replace(/\/$/, "") ?? "";
   const probes = await Promise.all([
     probeUrl("tiles", tileProbeUrl(env.MAP_TILE_DARK_URL || env.MAP_TILE_LIGHT_URL)),
