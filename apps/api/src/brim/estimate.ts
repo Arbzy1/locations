@@ -26,6 +26,7 @@ import {
   routeCacheKey,
 } from '@locations/brim/routing';
 import type { Context } from 'hono';
+import { osrmRoot } from '../osrm-base';
 import { createLogger } from './logger';
 import { NeonRouteCache } from './db/route-cache';
 import { getDefaultTariff, getCalibration, getVehicle, ytdMiles } from './db/repo';
@@ -152,7 +153,7 @@ async function estimateFromBody(c: BrimContext, raw: unknown) {
   const chosen = chooseProvider({
     fixtureMode: isFixtureMode(c.env.BRIM_FIXTURES),
     googleKey: c.env.GOOGLE_MAPS_API_KEY,
-    osrmUrl: c.env.OSRM_BASE,
+    osrmUrl: osrmRoot(c.env.OSRM_BASE),
     spentUsd: Number(c.env.ROUTING_SPENT_USD ?? 0),
     ceilingUsd: Number(c.env.ROUTING_CEILING_USD ?? 50),
     hasVehicleProfile: hasProfile,

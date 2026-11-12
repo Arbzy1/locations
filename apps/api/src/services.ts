@@ -78,6 +78,7 @@ import {
   parseTimelineJson,
   timezoneSkewWarning,
 } from "@locations/db/timeline-import";
+import { osrmRoot } from "./osrm-base";
 import type { Env } from "./env";
 
 const OSRM_BASE_DEFAULT = "https://router.project-osrm.org/route/v1";
@@ -94,7 +95,8 @@ let OSRM_BASE = OSRM_BASE_DEFAULT;
 let NOMINATIM = NOMINATIM_DEFAULT;
 
 export function configureGeoEndpoints(env: { OSRM_BASE?: string; GEOCODE_BASE?: string }) {
-  OSRM_BASE = env.OSRM_BASE || OSRM_BASE_DEFAULT;
+  const root = osrmRoot(env.OSRM_BASE);
+  OSRM_BASE = root ? `${root}/route/v1` : OSRM_BASE_DEFAULT;
   NOMINATIM = env.GEOCODE_BASE || NOMINATIM_DEFAULT;
 }
 
