@@ -1633,6 +1633,10 @@ app.post("/api/account/delete", async (c) => {
   await deleteR2Prefix(c.env.UPLOADS, `exports/${user.id}/`);
   const stripe = await stripeClient(c.env);
   const sub = await withTenant(db, tenant, (tx) => getSubscription(tx, tenant));
+  // Wipe the database before touching Stripe or sending the email. If the wipe
+  // fails, the account is intact and the user can try again; nothing has been
+  // cancelled and no "account deleted" email has gone out for a live account.
+  await withTenant(db, tenant, (tx) => wipeTenantData(tx, tenant, user.id, user.email));
   if (stripe && sub?.stripeCustomerId) {
     await stripe.customers.del(sub.stripeCustomerId).catch(() => undefined);
   }
@@ -1640,8 +1644,7 @@ app.post("/api/account/delete", async (c) => {
     kind: "account_deleted",
     to: user.email,
     role: user.role,
-  });
-  await withTenant(db, tenant, (tx) => wipeTenantData(tx, tenant, user.id, user.email));
+  }).catch(() => undefined);
   return c.json({ ok: true });
 });
 

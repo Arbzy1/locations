@@ -114,4 +114,30 @@ describe("POST /api/account/delete", () => {
     expect(res.status).toBe(200);
     expect(wipeTenantData).toHaveBeenCalled();
   });
+
+  it("leaves the Stripe customer alone when the database wipe fails", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a", email: "a@example.com" }));
+    vi.mocked(getSubscription).mockResolvedValue({
+      stripeCustomerId: "cus_1",
+    } as never);
+    vi.mocked(wipeTenantData).mockRejectedValue(new Error("db down"));
+    const billed = testEnv({ STRIPE_SECRET_KEY: "sk_test" });
+    vi.mocked(billed.UPLOADS.list).mockResolvedValue({ objects: [], truncated: false } as never);
+    const res = await request("/api/account/delete", { method: "POST" }, billed);
+    expect(res.status).toBe(500);
+    expect(stripe.customers.del).not.toHaveBeenCalled();
+  });
+
+  it("wipes the database before deleting the Stripe customer", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a", email: "a@example.com" }));
+    vi.mocked(getSubscription).mockResolvedValue({
+      stripeCustomerId: "cus_1",
+    } as never);
+    const billed = testEnv({ STRIPE_SECRET_KEY: "sk_test" });
+    vi.mocked(billed.UPLOADS.list).mockResolvedValue({ objects: [], truncated: false } as never);
+    await request("/api/account/delete", { method: "POST" }, billed);
+    const wipedAt = vi.mocked(wipeTenantData).mock.invocationCallOrder[0];
+    const stripeAt = stripe.customers.del.mock.invocationCallOrder[0];
+    expect(wipedAt).toBeLessThan(stripeAt);
+  });
 });
