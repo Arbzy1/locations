@@ -12,7 +12,10 @@ import {
   brimSettings as ownerSettings,
   brimTariffs as tariffs,
   brimVehicles as vehicles,
+  opsFlags,
+  sql,
 } from "@locations/db";
+import { routingSpendKey } from "@locations/brim/routing";
 import type {
   CalibrationRow,
   FillUpRow,
@@ -743,4 +746,34 @@ export async function getDefaultTariff(
 ): Promise<TariffRow | undefined> {
   const all = await listTariffs(db, ownerId, vehicleId);
   return all.find((t) => t.is_default) ?? all[0];
+}
+
+/**
+ * Estimated Google routing spend this calendar month (UTC), in USD. Kept in `ops_flags`
+ * (shared, no personal data) under a per-month key, so the guard resets each month.
+ */
+export async function getRoutingSpendUsd(db: BrimDb, now: Date = new Date()): Promise<number> {
+  const rows = await db.db
+    .select({ value: opsFlags.value })
+    .from(opsFlags)
+    .where(eq(opsFlags.key, routingSpendKey(now)))
+    .limit(1);
+  const spent = Number(rows[0]?.value ?? 0);
+  return Number.isFinite(spent) && spent > 0 ? spent : 0;
+}
+
+/** Add one paid request's estimated cost to this month's total (atomic in Postgres). */
+export async function addRoutingSpendUsd(db: BrimDb, usd: number, now: Date = new Date()): Promise<void> {
+  if (!(usd > 0)) return;
+  await db.db
+    .insert(opsFlags)
+    .values({ key: routingSpendKey(now), value: String(usd), updatedAt: now, updatedBy: "system" })
+    .onConflictDoUpdate({
+      target: opsFlags.key,
+      set: {
+        value: sql`(${opsFlags.value}::numeric + ${usd}::numeric)::text`,
+        updatedAt: now,
+        updatedBy: "system",
+      },
+    });
 }

@@ -46,7 +46,7 @@ All routes are under `/api/brim/*`, behind the normal session middleware. See [r
 | Key | Kind | Purpose |
 |-----|------|---------|
 | `GOOGLE_MAPS_API_KEY` | secret | Google Routes and Places. Without it, routing falls back to `OSRM_BASE`. |
-| `ROUTING_CEILING_USD`, `ROUTING_SPENT_USD` | wrangler var | Spend guard: past the ceiling, routing fails over to OSRM. |
+| `ROUTING_CEILING_USD`, `ROUTING_SPENT_USD` | wrangler var | Spend guard: past the monthly ceiling, routing fails over to OSRM. Each billable Google Routes request adds an estimated cost (`ROUTE_COST_USD`) to a per-month total in `ops_flags` (`routing_spend:YYYY-MM`); cache hits add nothing. `ROUTING_SPENT_USD` is a manual floor: set it at or above the ceiling to force OSRM. If the total cannot be read, the ceiling is treated as reached. Google Places (address search) calls are not counted. |
 | `DVLA_VES_API_KEY` | secret | Registration lookup. Missing outside fixture mode: lookup returns 503. |
 | `VRM_ENCRYPTION_KEY` | secret | 32 random bytes, base64. Encrypts stored plates. Missing: cars save without a plate. |
 | `FUEL_FINDER_CLIENT_ID`, `FUEL_FINDER_CLIENT_SECRET` | secret | Forecourt price sync. Missing: the cron only syncs carbon intensity. |
