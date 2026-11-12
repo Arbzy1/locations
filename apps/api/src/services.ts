@@ -20,6 +20,9 @@ import {
   subscriptions,
   brimSettings,
   brimVehicles,
+  brimTariffs,
+  brimCalibrations,
+  brimFillUps,
   brimJourneys,
   brimSavedPlaces,
   user,
@@ -2787,12 +2790,19 @@ export async function wipeTenantData(
   await db.delete(placeLabels).where(eq(placeLabels.tenant, tenant));
   await db.delete(namedTrips).where(eq(namedTrips.tenant, tenant));
   await db.delete(lifeChapters).where(eq(lifeChapters.tenant, tenant));
+  // Notes and transport-mode fixes the user made on their timeline.
+  await db.delete(timelineOverrides).where(eq(timelineOverrides.tenant, tenant));
   await db.delete(userSettings).where(eq(userSettings.tenant, tenant));
   await db.delete(subscriptions).where(eq(subscriptions.tenant, tenant));
   await db.delete(brimSettings).where(eq(brimSettings.tenant, tenant));
   await db.delete(brimJourneys).where(eq(brimJourneys.tenant, tenant));
   await db.delete(brimSavedPlaces).where(eq(brimSavedPlaces.tenant, tenant));
-  // Journey cost tariffs, fill-ups, and calibrations cascade from brim_vehicles.
+  // These also cascade from brim_vehicles; deleting by tenant removes any row
+  // whose vehicle is already gone and keeps every tenant table listed here
+  // (tests/unit/api/account/wipe-tenant.test.ts checks the list is complete).
+  await db.delete(brimTariffs).where(eq(brimTariffs.tenant, tenant));
+  await db.delete(brimCalibrations).where(eq(brimCalibrations.tenant, tenant));
+  await db.delete(brimFillUps).where(eq(brimFillUps.tenant, tenant));
   await db.delete(brimVehicles).where(eq(brimVehicles.tenant, tenant));
   if (email) {
     await db.delete(verification).where(eq(verification.identifier, email));
