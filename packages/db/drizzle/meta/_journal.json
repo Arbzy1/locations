@@ -159,5 +159,12 @@
     "when": 1755280000000,
     "tag": "0022_activity_mode_detection",
     "breakpoints": true
+  },
+  {
+    "idx": 23,
+    "version": "7",
+    "when": 1755284000000,
+    "tag": "0023_import_job_rows",
+    "breakpoints": true
   }
 ]

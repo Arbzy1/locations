@@ -6,12 +6,12 @@ The Worker runs on the Cloudflare free plan: 10 ms of CPU per request. Parsing a
 
 1. The browser parses the file (or Takeout zip, same bounds as the server) in a Web Worker (`apps/web/src/lib/import/import.worker.ts`) with the shared pure code in `@locations/db/pure` (`timeline-parse.ts`, `aggregates.ts`, `takeout-zip.ts`).
 2. Preview is computed locally; `GET /api/import/existing?sourceId=` supplies the days already stored for overlap and skip-overlap.
-3. `POST /api/import/start` (not demo, verified, entitlement, one active job, `maxSources`, `maxImportRows`) resolves or creates the source, clears it unless merging, and opens a `processing` job.
-4. `POST /api/import/:jobId/rows` stores batches of at most 250 rows and 256 KB (the browser aims for 120 KB). Rows are validated field by field (`checkRowBatch`), then inserted with one `jsonb_to_recordset` statement, about 1 to 2 ms of CPU. Tenant and source come from the session and job, never the body. Unknown or other tenants' jobs are 404.
-5. `POST /api/import/:jobId/finish` stores Google's `timelineMemory` trips as named trips, marks aggregates stale and the job ready, and sends `import_ready`.
+3. `POST /api/import/start` (not demo, verified, entitlement, one active job, `maxSources`, `maxImportRows`) resolves or creates the source and opens a `processing` job. A replace does not clear the source yet.
+4. `POST /api/import/:jobId/rows` stores batches of at most 250 rows and 256 KB (the browser aims for 120 KB). Rows are validated field by field (`checkRowBatch`), then inserted with one `jsonb_to_recordset` statement, about 1 to 2 ms of CPU. Each row is tagged with the job (`import_job_id`). Tenant and source come from the session and job, never the body. Unknown or other tenants' jobs are 404.
+5. `POST /api/import/:jobId/finish` (one transaction) deletes the source's rows that this job did not write when replacing, stores Google's `timelineMemory` trips as named trips, marks aggregates stale and the job ready, and sends `import_ready`.
 6. The browser rebuilds aggregates (below).
 
-Closing the tab mid-import leaves a partial source; the job goes stale after 15 minutes and re-importing replaces it.
+Closing the tab mid-import loses nothing: the old rows are still there. The job goes stale after 15 minutes, and the rows it had uploaded are removed the next time the app checks import status or starts an import (`discardImportJobRows`). Until then that source shows the old rows plus the partial upload.
 
 ## Aggregates rebuilt by the browser
 

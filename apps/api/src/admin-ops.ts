@@ -38,6 +38,7 @@ import {
   wipeTenantData,
 } from "./services";
 import { osrmRoot } from "./osrm-base";
+import { discardImportJobRows } from "./import-session";
 import {
   EMAIL_TEST_KINDS,
   lastAdminDemoteBlocked,
@@ -951,6 +952,7 @@ export async function failOpsImportJob(
       return { error: "Job is not stuck" as const };
     }
     await updateImportJob(tx, jobId, { status: "error", error: "Cancelled by staff (stuck)" }, tenant);
+    await discardImportJobRows(tx, tenant, { id: job.id, sourceId: job.sourceId });
     return { r2Key: job.r2Key as string | null };
   });
   if ("error" in result) {

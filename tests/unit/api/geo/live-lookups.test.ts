@@ -87,7 +87,12 @@ describe("failStaleImportJobs", () => {
         return {
           set: (p: Record<string, unknown>) => {
             patch = p;
-            return { where: async (w: unknown) => void (where = w) };
+            return {
+              where: (w: unknown) => {
+                where = w;
+                return { returning: async () => [] };
+              },
+            };
           },
         };
       },
