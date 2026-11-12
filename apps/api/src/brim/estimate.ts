@@ -16,9 +16,10 @@ import {
   type PriceSource,
   type VehicleProfile,
 } from '@locations/brim/shared';
-import type { RoutePlace, RouteRequest } from '@locations/brim/routing';
+import type { RoutePlace, RouteRequest, RoutingProvider } from '@locations/brim/routing';
 import {
   KvCache,
+  ROUTE_COST_USD,
   MemoryCache,
   cachePlaceKey,
   cachedRoute,
@@ -29,7 +30,14 @@ import type { Context } from 'hono';
 import { osrmRoot } from '../osrm-base';
 import { createLogger } from './logger';
 import { NeonRouteCache } from './db/route-cache';
-import { getDefaultTariff, getCalibration, getVehicle, ytdMiles } from './db/repo';
+import {
+  addRoutingSpendUsd,
+  getDefaultTariff,
+  getCalibration,
+  getRoutingSpendUsd,
+  getVehicle,
+  ytdMiles,
+} from './db/repo';
 import { resolveEstimatePrice } from './prices';
 import { attachCheapestFill } from './fill';
 import { loadGridIntensity, resolveEstimateEvPrice, resolveForecastTemp } from './ev';
@@ -71,6 +79,20 @@ const estimateBodySchema = z.object({
 const isolateCache = new MemoryCache();
 const log = createLogger();
 let providerCalls = 0;
+
+/**
+ * Run the routing call and, for Google, add its estimated cost to the month's total.
+ * Cache hits never reach here, so only billable requests are counted.
+ */
+async function computeAndRecord(db: BrimDb, provider: RoutingProvider, req: RouteRequest) {
+  const route = await provider.computeRoute(req);
+  if (provider.name === 'google') {
+    await addRoutingSpendUsd(db, ROUTE_COST_USD[req.mode]).catch(() => {
+      log.info({ kind: 'routing_spend', ok: false });
+    });
+  }
+  return route;
+}
 
 function cacheFor(env: Env, db: BrimDb) {
   if (persistLive(db)) return new NeonRouteCache(db);
@@ -150,12 +172,19 @@ async function estimateFromBody(c: BrimContext, raw: unknown) {
         }
       : undefined;
   const hasProfile = Boolean(vehicleInline);
+  const fixtureMode = isFixtureMode(c.env.BRIM_FIXTURES);
+  const ceilingUsd = Number(c.env.ROUTING_CEILING_USD ?? 50);
+  // Paid routing only: read this month's running total. If it cannot be read, assume
+  // the ceiling is reached, so a database fault can never mean unlimited spend.
+  // ROUTING_SPENT_USD stays as a manual floor (set it high to force the free router).
+  const paidRouting = Boolean(c.env.GOOGLE_MAPS_API_KEY) && !fixtureMode;
+  const recordedUsd = paidRouting ? await getRoutingSpendUsd(db).catch(() => ceilingUsd) : 0;
   const chosen = chooseProvider({
-    fixtureMode: isFixtureMode(c.env.BRIM_FIXTURES),
+    fixtureMode,
     googleKey: c.env.GOOGLE_MAPS_API_KEY,
     osrmUrl: osrmRoot(c.env.OSRM_BASE),
-    spentUsd: Number(c.env.ROUTING_SPENT_USD ?? 0),
-    ceilingUsd: Number(c.env.ROUTING_CEILING_USD ?? 50),
+    spentUsd: Math.max(Number(c.env.ROUTING_SPENT_USD ?? 0), recordedUsd),
+    ceilingUsd,
     hasVehicleProfile: hasProfile,
   });
   const origin = resolvePlace(body.origin);
@@ -180,7 +209,7 @@ async function estimateFromBody(c: BrimContext, raw: unknown) {
     };
     if (waypoints && waypoints.length > 0) req.waypoints = waypoints.map((w) => w.route);
     if (body.departsAt) req.departureTime = body.departsAt;
-    return chosen.provider.computeRoute(req);
+    return computeAndRecord(db, chosen.provider, req);
   });
 
   log.info({ branch: chosen.branch, mode: chosen.mode, budget: chosen.budgetAlert, cacheHit: hit });
