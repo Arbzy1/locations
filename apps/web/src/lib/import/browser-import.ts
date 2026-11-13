@@ -40,6 +40,15 @@ function runInWorker(req: WorkerRequest): Promise<WorkerResponse> {
   });
 }
 
+/** An API failure that keeps the HTTP status, so callers can tell "too big" from "wrong". */
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 /** fetch with JSON, retrying network errors, 429 and 5xx a few times. */
 async function api<T>(path: string, init?: RequestInit, attempts = 4): Promise<T> {
   let lastError: Error = new Error('Request failed');
@@ -52,11 +61,15 @@ async function api<T>(path: string, init?: RequestInit, attempts = 4): Promise<T
       });
       const body = (await res.json().catch(() => ({}))) as T & { error?: string };
       if (res.ok) return body;
-      lastError = new Error(body.error || `Request failed (${res.status})`);
+      lastError = new ApiError(body.error || `Request failed (${res.status})`, res.status);
       if (res.status !== 429 && res.status < 500) throw lastError;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
-      if (lastError.message && !/fetch|network|Failed|5\d\d|429/i.test(lastError.message)) throw lastError;
+      const retryable =
+        lastError instanceof ApiError
+          ? lastError.status === 429 || lastError.status >= 500
+          : /fetch|network|Failed/i.test(lastError.message);
+      if (!retryable) throw lastError;
     }
     await new Promise((r) => setTimeout(r, 800 * 2 ** i));
   }
@@ -149,6 +162,40 @@ export function planBatches(visits: unknown[], activities: unknown[]): Array<{ v
   return batches;
 }
 
+type Batch = { visits: unknown[]; activities: unknown[] };
+
+/** Halve a batch, keeping stays before journeys. */
+function halve(batch: Batch): [Batch, Batch] {
+  const rows = [
+    ...batch.visits.map((row) => ({ kind: 'visits' as const, row })),
+    ...batch.activities.map((row) => ({ kind: 'activities' as const, row })),
+  ];
+  const mid = Math.ceil(rows.length / 2);
+  const part = (slice: typeof rows): Batch => ({
+    visits: slice.filter((r) => r.kind === 'visits').map((r) => r.row),
+    activities: slice.filter((r) => r.kind === 'activities').map((r) => r.row),
+  });
+  return [part(rows.slice(0, mid)), part(rows.slice(mid))];
+}
+
+/**
+ * Send one batch. When the server cannot take it (5xx, usually the Worker's 10 ms CPU
+ * limit on long GPS paths, or 413 too large), send it again as two halves, down to an
+ * eighth of the original size. Anything else (a rejected row, a lost session) fails at once.
+ */
+export async function sendBatch(batch: Batch, send: (b: Batch) => Promise<unknown>, depth = 0): Promise<void> {
+  try {
+    await send(batch);
+  } catch (err) {
+    const tooHeavy = err instanceof ApiError && (err.status >= 500 || err.status === 413);
+    const size = batch.visits.length + batch.activities.length;
+    if (!tooHeavy || size < 2 || depth >= 3) throw err;
+    const [first, second] = halve(batch);
+    await sendBatch(first, send, depth + 1);
+    await sendBatch(second, send, depth + 1);
+  }
+}
+
 export type ImportProgress = { stage: string; done: number; total: number };
 
 /** Upload a prepared import in batches, finish it, then rebuild the aggregates. */
@@ -185,15 +232,26 @@ export async function runImport(
   const total = visits.length + activities.length;
   let done = 0;
   opts.onProgress({ stage: 'Saving stays and journeys', done, total });
-  for (const batch of batches) {
-    await api(`/api/import/${started.jobId}/rows`, { method: 'POST', body: JSON.stringify(batch) });
-    done += batch.visits.length + batch.activities.length;
-    opts.onProgress({ stage: 'Saving stays and journeys', done, total });
+  const rowsPath = `/api/import/${started.jobId}/rows`;
+  try {
+    for (const batch of batches) {
+      // A retried half is tried twice, not four times, so a hopeless batch fails quickly.
+      await sendBatch(batch, (b) =>
+        api(rowsPath, { method: 'POST', body: JSON.stringify(b) }, b === batch ? 4 : 2),
+      );
+      done += batch.visits.length + batch.activities.length;
+      opts.onProgress({ stage: 'Saving stays and journeys', done, total });
+    }
+    await api(`/api/import/${started.jobId}/finish`, {
+      method: 'POST',
+      body: JSON.stringify({ memories: parsed.memories }),
+    });
+  } catch (err) {
+    // Close the job and drop what was uploaded, so starting again is not refused as
+    // "an import is already running". Best effort: the server also times idle jobs out.
+    await api(`/api/import/${started.jobId}/cancel`, { method: 'POST' }, 1).catch(() => undefined);
+    throw err;
   }
-  await api(`/api/import/${started.jobId}/finish`, {
-    method: 'POST',
-    body: JSON.stringify({ memories: parsed.memories }),
-  });
   await rebuildAggregates({ timezone: opts.timezone, onProgress: opts.onProgress });
   return { visitCount: visits.length, activityCount: activities.length };
 }

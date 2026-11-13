@@ -24,6 +24,7 @@ vi.mock("@locations/api/import-session", async () => {
 import { app } from "@locations/api/index";
 import {
   appendImportRows,
+  cancelImportJob,
   existingImportDays,
   finishImportJob,
   openImportJob,
@@ -65,6 +66,7 @@ beforeEach(() => {
   vi.mocked(openImportJob).mockReset().mockResolvedValue(null);
   vi.mocked(appendImportRows).mockClear();
   vi.mocked(finishImportJob).mockClear();
+  vi.mocked(cancelImportJob).mockReset().mockResolvedValue(false);
   vi.mocked(writeAggregates).mockClear();
   vi.mocked(existingImportDays).mockReset().mockResolvedValue(null);
 });
@@ -151,6 +153,29 @@ describe("browser import routes", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ status: "ready", aggregatesStale: true });
     expect(vi.mocked(finishImportJob).mock.calls[0]?.[3]).toHaveLength(1);
+  });
+
+  it("cancel needs a session and is blocked for the demo", async () => {
+    getSession.mockResolvedValue(null);
+    expect((await post("/api/import/job-1/cancel", {})).status).toBe(401);
+    getSession.mockResolvedValue(sessionUser({ id: "demo-1", role: "demo", emailVerified: true }));
+    expect((await post("/api/import/job-1/cancel", {})).status).toBe(403);
+    expect(cancelImportJob).not.toHaveBeenCalled();
+  });
+
+  it("cancel is 404 for an unknown or another tenant's job", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a", emailVerified: true }));
+    const res = await post("/api/import/other-tenant-id/cancel", {});
+    expect(res.status).toBe(404);
+    expect(cancelImportJob).toHaveBeenCalledWith(expect.anything(), "user-a", "other-tenant-id");
+  });
+
+  it("cancel fails the tenant's open job", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a", emailVerified: true }));
+    vi.mocked(cancelImportJob).mockResolvedValue(true);
+    const res = await post("/api/import/job-1/cancel", {});
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ jobId: "job-1", status: "error" });
   });
 
   it("existing days are 404 for another tenant's source", async () => {

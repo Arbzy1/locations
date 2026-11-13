@@ -114,6 +114,7 @@ import {
   aggregateInputPage,
   aggregatesStale,
   appendImportRows,
+  cancelImportJob,
   checkAggregateWrite,
   checkMemories,
   checkRowBatch,
@@ -824,7 +825,7 @@ app.post("/api/import/start", async (c) => {
       maxSources: quota.maxSources,
     }),
   );
-  if (started.status === 409) return c.json({ error: "An import is already running" }, 409);
+  if (started.status === 409) return c.json({ error: "An import is already running. If an earlier one stopped, wait three minutes and try again" }, 409);
   if (started.status === 404) return c.json({ error: "Source not found" }, 404);
   if (started.status === 403) return c.json({ error: "Source limit reached for this plan" }, 403);
   if (started.status !== 200) return c.json({ error: "Could not start import" }, 500);
@@ -875,6 +876,18 @@ app.post("/api/import/:jobId/finish", async (c) => {
   if (typeof done !== "string") return c.json({ error: done.invalid }, 400);
   c.executionCtx.waitUntil(notifyImportJob(c.env, getDb(c.env), tenant, done).catch(() => undefined));
   return c.json({ jobId: done, status: "ready", aggregatesStale: true });
+});
+
+/** The browser gave up on an upload: fail the job and drop its rows so a retry can start. */
+app.post("/api/import/:jobId/cancel", async (c) => {
+  const blocked = blockDemo(c.get("user"));
+  if (blocked) return c.json(blocked, 403);
+  const tenant = c.get("tenant");
+  const db = requestDb(c);
+  const jobId = c.req.param("jobId");
+  const cancelled = await withTenant(db, tenant, (tx) => cancelImportJob(tx, tenant, jobId));
+  if (!cancelled) return c.json({ error: "Import not found" }, 404);
+  return c.json({ jobId, status: "error" });
 });
 
 // ---- Aggregates the browser recomputes (day_stats, analytics_cache) ----

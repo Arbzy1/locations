@@ -103,6 +103,6 @@ describe("failStaleImportJobs", () => {
     expect(patch?.status).toBe("error");
     expect(String(patch?.error)).toMatch(/upload the file again/i);
     expect(where).toBeDefined();
-    expect(STALE_IMPORT_MS).toBe(15 * 60_000);
+    expect(STALE_IMPORT_MS).toBe(3 * 60_000);
   });
 });

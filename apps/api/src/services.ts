@@ -79,7 +79,7 @@ import {
   timezoneSkewWarning,
 } from "@locations/db/timeline-import";
 import { osrmRoot } from "./osrm-base";
-import { discardImportJobRows } from "./import-session";
+import { IMPORT_IDLE_MS, discardImportJobRows } from "./import-session";
 import type { Env } from "./env";
 
 const OSRM_BASE_DEFAULT = "https://router.project-osrm.org/route/v1";
@@ -2107,8 +2107,8 @@ export async function getImportJob(
   return rows[0] ?? null;
 }
 
-/** A Worker import cannot outlive this, so an older open job died without reporting. */
-export const STALE_IMPORT_MS = 15 * 60_000;
+/** An open import with no activity for this long died without reporting. */
+export const STALE_IMPORT_MS = IMPORT_IDLE_MS;
 
 /**
  * Fail this tenant's pending/processing jobs that have not moved for STALE_IMPORT_MS,

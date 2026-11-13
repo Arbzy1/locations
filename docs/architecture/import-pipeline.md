@@ -11,7 +11,9 @@ The Worker runs on the Cloudflare free plan: 10 ms of CPU per request. Parsing a
 5. `POST /api/import/:jobId/finish` (one transaction) deletes the source's rows that this job did not write when replacing, stores Google's `timelineMemory` trips as named trips, marks aggregates stale and the job ready, and sends `import_ready`.
 6. The browser rebuilds aggregates (below).
 
-Closing the tab mid-import loses nothing: the old rows are still there. The job goes stale after 15 minutes, and the rows it had uploaded are removed the next time the app checks import status or starts an import (`discardImportJobRows`). Until then that source shows the old rows plus the partial upload.
+Closing the tab mid-import loses nothing: the old rows are still there. When an upload fails, the browser calls `POST /api/import/:jobId/cancel`, which fails the job and removes the rows it had uploaded, so the user can start again at once. If the tab simply closes, the job goes stale after 3 minutes without a batch (`IMPORT_IDLE_MS`) and is cleaned up the same way the next time the app checks import status or starts an import. Until then that source shows the old rows plus the partial upload.
+
+A batch that the Worker rejects with a 5xx or 413 (usually the 10 ms CPU limit on a batch of long GPS paths) is split in half and sent again, down to an eighth of its size, before the import gives up.
 
 ## Aggregates rebuilt by the browser
 
