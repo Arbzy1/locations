@@ -88,7 +88,7 @@ export default function ImportDropZone({
       invalidate();
     } catch (err) {
       fail(
-        `${err instanceof Error ? err.message : String(err)} Keep this tab open while importing; you can safely start again.`,
+        `${(err instanceof Error ? err.message : String(err)).replace(/\.$/, '')}. Nothing was changed. You can start the import again.`,
       );
     } finally {
       setBusy(false);

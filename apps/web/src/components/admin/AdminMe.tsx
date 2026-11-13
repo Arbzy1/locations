@@ -38,7 +38,7 @@ export function AdminMePage() {
           loading={isPending}
           value={data?.stuckJobCount ?? 0}
           label="Stuck imports"
-          hint="Pending or processing over 15 minutes"
+          hint="Pending or processing with no activity for 3 minutes"
           tone={(data?.stuckJobCount ?? 0) > 0 ? "danger" : "ok"}
         />
       </div>

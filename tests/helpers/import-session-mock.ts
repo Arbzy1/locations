@@ -13,6 +13,7 @@ export async function createImportSessionMock() {
     openImportJob: vi.fn(async () => null),
     appendImportRows: vi.fn(async () => undefined),
     finishImportJob: vi.fn(async () => undefined),
+    cancelImportJob: vi.fn(async () => false),
     aggregatesStale: vi.fn(async () => false),
     aggregateInputPage: vi.fn(async () => []),
     writeAggregates: vi.fn(async () => undefined),

@@ -87,6 +87,7 @@ export const API_ROUTE_CATALOG: ApiRoute[] = [
   { method: "POST", path: "/api/import/start", samplePath: "/api/import/start", auth: "session", demo: "denyWrite", idScope: "none", rateLimited: true },
   { method: "POST", path: "/api/import/:jobId/rows", samplePath: "/api/import/other-tenant-id/rows", auth: "session", demo: "denyWrite", idScope: "job", rateLimited: false },
   { method: "POST", path: "/api/import/:jobId/finish", samplePath: "/api/import/other-tenant-id/finish", auth: "session", demo: "denyWrite", idScope: "job", rateLimited: false },
+  { method: "POST", path: "/api/import/:jobId/cancel", samplePath: "/api/import/other-tenant-id/cancel", auth: "session", demo: "denyWrite", idScope: "job", rateLimited: false },
   { method: "GET", path: "/api/aggregates/status", samplePath: "/api/aggregates/status", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
   { method: "GET", path: "/api/aggregates/input", samplePath: "/api/aggregates/input?table=visits", auth: "session", demo: "allow", idScope: "none", rateLimited: false },
   { method: "POST", path: "/api/aggregates", samplePath: "/api/aggregates", auth: "session", demo: "denyWrite", idScope: "none", rateLimited: false },

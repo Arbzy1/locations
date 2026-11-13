@@ -17,6 +17,7 @@ import {
   eq,
   gt,
   importJobs,
+  lt,
   markAggregatesStale,
   namedTrips,
   namedTripsFromMemories,
@@ -31,6 +32,13 @@ import {
 import type { createDb } from "@locations/db";
 
 type Db = ReturnType<typeof createDb>;
+
+/**
+ * An open import with no activity for this long is abandoned. The browser sends a batch
+ * every second or so and retries for about 12 seconds, so three quiet minutes means the
+ * tab closed or the upload failed. Short on purpose: an abandoned job blocks the next one.
+ */
+export const IMPORT_IDLE_MS = 3 * 60_000;
 
 /** Rows per append request; keeps body parsing and SQL building well under 10 ms. */
 export const IMPORT_BATCH_ROWS = 250;
@@ -323,8 +331,8 @@ export async function startImportJob(
     maxSources: number;
   },
 ): Promise<{ status: 200; jobId: string; sourceId: string; label: string } | { status: 403 | 404 | 409 }> {
-  // A job that has not moved for 15 minutes died (e.g. an old upload killed by the CPU
-  // limit, or a closed tab); fail it so it cannot block a new import forever.
+  // A job that has not moved for IMPORT_IDLE_MS died (a failed upload or a closed tab);
+  // fail it so it cannot block a new import.
   const stale = await db
     .update(importJobs)
     .set({ status: "error", error: "Import stopped without finishing. Upload the file again.", updatedAt: new Date() })
@@ -332,7 +340,7 @@ export async function startImportJob(
       and(
         eq(importJobs.tenant, tenant),
         sql`${importJobs.status} in ('pending', 'processing')`,
-        sql`${importJobs.updatedAt} < now() - interval '15 minutes'`,
+        lt(importJobs.updatedAt, new Date(Date.now() - IMPORT_IDLE_MS)),
       ),
     )
     .returning({ id: importJobs.id, sourceId: importJobs.sourceId });
@@ -397,6 +405,21 @@ export async function discardImportJobRows(db: Db, tenant: TenantId, job: { id: 
     .where(
       and(eq(activities.tenant, tenant), eq(activities.sourceId, job.sourceId), eq(activities.importJobId, job.id)),
     );
+}
+
+/**
+ * Stop an open import the browser gave up on: mark it failed and remove the rows it had
+ * uploaded, so the user can start again at once. False when there is no such open job.
+ */
+export async function cancelImportJob(db: Db, tenant: TenantId, jobId: string): Promise<boolean> {
+  const job = await openImportJob(db, tenant, jobId);
+  if (!job) return false;
+  await db
+    .update(importJobs)
+    .set({ status: "error", error: "Import stopped before it finished. Upload the file again.", updatedAt: new Date() })
+    .where(and(eq(importJobs.tenant, tenant), eq(importJobs.id, job.id)));
+  await discardImportJobRows(db, tenant, job);
+  return true;
 }
 
 /** A job this tenant owns that is still accepting rows, else null (route answers 404). */
