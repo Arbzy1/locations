@@ -60,12 +60,36 @@ describe("row validation", () => {
     expect(checkActivity({ ...trip, path: [[51, 0]] }).ok).toBe(false);
   });
 
-  it("caps a batch and names the bad row", () => {
+  it("caps a batch", () => {
     expect(checkRowBatch({ visits: [] }).ok).toBe(false);
     expect(checkRowBatch({ visits: Array.from({ length: IMPORT_BATCH_ROWS + 1 }, () => stay) }).ok).toBe(false);
-    const bad = checkRowBatch({ visits: [stay, { ...stay, lon: 999 }] });
-    expect(!bad.ok && bad.error).toMatch(/^visits\[1\]/);
     expect(checkRowBatch({ visits: [stay], activities: [trip] }).ok).toBe(true);
+  });
+
+  it("leaves out a bad row, keeps the rest and says why", () => {
+    const res = checkRowBatch({
+      visits: [stay, { ...stay, lon: 999 }, stay],
+      activities: [trip, { ...trip, mode: "teleport" }],
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.value.visits).toHaveLength(2);
+    expect(res.value.activities).toHaveLength(1);
+    expect(res.value.skipped).toBe(2);
+    expect(res.value.firstSkipped).toBe("visits[1]: visit position out of range");
+  });
+
+  it("accepts a batch whose rows are all bad, storing none", () => {
+    const res = checkRowBatch({ visits: [{ ...stay, durationMinutes: -5 }, { ...stay, date: "June" }] });
+    expect(res.ok && res.value.visits).toEqual([]);
+    expect(res.ok && res.value.skipped).toBe(2);
+  });
+
+  it("accepts stays that last years and refuses absurd ones", () => {
+    const years = (n: number) => 60 * 24 * 365 * n;
+    expect(checkVisit({ ...stay, durationMinutes: years(3) }).ok).toBe(true);
+    expect(checkVisit({ ...stay, durationMinutes: years(40) }).ok).toBe(false);
+    expect(checkVisit({ ...stay, durationMinutes: -1 }).ok).toBe(false);
   });
 
   it("validates trips from Timeline memories", () => {

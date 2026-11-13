@@ -136,7 +136,14 @@ describe("browser import routes", () => {
   it("reject invalid and oversized batches", async () => {
     getSession.mockResolvedValue(sessionUser({ id: "user-a", emailVerified: true }));
     vi.mocked(openImportJob).mockResolvedValue(job as never);
-    expect((await post("/api/import/job-1/rows", { visits: [{ ...stay, lat: 500 }] })).status).toBe(400);
+    const partly = await post("/api/import/job-1/rows", { visits: [stay, { ...stay, lat: 500 }] });
+    expect(partly.status).toBe(200);
+    expect(await partly.json()).toMatchObject({ stored: 1, skipped: 1, reason: "visits[1]: visit position out of range" });
+    expect(vi.mocked(appendImportRows).mock.calls.at(-1)?.[3].visits).toHaveLength(1);
+    vi.mocked(appendImportRows).mockClear();
+    const allBad = await post("/api/import/job-1/rows", { visits: [{ ...stay, lat: 500 }] });
+    expect(await allBad.json()).toMatchObject({ stored: 0, skipped: 1 });
+    expect(appendImportRows).not.toHaveBeenCalled();
     expect((await post("/api/import/job-1/rows", "{not json")).status).toBe(400);
     const huge = JSON.stringify({ visits: [{ ...stay, cluster: "x".repeat(300 * 1024) }] });
     expect((await post("/api/import/job-1/rows", huge)).status).toBe(413);

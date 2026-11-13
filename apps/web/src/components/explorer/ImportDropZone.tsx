@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { useRef, useState, type DragEvent } from 'react';
 import { Loader2, Upload } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
@@ -82,7 +83,12 @@ export default function ImportDropZone({
     onError?.('');
     try {
       onStarted?.();
-      await runImport(prepared, { policy, sourceId, label, timezone, onProgress: setProgress });
+      const result = await runImport(prepared, { policy, sourceId, label, timezone, onProgress: setProgress });
+      if (result.skipped > 0) {
+        toast.message(
+          `Imported. ${result.skipped.toLocaleString()} ${result.skipped === 1 ? 'record was' : 'records were'} left out because the data in the file was malformed.`,
+        );
+      }
       setPrepared(null);
       if (fileRef.current) fileRef.current.value = '';
       invalidate();

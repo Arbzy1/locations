@@ -848,8 +848,9 @@ app.post("/api/import/:jobId/rows", async (c) => {
     const stored = (job.visitCount ?? 0) + (job.activityCount ?? 0);
     const incoming = checked.value.visits.length + checked.value.activities.length;
     if (stored + incoming > PLAN_QUOTAS.pro.maxImportRows) return { tooMany: true as const };
-    await appendImportRows(tx, tenant, job, checked.value);
-    return { stored: stored + incoming };
+    if (incoming > 0) await appendImportRows(tx, tenant, job, checked.value);
+    // `reason` is a field name and rule ("visit duration out of range"), never a value.
+    return { stored: stored + incoming, skipped: checked.value.skipped, reason: checked.value.firstSkipped };
   });
   if (!result) return c.json({ error: "Import not found" }, 404);
   if ("invalid" in result) return c.json({ error: result.invalid }, 400);
