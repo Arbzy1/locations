@@ -67,6 +67,11 @@ const ANALYTICS_ENTRY_MAX_BYTES = 768 * 1024;
 const ANALYTICS_KEY = /^[a-z0-9-]{1,40}(:\d{4})?$/;
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * Longest stay or journey accepted, in minutes (30 years). Real exports hold stays that
+ * last years: with location off, Google records one visit from the last fix to the next.
+ */
+const MAX_DURATION_MINUTES = 60 * 24 * 366 * 30;
 const MODES = new Set(Object.values(TRANSPORT_MODE_MAP));
 
 type Check<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -177,7 +182,7 @@ export function checkVisit(x: unknown): Check<VisitInput> {
   if (!day(x.date)) return { ok: false, error: "visit date must be YYYY-MM-DD" };
   if (!num(x.lat, -90, 90) || !num(x.lon, -180, 180)) return { ok: false, error: "visit position out of range" };
   if (!str(x.cluster, 80) || !str(x.semanticType, 80)) return { ok: false, error: "visit labels too long" };
-  if (!num(x.durationMinutes, 0, 60 * 24 * 400)) return { ok: false, error: "visit duration out of range" };
+  if (!num(x.durationMinutes, 0, MAX_DURATION_MINUTES)) return { ok: false, error: "visit duration out of range" };
   if (!optStr(x.placeId, 300) || !optStr(x.placeKey, 320) || !optStr(x.googleName, 200)) {
     return { ok: false, error: "visit place fields too long" };
   }
@@ -219,7 +224,7 @@ export function checkActivity(x: unknown): Check<ActivityInput> {
     return { ok: false, error: "journey position out of range" };
   }
   if (typeof x.mode !== "string" || !MODES.has(x.mode)) return { ok: false, error: "unknown journey mode" };
-  if (!num(x.distanceMeters, 0, 40_075_000) || !num(x.durationMinutes, 0, 60 * 24 * 400)) {
+  if (!num(x.distanceMeters, 0, 40_075_000) || !num(x.durationMinutes, 0, MAX_DURATION_MINUTES)) {
     return { ok: false, error: "journey distance or duration out of range" };
   }
   let path: PathPoint[] | null = null;
@@ -254,24 +259,39 @@ export function checkActivity(x: unknown): Check<ActivityInput> {
   };
 }
 
-/** Validate an append body: at most IMPORT_BATCH_ROWS rows in total. */
-export function checkRowBatch(body: unknown): Check<{ visits: VisitInput[]; activities: ActivityInput[] }> {
+/**
+ * Validate an append body: at most IMPORT_BATCH_ROWS rows in total. A malformed batch is
+ * refused, but a malformed row is only left out and counted in `skipped`: one odd record
+ * in a ten-year export must not sink the whole import. Nothing invalid is ever stored.
+ */
+export function checkRowBatch(
+  body: unknown,
+): Check<{ visits: VisitInput[]; activities: ActivityInput[]; skipped: number; firstSkipped: string | null }> {
   if (!isObj(body)) return { ok: false, error: "JSON body required" };
   const v = body.visits ?? [];
   const a = body.activities ?? [];
   if (!Array.isArray(v) || !Array.isArray(a)) return { ok: false, error: "visits and activities must be arrays" };
   if (v.length + a.length === 0) return { ok: false, error: "No rows in batch" };
   if (v.length + a.length > IMPORT_BATCH_ROWS) return { ok: false, error: `At most ${IMPORT_BATCH_ROWS} rows per batch` };
-  const out = { visits: [] as VisitInput[], activities: [] as ActivityInput[] };
+  const out = {
+    visits: [] as VisitInput[],
+    activities: [] as ActivityInput[],
+    skipped: 0,
+    firstSkipped: null as string | null,
+  };
+  const skip = (where: string, error: string) => {
+    out.skipped += 1;
+    out.firstSkipped ??= `${where}: ${error}`;
+  };
   for (const [i, row] of v.entries()) {
     const c = checkVisit(row);
-    if (!c.ok) return { ok: false, error: `visits[${i}]: ${c.error}` };
-    out.visits.push(c.value);
+    if (c.ok) out.visits.push(c.value);
+    else skip(`visits[${i}]`, c.error);
   }
   for (const [i, row] of a.entries()) {
     const c = checkActivity(row);
-    if (!c.ok) return { ok: false, error: `activities[${i}]: ${c.error}` };
-    out.activities.push(c.value);
+    if (c.ok) out.activities.push(c.value);
+    else skip(`activities[${i}]`, c.error);
   }
   return { ok: true, value: out };
 }

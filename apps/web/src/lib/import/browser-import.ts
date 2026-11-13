@@ -208,7 +208,7 @@ export async function runImport(
     timezone: string | null;
     onProgress: (p: ImportProgress) => void;
   },
-): Promise<{ visitCount: number; activityCount: number }> {
+): Promise<{ visitCount: number; activityCount: number; skipped: number }> {
   const { parsed } = prepared;
   const skip = opts.policy === 'skip-overlap' ? new Set(prepared.existingDates) : null;
   const visits = skip ? parsed.visits.filter((v) => !skip.has(v.date)) : parsed.visits;
@@ -233,12 +233,19 @@ export async function runImport(
   let done = 0;
   opts.onProgress({ stage: 'Saving stays and journeys', done, total });
   const rowsPath = `/api/import/${started.jobId}/rows`;
+  // Records the server left out because their data was malformed.
+  let skipped = 0;
   try {
     for (const batch of batches) {
       // A retried half is tried twice, not four times, so a hopeless batch fails quickly.
-      await sendBatch(batch, (b) =>
-        api(rowsPath, { method: 'POST', body: JSON.stringify(b) }, b === batch ? 4 : 2),
-      );
+      await sendBatch(batch, async (b) => {
+        const res = await api<{ skipped?: number }>(
+          rowsPath,
+          { method: 'POST', body: JSON.stringify(b) },
+          b === batch ? 4 : 2,
+        );
+        skipped += res.skipped ?? 0;
+      });
       done += batch.visits.length + batch.activities.length;
       opts.onProgress({ stage: 'Saving stays and journeys', done, total });
     }
@@ -253,7 +260,7 @@ export async function runImport(
     throw err;
   }
   await rebuildAggregates({ timezone: opts.timezone, onProgress: opts.onProgress });
-  return { visitCount: visits.length, activityCount: activities.length };
+  return { visitCount: visits.length, activityCount: activities.length, skipped };
 }
 
 let rebuilding: Promise<void> | null = null;
