@@ -305,6 +305,9 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const visitPopupById = useRef(new Map<string, string>());
   const overlayReady = useRef(false);
+  // Bumps whenever the heatmap data is replaced, so a delayed redraw cannot
+  // put an older, smaller set back on top of the one just loaded.
+  const heatDrawGen = useRef(0);
   const { theme, mood } = useTheme();
   const { unit, mapBookmarks, mapTileDarkUrl, mapTileLightUrl } = useUnits();
   const queryClient = useQueryClient();
@@ -464,6 +467,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         upsertSource(map, 'loc-heat', emptyFc());
       }
 
+      const gen = ++heatDrawGen.current;
+      const payloads: { id: string; data: FC }[] = [];
       for (const spec of heatSpecs) {
         const features = spec.points.map((p) => ({
           type: 'Feature' as const,
@@ -471,20 +476,44 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           geometry: { type: 'Point' as const, coordinates: toLngLat(p.lat, p.lon) },
         }));
         const maxW = features.reduce((max, f) => Math.max(max, Number(f.properties.weight) || 1), 1);
-        upsertSource(map, spec.id, { type: 'FeatureCollection', features });
+        const data: FC = { type: 'FeatureCollection', features };
+        payloads.push({ id: spec.id, data });
+        // Keep every cell. The default simplification folds points that land on
+        // the same spot, and a small buffer clips kernels on a tile edge.
+        upsertSource(map, spec.id, data, { tolerance: 0, buffer: 256 });
+        const weight: unknown[] = ['interpolate', ['linear'], ['get', 'weight'], 0, 0, maxW, 1];
         ensureLayer(map, {
           id: spec.id,
           type: 'heatmap',
           source: spec.id,
           paint: {
-            'heatmap-weight': ['interpolate', ['linear'], ['get', 'weight'], 0, 0, maxW, 1],
+            'heatmap-weight': weight,
             'heatmap-intensity': heatIntensity(intensityRef.current),
             'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 16, 9, 36],
             'heatmap-opacity': opacityRef.current / 100,
             'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], ...heatColorStops(spec.token)],
           },
         });
+        // The layer is created once. A later, heavier set of points would
+        // otherwise stay scaled to the first max weight.
+        if (map.getLayer(spec.id)) map.setPaintProperty(spec.id, 'heatmap-weight', weight as never);
       }
+      // The first setData often runs before the source is allowed to load
+      // tiles, and MapLibre then keeps that partial draw until a refresh.
+      // Push the same points again once a frame has actually finished.
+      const redraw = () => {
+        if (gen !== heatDrawGen.current) return;
+        const current = mapRef.current;
+        if (!current) return;
+        for (const item of payloads) {
+          const src = current.getSource(item.id) as GeoJSONSource | undefined;
+          if (!src || !current.getLayer(item.id)) continue;
+          src.setData(item.data);
+        }
+        current.triggerRepaint();
+      };
+      requestAnimationFrame(() => requestAnimationFrame(redraw));
+      map.once('idle', redraw);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [heatmapOn, heatmapLayers, heatmapPoints, theme, mood],
@@ -1296,53 +1325,68 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     if (!map || !boundsKey) return;
     let alive = true;
     let fitting = false;
-    // fitBounds does nothing when the canvas is still smaller than the padding
-    // (the view is animating in, or the style just reloaded). Keep trying until
-    // the container has a real size, instead of staying on the default world view.
+    let fittedW = 0;
+    let fittedH = 0;
+    let userMoved = false;
+    let timer = 0;
+    // A fit while the panel is still opening is a wide zoom. The heat then
+    // draws as a few blobs, and a refresh looks right only because the map
+    // already has its final size. Refit when the container grows. A shrink
+    // (the phone sheet) must not yank the camera back.
+    const markMoved = () => {
+      userMoved = true;
+    };
     const fit = () => {
       const current = mapRef.current;
       const b = dataBoundsRef.current;
-      if (!alive || fitting || !current || followRef.current || !b) return false;
+      if (!alive || fitting || userMoved || !current || followRef.current || !b) return;
       const el = current.getContainer();
-      if (el.clientWidth < 80 || el.clientHeight < 80) return false;
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w < 80 || h < 80) return;
+      if (fittedW !== 0 && w <= fittedW + 8 && h <= fittedH + 8) return;
       fitting = true;
       try {
         const canvas = current.getCanvas();
-        if (canvas.clientWidth !== el.clientWidth || canvas.clientHeight !== el.clientHeight) {
-          current.resize();
-        }
+        if (canvas.clientWidth !== w || canvas.clientHeight !== h) current.resize();
+        current.fitBounds(
+          [
+            [b.west, b.south],
+            [b.east, b.north],
+          ],
+          { padding: 30, maxZoom: 15, duration: reducedMotion() ? 0 : 400 },
+        );
+        fittedW = w;
+        fittedH = h;
       } finally {
         fitting = false;
       }
-      current.fitBounds(
-        [
-          [b.west, b.south],
-          [b.east, b.north],
-        ],
-        { padding: 30, maxZoom: 15, duration: reducedMotion() ? 0 : 400 },
-      );
-      return true;
     };
-    if (fit()) return;
-    const retry = () => {
-      if (fit()) stop();
+    const schedule = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(fit, 60);
     };
-    const stop = () => {
-      map.off('idle', retry);
-      map.off('resize', retry);
-      observer?.disconnect();
-    };
+    schedule();
+    map.on('idle', schedule);
+    map.on('resize', schedule);
+    map.on('dragstart', markMoved);
+    map.on('wheel', markMoved);
+    map.on('boxzoomstart', markMoved);
     let observer: ResizeObserver | null = null;
-    map.on('idle', retry);
-    map.on('resize', retry);
     const el = hostRef.current;
-    if (el) {
-      observer = new ResizeObserver(retry);
+    if (el && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(schedule);
       observer.observe(el);
     }
     return () => {
       alive = false;
-      stop();
+      window.clearTimeout(timer);
+      map.off('idle', schedule);
+      map.off('resize', schedule);
+      map.off('dragstart', markMoved);
+      map.off('wheel', markMoved);
+      map.off('boxzoomstart', markMoved);
+      observer?.disconnect();
     };
   }, [boundsKey, dataBoundsRef, followRef]);
 
