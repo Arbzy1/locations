@@ -76,10 +76,10 @@ function useLatest<T>(value: T) {
 }
 
 /**
- * Re-run one overlay group when its inputs change. Before the first full sync the
- * load handler covers it. isStyleLoaded() is also false while tiles are still
- * downloading after style.load, so a skipped update (heatmap data arriving on a cold
- * visit) retries on the first frame the style reports loaded instead of being lost.
+ * Draw one overlay group, and keep trying until the map can actually take it.
+ * A heatmap often arrives while tiles are still loading, or while a style reload
+ * has cleared the previous layer. One attempt in that gap used to be dropped, so
+ * the map stayed on whatever it had drawn first until a refresh.
  */
 function useOverlayGroup(
   mapRef: { current: MLMap | null },
@@ -87,23 +87,32 @@ function useOverlayGroup(
   sync: (map: MLMap) => void,
 ) {
   const syncRef = useLatest(sync);
-  const pending = useRef(false);
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !ready.current) return;
-    if (map.isStyleLoaded()) {
-      sync(map);
-      return;
-    }
-    if (pending.current) return;
-    pending.current = true;
-    const retry = () => {
-      if (!map.isStyleLoaded()) return;
-      map.off('render', retry);
-      pending.current = false;
-      if (ready.current) syncRef.current(map);
+    let alive = true;
+    const attempt = () => {
+      const map = mapRef.current;
+      if (!alive || !map || !ready.current || !map.isStyleLoaded()) return false;
+      syncRef.current(map);
+      map.triggerRepaint();
+      return true;
     };
-    map.on('render', retry);
+    if (attempt()) return;
+
+    const map = mapRef.current;
+    if (!map) return;
+    const retry = () => {
+      if (attempt()) stop();
+    };
+    const stop = () => {
+      map.off('idle', retry);
+      map.off('style.load', retry);
+    };
+    map.on('idle', retry);
+    map.on('style.load', retry);
+    return () => {
+      alive = false;
+      stop();
+    };
   }, [mapRef, ready, sync, syncRef]);
 }
 
@@ -1276,6 +1285,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   }, []);
 
   const followRef = useLatest(followPlayhead);
+  const dataBoundsRef = useLatest(dataBounds);
   // Refit when the data's extent (or amount) changes.
   const boundsKey = dataBounds
     ? `${allCoords.length}|${dataBounds.west},${dataBounds.south},${dataBounds.east},${dataBounds.north}`
@@ -1283,18 +1293,58 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || followRef.current) return;
-    const b = dataBounds;
-    if (!b) return;
-    map.fitBounds(
-      [
-        [b.west, b.south],
-        [b.east, b.north],
-      ],
-      { padding: 30, maxZoom: 15, duration: reducedMotion() ? 0 : 400 },
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boundsKey]);
+    if (!map || !boundsKey) return;
+    let alive = true;
+    let fitting = false;
+    // fitBounds does nothing when the canvas is still smaller than the padding
+    // (the view is animating in, or the style just reloaded). Keep trying until
+    // the container has a real size, instead of staying on the default world view.
+    const fit = () => {
+      const current = mapRef.current;
+      const b = dataBoundsRef.current;
+      if (!alive || fitting || !current || followRef.current || !b) return false;
+      const el = current.getContainer();
+      if (el.clientWidth < 80 || el.clientHeight < 80) return false;
+      fitting = true;
+      try {
+        const canvas = current.getCanvas();
+        if (canvas.clientWidth !== el.clientWidth || canvas.clientHeight !== el.clientHeight) {
+          current.resize();
+        }
+      } finally {
+        fitting = false;
+      }
+      current.fitBounds(
+        [
+          [b.west, b.south],
+          [b.east, b.north],
+        ],
+        { padding: 30, maxZoom: 15, duration: reducedMotion() ? 0 : 400 },
+      );
+      return true;
+    };
+    if (fit()) return;
+    const retry = () => {
+      if (fit()) stop();
+    };
+    const stop = () => {
+      map.off('idle', retry);
+      map.off('resize', retry);
+      observer?.disconnect();
+    };
+    let observer: ResizeObserver | null = null;
+    map.on('idle', retry);
+    map.on('resize', retry);
+    const el = hostRef.current;
+    if (el) {
+      observer = new ResizeObserver(retry);
+      observer.observe(el);
+    }
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, [boundsKey, dataBoundsRef, followRef]);
 
   useEffect(() => {
     const map = mapRef.current;
