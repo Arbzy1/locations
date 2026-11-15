@@ -33,6 +33,8 @@ Street View and Mapillary are external links with latitude and longitude only. N
 
 Before matching, `journeyTrace` (`packages/db/src/geo.ts`) drops a Google start or end point that could not be reached from the nearest fix in the time between them (over 250 km/h), and `cleanTrace` drops single-fix GPS spikes. A matched road line is only kept when it stays with the fixes (`roadFollowsFixes`: median distance at most 80 m and 70% of fixes within 100 m). Live OSRM calls are capped per Day View request (`MAX_LIVE_ROUTE_CALLS`) to stay inside the free plan's 50 subrequests.
 
+Predicted (Day View, only while that toggle is on) is a separate line: one road route through up to six points on the recorded trace, starting and ending at the same anchors as Best, kept even when it strays. A train or Underground journey uses its rail line, or no line when it has none. Best is unchanged.
+
 Routes view (`GET /api/routes`) makes no routing calls: rail line, else recorded trace, else a straight line, thinned to the span.
 
 ## Transport mode from GPS

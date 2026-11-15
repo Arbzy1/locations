@@ -23,11 +23,22 @@ function emptyCacheDb() {
   return { db: db as never, inserted };
 }
 
-const nominatimOk = () =>
-  new Response(JSON.stringify({ name: "Cafe", display_name: "Cafe, Town", address: {} }), { status: 200 });
+function nominatimOk(url: string) {
+  const parsed = new URL(url);
+  return new Response(
+    JSON.stringify({
+      name: "Cafe",
+      display_name: "Cafe, Town",
+      lat: parsed.searchParams.get("lat"),
+      lon: parsed.searchParams.get("lon"),
+      address: {},
+    }),
+    { status: 200 },
+  );
+}
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn(async () => nominatimOk()));
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => nominatimOk(url)));
 });
 afterEach(() => {
   vi.unstubAllGlobals();

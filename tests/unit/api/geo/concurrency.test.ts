@@ -37,7 +37,18 @@ describe("Nominatim spacing under concurrency", () => {
     vi.useFakeTimers();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response(JSON.stringify({ name: "Cafe", address: {} }), { status: 200 })),
+      vi.fn(async (url: string) => {
+        const parsed = new URL(url);
+        return new Response(
+          JSON.stringify({
+            name: "Cafe",
+            lat: parsed.searchParams.get("lat"),
+            lon: parsed.searchParams.get("lon"),
+            address: {},
+          }),
+          { status: 200 },
+        );
+      }),
     );
   });
   afterEach(() => {

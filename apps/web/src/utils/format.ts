@@ -29,13 +29,24 @@ export function formatMilesOrKm(miles: number, unit: DistanceUnit = 'mi'): strin
   return formatMiles(miles);
 }
 
+const MINUTES_PER_DAY = 24 * 60;
+
+/** Days, then hours, then minutes. A zero part is left out. */
 export function formatDuration(minutes: number): string {
   if (minutes < 1) return '< 1 min';
-  if (minutes < 60) return `${Math.round(minutes)} min`;
-  const hrs = Math.floor(minutes / 60);
-  const mins = Math.round(minutes % 60);
-  if (mins === 0) return `${hrs}h`;
-  return `${hrs}h ${mins}m`;
+  const total = Math.round(minutes);
+  if (total < 60) return `${total} min`;
+  const days = Math.floor(total / MINUTES_PER_DAY);
+  const hrs = Math.floor((total % MINUTES_PER_DAY) / 60);
+  const mins = total % 60;
+  if (days === 0) {
+    if (mins === 0) return `${hrs}h`;
+    return `${hrs}h ${mins}m`;
+  }
+  const parts = [`${days}d`];
+  if (hrs > 0) parts.push(`${hrs}h`);
+  if (mins > 0) parts.push(`${mins}m`);
+  return parts.join(' ');
 }
 
 export function formatTime(isoString: string, timeZone?: string | null): string {

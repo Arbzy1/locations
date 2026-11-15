@@ -64,7 +64,13 @@ function dayDb(v: VisitRow[], a: ActivityRow[]) {
     }
     if (table === visits) return v;
     if (table === activities) return a;
-    if (table === placeCache) return [{ name: "Place", address: "", data: {} }];
+    if (table === placeCache) {
+      return [{
+        name: "Place",
+        address: "",
+        data: { raw: { lat: "40.758", lon: "-73.9855", name: "Place", address: { amenity: "Place" } } },
+      }];
+    }
     return [];
   };
   const query = (rows: unknown[]) => {
@@ -203,7 +209,54 @@ describe("getDay journey lines and gaps", () => {
     const compared = (await getDay(dayDb([home, work], [train]), "t1", DATE, undefined, undefined, {
       compare: true,
     })) as DayResult;
-    expect(compared.activities[0].predicted_geometry!.length).toBeGreaterThan(2);
-    expect(compared.activities[0].prediction_gap).not.toBeNull();
+    expect(compared.activities[0].predicted_geometry ?? []).toEqual([]);
+    expect(compared.activities[0].prediction_gap ?? null).toBeNull();
+  });
+
+  it("predicts a road through the GPS points between the stay anchors", async () => {
+    const t = Date.parse(`${DATE}T09:10:00Z`) / 1000;
+    const drive = {
+      ...journey(10, "09:00", "09:30", [40.9, -74.2], [41, -73.5]),
+      path: [
+        [40.714, -74.005, t],
+        [40.73, -74.0, t + 300],
+        [40.75, -73.99, t + 600],
+      ] as [number, number, number][],
+    };
+    const day = (await getDay(dayDb([home, work], [drive]), "t1", DATE, undefined, undefined, {
+      compare: true,
+    })) as DayResult;
+    const urls = vi.mocked(fetch).mock.calls.map((call) => String(call[0]));
+    const predicted = urls.find(
+      (url) => url.includes("/route/v1/driving/") && url.includes("-74.006,40.7128") && url.includes("40.73"),
+    );
+    expect(predicted).toBeTruthy();
+    expect(predicted).not.toContain("-74.2,40.9");
+    expect(predicted).toContain("-73.9855,40.758");
+    // OSRM is down, so the drawn line is the straight run between those anchors.
+    expect(day.activities[0].predicted_geometry).toEqual([
+      [40.7128, -74.006],
+      [40.758, -73.9855],
+    ]);
+  });
+
+  it("uses a train's rail line as the predicted geometry", async () => {
+    const rail: [number, number][] = [
+      [40.72, -74.0],
+      [40.74, -73.99],
+      [40.75, -73.985],
+    ];
+    const train = {
+      ...journey(10, "09:00", "09:30", [40.7135, -74.0065], [40.7575, -73.986]),
+      mode: "train",
+      railGeometry: rail,
+      path: [[40.73, -73.996, Date.parse(`${DATE}T09:10:00Z`) / 1000]] as [number, number, number][],
+    };
+    const day = (await getDay(dayDb([home, work], [train]), "t1", DATE, undefined, undefined, {
+      compare: true,
+    })) as DayResult;
+    expect(day.activities[0].predicted_geometry).toContainEqual([40.74, -73.99]);
+    expect(day.activities[0].predicted_geometry?.[0]).toEqual([40.7128, -74.006]);
+    expect(day.activities[0].predicted_geometry?.at(-1)).toEqual([40.758, -73.9855]);
   });
 });

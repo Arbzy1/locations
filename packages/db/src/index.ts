@@ -19,6 +19,7 @@ export function createDb(databaseUrl: string) {
 
 export * from "./schema.js";
 export * from "./geo.js";
+export * from "./place-title.js";
 export * from "./rail.js";
 export * from "./analytics.js";
 export * from "./activity-guess.js";

@@ -126,7 +126,7 @@ export function TripBuilderPage() {
 }
 
 export function HolidaysPage() {
-  const { data } = useCachedAnalytics<{ date: string; cluster: string }[]>('away-nights');
+  const { data } = useCachedAnalytics<{ date: string; cluster: string; label?: string }[]>('away-nights');
   const rows = Array.isArray(data) ? data : [];
   return (
     <CatalogPage
@@ -139,7 +139,7 @@ export function HolidaysPage() {
             <Button variant="ghost" asChild title={`Open ${r.date}`} className="h-11 w-full justify-between font-normal">
               <Link to={`/day/${r.date}`}>
                 <span>{r.date}</span>
-                <span className="truncate text-xs text-text-muted">{r.cluster}</span>
+                <span className="truncate text-xs text-text-muted">{r.label || r.cluster}</span>
               </Link>
             </Button>
           </li>
@@ -156,6 +156,8 @@ export function CommutePage() {
   const { data } = useCachedAnalytics<{
     home: string;
     work: string;
+    homeLabel?: string;
+    workLabel?: string;
     count: number;
     modes: Record<string, number>;
     departHours: number[];
@@ -177,10 +179,10 @@ export function CommutePage() {
   return (
     <CatalogPage title="Commute" description={`${data.count} weekday home/work transitions.`}>
       <p className="text-sm">
-        Home guess: <Link className="text-accent underline" to={placePath(data.home)} title="Open home guess">{data.home}</Link>
+        Home guess: <Link className="text-accent underline" to={placePath(data.home)} title="Open home guess">{data.homeLabel || data.home}</Link>
       </p>
       <p className="text-sm">
-        Work guess: <Link className="text-accent underline" to={placePath(data.work)} title="Open work guess">{data.work}</Link>
+        Work guess: <Link className="text-accent underline" to={placePath(data.work)} title="Open work guess">{data.workLabel || data.work}</Link>
       </p>
       <div className="flex flex-wrap gap-2">
         {Object.entries(data.modes).map(([mode, n]) => (

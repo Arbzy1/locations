@@ -43,6 +43,10 @@ import {
   journeyAccuracy,
   haversineM,
   METERS_TO_MILES,
+  titleFromGeocode,
+  titleFromPlaceCache,
+  titleWithType,
+  type PlaceTitleKind,
   and,
   eq,
   sql,
@@ -81,6 +85,7 @@ import {
 import { osrmRoot } from "./osrm-base";
 import { IMPORT_IDLE_MS, discardImportJobRows } from "./import-session";
 import type { Env } from "./env";
+import { attachPlaceLabels } from "./catalog";
 
 const OSRM_BASE_DEFAULT = "https://router.project-osrm.org/route/v1";
 /**
@@ -245,6 +250,64 @@ export async function fetchRoute(
   } catch {
     return fallback;
   }
+}
+
+/** Via points on a predicted road line, including the two anchors. */
+const PREDICT_VIA_POINTS = 6;
+
+/**
+ * One road route through several points. Unlike Best, a line that strays from the
+ * GPS is kept: Predicted is the guess, and the gap text says how far off it is.
+ * Spends one live call. A failure, or an empty budget, is a straight line.
+ */
+async function fetchRouteThrough(
+  db: ReturnType<typeof createDb>,
+  points: [number, number][],
+  mode: string,
+  budget?: LiveLookupBudget,
+): Promise<[number, number][]> {
+  const start = points[0];
+  const end = points[points.length - 1] ?? start;
+  const fallback: [number, number][] = start && end ? [start, end] : [];
+  if (!start || !end || points.length < 2 || SKIP.has(mode)) return fallback.length ? fallback : [start ?? [0, 0], end ?? [0, 0]];
+  const profile = MODE_TO_PROFILE[mode] ?? "driving";
+  const key = `predict:${profile}:${points.map((p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`).join(";")}`;
+  const cached = await db.select().from(routeCache).where(eq(routeCache.key, key)).limit(1);
+  if (cached[0]) return cached[0].geometry.length >= 2 ? cached[0].geometry : fallback;
+  if (budget) {
+    if (budget.live < 1) return fallback;
+    budget.live -= 1;
+  }
+  const coords = points.map((p) => `${p[1]},${p[0]}`).join(";");
+  const url = `${OSRM_BASE}/${profile}/${coords}?overview=full&geometries=geojson`;
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS), headers: OSRM_HEADERS });
+    if (!resp.ok) return fallback;
+    const data = (await resp.json()) as {
+      code?: string;
+      routes?: Array<{ geometry: { coordinates: number[][] } }>;
+    };
+    if (data.code !== "Ok" || !data.routes?.length) return fallback;
+    const geometry = data.routes[0].geometry.coordinates.map((c) => [c[1], c[0]] as [number, number]);
+    if (geometry.length < 2) return fallback;
+    await db
+      .insert(routeCache)
+      .values({ key, geometry, steps: [] })
+      .onConflictDoUpdate({ target: routeCache.key, set: { geometry, steps: [] } });
+    return geometry;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Anchors, with up to four GPS fixes from the trace between them. */
+function predictViaPoints(trace: PathPoint[] | null, start: LatLon, end: LatLon): [number, number][] {
+  if (!trace || trace.length < 2) return [start, end];
+  const cleaned = cleanTrace(trace);
+  if (cleaned.length < 2) return [start, end];
+  const thinned = thinTrace(cleaned, { minSpacingM: TRACE_MIN_SPACING_M, maxPoints: PREDICT_VIA_POINTS });
+  const middle = thinned.slice(1, -1).map((p) => [p[0], p[1]] as [number, number]);
+  return [start, ...middle, end];
 }
 
 /** Public OSRM rejects map-matching radii above ~30m. */
@@ -599,7 +662,8 @@ export async function resolveCoords(
   const key = makeCoordPlaceKey(lat, lon);
   const cached = await db.select().from(placeCache).where(eq(placeCache.placeId, key)).limit(1);
   if (cached[0]) {
-    return { name: cached[0].name, address: cached[0].address, data: cached[0].data };
+    const title = titleFromPlaceCache(lat, lon, cached[0].data);
+    return { name: title.name || "Unknown", address: cached[0].address, data: cached[0].data };
   }
 
   if (budget) {
@@ -620,14 +684,7 @@ export async function resolveCoords(
       display_name?: string;
       address?: Record<string, string>;
     };
-    const name =
-      data.name ||
-      data.address?.amenity ||
-      data.address?.shop ||
-      data.address?.tourism ||
-      data.address?.building ||
-      data.address?.road ||
-      "Unknown";
+    const name = titleFromGeocode(lat, lon, data).name || "Unknown";
     const address = data.display_name ?? "";
     const payload = { address: data.address ?? {}, raw: data };
     await db
@@ -1053,10 +1110,18 @@ export function hotspotTitle(p: {
   street: string | null;
   settlement: string | null;
   near?: string | null;
+  /** Set when `street` came from a reverse geocode, so a road can take Google's type. */
+  streetKind?: PlaceTitleKind | null;
+  semanticType?: string | null;
 }): string {
   if (p.name) return p.name;
   if (p.kind) return p.kind === "home" ? "Home" : "Work";
-  if (p.street) return p.street;
+  if (p.street) {
+    return titleWithType(
+      { name: p.street, kind: p.streetKind === "road" ? "road" : "building" },
+      p.semanticType,
+    );
+  }
   if (p.settlement) return `Near ${p.settlement}`;
   if (p.near) return `Near ${p.near}`;
   return `Near ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`;
@@ -1089,12 +1154,15 @@ export async function enrichHeatmapSettlements(
 
   const streetKeys = points.map((p) => makeCoordPlaceKey(p.lat, p.lon));
   const streetRows = await db
-    .select({ placeId: placeCache.placeId, name: placeCache.name })
+    .select({ placeId: placeCache.placeId, data: placeCache.data })
     .from(placeCache)
     .where(inArray(placeCache.placeId, [...new Set(streetKeys)]));
-  const streetByKey = new Map(streetRows.map((r) => [r.placeId, usefulName(r.name)]));
+  const streetByKey = new Map(streetRows.map((r) => [r.placeId, r.data]));
+  const streetKind = new Map<HeatmapPoint, PlaceTitleKind>();
   points.forEach((p, i) => {
-    p.street = streetByKey.get(streetKeys[i]) ?? null;
+    const title = titleFromPlaceCache(p.lat, p.lon, streetByKey.get(streetKeys[i]));
+    p.street = title.name || null;
+    streetKind.set(p, title.kind);
   });
 
   const top = points.slice(0, TOP_SETTLEMENT);
@@ -1114,7 +1182,9 @@ export async function enrichHeatmapSettlements(
     if (unnamed && budget.live > 0) {
       // One street-level call gives both the street or building and the town.
       const found = await resolveCoords(db, point.lat, point.lon, budget);
-      point.street = usefulName(found.name);
+      const title = titleFromPlaceCache(point.lat, point.lon, found.data);
+      point.street = title.name || null;
+      streetKind.set(point, title.kind);
       const town = settlementFromAddress((found.data as { address?: Record<string, string> }).address);
       if (town) point.settlement = town;
     }
@@ -1157,7 +1227,12 @@ export async function enrichHeatmapSettlements(
         }
       }
     }
-    p.label = hotspotTitle({ ...p, near });
+    p.label = hotspotTitle({
+      ...p,
+      near,
+      streetKind: streetKind.get(p) ?? null,
+      semanticType: p.topTypes[0] ?? null,
+    });
   }
   return points;
 }
@@ -1174,7 +1249,7 @@ export async function getAnalytics(
     .limit(1);
   const data = rows[0]?.data ?? [];
   const hidden = await hiddenPlaceKeySet(db, tenant);
-  return filterHiddenAnalytics(key, data, hidden);
+  return attachPlaceLabels(db, tenant, key, filterHiddenAnalytics(key, data, hidden));
 }
 
 function isHiddenCluster(name: string, hidden: Set<string>): boolean {
@@ -1562,18 +1637,26 @@ export async function buildDay(
     });
 
     if (opts?.compare) {
-      const predicted =
-        a.mode === "train" || a.mode === "subway"
-          ? makeRailArc(snapStartLat, snapStartLon, snapEndLat, snapEndLon)
-          : snapGeometry(
-              (await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode, routeBudget)).geometry,
-              snapStartLat,
-              snapStartLon,
-              snapEndLat,
-              snapEndLon,
-            );
+      const rail = a.mode === "train" || a.mode === "subway";
+      const snapStart: LatLon = [snapStartLat, snapStartLon];
+      const snapEnd: LatLon = [snapEndLat, snapEndLon];
+      let predicted: [number, number][];
+      if (rail && a.railGeometry && a.railGeometry.length >= 2) {
+        predicted = snapGeometry(a.railGeometry, snapStartLat, snapStartLon, snapEndLat, snapEndLon);
+      } else if (rail) {
+        predicted = [];
+      } else {
+        const via = predictViaPoints(recorded, snapStart, snapEnd);
+        predicted = snapGeometry(
+          await fetchRouteThrough(db, via, a.mode, routeBudget),
+          snapStartLat,
+          snapStartLon,
+          snapEndLat,
+          snapEndLon,
+        );
+      }
       d.predicted_geometry = predicted;
-      d.prediction_gap = a.path?.length ? traceDeviation(a.path, predicted) : null;
+      d.prediction_gap = predicted.length >= 2 && a.path?.length ? traceDeviation(a.path, predicted) : null;
     }
 
     d.via_places = recorded ? await placesAlongTrace(db, recorded, viaBudget) : [];

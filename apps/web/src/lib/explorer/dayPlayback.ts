@@ -116,7 +116,9 @@ function fallbackPath(
   end: [number, number],
   geometry?: [number, number][],
 ): [number, number][] {
-  if (geometry && geometry.length > 0) return geometry;
+  if (geometry && geometry.length > 1) return geometry;
+  // An empty list is an explicit "no line" (a train with no rail line in Predicted).
+  if (geometry && geometry.length === 0) return [start];
   return [start, end];
 }
 

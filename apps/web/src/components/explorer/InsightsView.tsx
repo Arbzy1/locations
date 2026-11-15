@@ -137,7 +137,7 @@ export default function InsightsView() {
         .map((a) => ({
           lat: a.lat,
           lon: a.lon,
-          label: a.cluster,
+          label: a.label || a.cluster,
           visits: a.visits,
         })),
     [visibleAreas],
@@ -377,12 +377,16 @@ export default function InsightsView() {
                     <div key={m.month} className="rounded-md border border-border/60 bg-surface/40 p-2">
                       <div className="mb-1 text-[11px] font-semibold text-text-muted">{m.month}</div>
                       <ul className="space-y-0.5 text-xs">
-                        {places.map(([name, count]) => (
+                        {places.map((place) => {
+                          const [name, count] = place;
+                          const label = place[2] || name;
+                          return (
                           <li key={name} className="flex justify-between gap-2">
-                            <span className="truncate text-text">{name}</span>
+                            <span className="truncate text-text">{label}</span>
                             <span className="shrink-0 font-mono text-text-muted">{count}</span>
                           </li>
-                        ))}
+                          );
+                        })}
                       </ul>
                     </div>
                   );
@@ -548,12 +552,15 @@ export default function InsightsView() {
                   {yearReview.top_places
                     .filter(([name]) => !hiddenKeys.has(name))
                     .slice(0, 8)
-                    .map(([name, count]) => (
+                    .map((place) => {
+                      const [name, count] = place;
+                      return (
                       <li key={name} className="flex justify-between gap-2">
-                        <span className="truncate">{name}</span>
+                        <span className="truncate">{place[2] || name}</span>
                         <span className="shrink-0 font-mono text-text-muted">{count}</span>
                       </li>
-                    ))}
+                      );
+                    })}
                 </ul>
               </div>
             )}
@@ -585,7 +592,7 @@ export default function InsightsView() {
               Home:{' '}
               {homeWork.home ? (
                 <Link className="text-accent" to={placePath(homeWork.home.cluster)} title="Open home guess">
-                  {homeWork.home.cluster}
+                  {homeWork.home.label || homeWork.home.cluster}
                 </Link>
               ) : (
                 'unknown'
@@ -593,7 +600,7 @@ export default function InsightsView() {
               {homeWork.home ? ` (${homeWork.home.visits} overnight visits)` : ''}
             </p>
             <p className="mt-1 text-sm text-text">
-              Work: {homeWork.work?.cluster ?? 'unknown'}
+              Work: {homeWork.work ? (homeWork.work.label || homeWork.work.cluster) : 'unknown'}
               {homeWork.work ? ` (${homeWork.work.visits} weekday visits)` : ''}
             </p>
           </div>
@@ -605,7 +612,7 @@ export default function InsightsView() {
             <ul className="space-y-1 text-sm">
               {visibleAreas.slice(0, 12).map((a) => (
                 <li key={a.cluster} className="flex justify-between">
-                  <span>{a.cluster}</span>
+                  <span>{a.label || a.cluster}</span>
                   <span className="font-mono text-text-muted">{a.visits}</span>
                 </li>
               ))}

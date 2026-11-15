@@ -205,6 +205,18 @@ interface MapProps {
   onFocusJourney?: (start: string | null) => void;
 }
 
+/** Null when Predicted has no line, so the map does not invent a straight one. */
+function drawnPositions(a: Activity, variant: LineVariant): [number, number][] | null {
+  if (a.route_geometry && a.route_geometry.length >= 2) {
+    return a.route_geometry.map((c) => [c[0], c[1]]);
+  }
+  if (variant === 'predicted') return null;
+  return [
+    [a.start_lat, a.start_lon],
+    [a.end_lat, a.end_lon],
+  ];
+}
+
 const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   {
     visits = NO_VISITS,
@@ -565,12 +577,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         .filter(({ a }) => !hiddenDayModes.includes(a.mode));
       const walkColor = literalColor(journeyColor({ mode: 'walking' }, 0, 1, coloring));
       const actFeatures = (pointsMode ? [] : shownActivities).flatMap(({ a, i }) => {
-        const positions: [number, number][] = a.route_geometry?.length
-          ? a.route_geometry.map((c) => [c[0], c[1]])
-          : [
-              [a.start_lat, a.start_lon],
-              [a.end_lat, a.end_lon],
-            ];
+        const positions = drawnPositions(a, lineVariant);
+        if (!positions) return [];
         const color = colorForActivity(a, i);
         const html = activityPopupHtml(a, i, totalJourneys, color, unit);
         const focusWidth = focusedStart === a.start ? 2 : 0;
@@ -659,7 +667,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pointsMode, sortedActivities, sourceColors, totalJourneys, coloring, focusedStart, hiddenDayModes, unit, theme, mood],
+    [pointsMode, lineVariant, sortedActivities, sourceColors, totalJourneys, coloring, focusedStart, hiddenDayModes, unit, theme, mood],
   );
 
   /** Period route lines, filtered by the hidden modes. */
@@ -939,12 +947,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
 
       if (z >= 13 && !pointsMode) {
         shownActivities.forEach(({ a, i }) => {
-          const positions: [number, number][] = a.route_geometry?.length
-            ? a.route_geometry.map((c) => [c[0], c[1]])
-            : [
-                [a.start_lat, a.start_lon],
-                [a.end_lat, a.end_lon],
-              ];
+          const positions = drawnPositions(a, lineVariant);
+          if (!positions) return;
           const color = colorForActivity(a, i);
           const arrowCount = positions.length > 10 ? 3 : positions.length > 4 ? 2 : 1;
           const arrowOpacity = focusedStart && focusedStart !== a.start ? 0.15 : 0.9;
@@ -961,12 +965,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
 
       if (!pointsMode && !compact) {
         shownActivities.forEach(({ a, i }) => {
-          const positions: [number, number][] = a.route_geometry?.length
-            ? a.route_geometry.map((c) => [c[0], c[1]])
-            : [
-                [a.start_lat, a.start_lon],
-                [a.end_lat, a.end_lon],
-              ];
+          const positions = drawnPositions(a, lineVariant);
+          if (!positions) return;
           // 40% along: a trip back over the same road puts its badge elsewhere.
           const at = pointAlong(positions, 0.4);
           if (!at) return;
@@ -1004,12 +1004,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         });
         shownActivities.forEach(({ a, i }) => {
           if (a.duration_minutes < 3) return;
-          const positions: [number, number][] = a.route_geometry?.length
-            ? a.route_geometry.map((c) => [c[0], c[1]])
-            : [
-                [a.start_lat, a.start_lon],
-                [a.end_lat, a.end_lon],
-              ];
+          const positions = drawnPositions(a, lineVariant);
+          if (!positions) return;
           const pts = getArrowPoints(positions, 3);
           if (!pts[0]) return;
           const color = colorForActivity(a, i);
@@ -1027,7 +1023,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       markerZoomBand.current = zoomBand(z);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [homeWorkPins, hotspotLabels, visits, pointsMode, compact, sortedActivities, sourceColors, totalJourneys, coloring, focusedStart, hiddenDayModes, unit, showPopup, focusJourneyRef, theme, mood],
+    [homeWorkPins, hotspotLabels, visits, pointsMode, lineVariant, compact, sortedActivities, sourceColors, totalJourneys, coloring, focusedStart, hiddenDayModes, unit, showPopup, focusJourneyRef, theme, mood],
   );
 
   // Every group at once, in layer order: on load and after a style change, when the

@@ -53,6 +53,13 @@ describe("hotspot titles", () => {
     expect(hotspotTitle(base)).toBe("Near 52.1234, -1.2345");
   });
 
+  it("adds Google's place type when the geocode title is only a road", () => {
+    const base = { lat: 52.1234, lon: -1.2345, name: null, kind: null, street: "Mill Lane", settlement: null };
+    expect(hotspotTitle({ ...base, streetKind: "road", semanticType: "Restaurant" })).toBe("Restaurant, Mill Lane");
+    expect(hotspotTitle({ ...base, streetKind: "road", semanticType: "Home" })).toBe("Mill Lane");
+    expect(hotspotTitle({ ...base, streetKind: "building", semanticType: "Restaurant" })).toBe("Mill Lane");
+  });
+
   it("read home and work from Google's place types", () => {
     expect(placeKind(["Inferred Home"])).toBe("home");
     expect(placeKind(["Inferred Work", "Home"])).toBe("work");
@@ -71,7 +78,7 @@ describe("enrichHeatmapSettlements", () => {
     const p = point(52.0, -1.0);
     await enrichHeatmapSettlements(
       cacheDb([
-        { placeId: coordKey(52.0, -1.0), name: "Mill Lane" },
+        { placeId: coordKey(52.0, -1.0), name: "Mill Lane", data: { address: { road: "Mill Lane" } } },
         { placeId: townKey(52.0, -1.0), name: "Townsville" },
       ]),
       [p],
@@ -84,7 +91,10 @@ describe("enrichHeatmapSettlements", () => {
 
   it("keeps Home as the title with the street alongside", async () => {
     const p = point(52.01, -1.01, { kind: "home", topTypes: ["Home"] });
-    await enrichHeatmapSettlements(cacheDb([{ placeId: coordKey(52.01, -1.01), name: "Orchard Close" }]), [p]);
+    await enrichHeatmapSettlements(
+      cacheDb([{ placeId: coordKey(52.01, -1.01), name: "Orchard Close", data: { address: { road: "Orchard Close" } } }]),
+      [p],
+    );
     expect(p.label).toBe("Home");
     expect(p.street).toBe("Orchard Close");
   });
@@ -92,7 +102,10 @@ describe("enrichHeatmapSettlements", () => {
   it("calls an unnamed hotspot near the closest named one", async () => {
     const named = point(52.0, -1.0);
     const unnamed = point(52.004, -1.0); // ~450 m north, nothing cached
-    await enrichHeatmapSettlements(cacheDb([{ placeId: coordKey(52.0, -1.0), name: "Mill Lane" }]), [named, unnamed]);
+    await enrichHeatmapSettlements(
+      cacheDb([{ placeId: coordKey(52.0, -1.0), name: "Mill Lane", data: { address: { road: "Mill Lane" } } }]),
+      [named, unnamed],
+    );
     expect(unnamed.label).toBe("Near Mill Lane");
   });
 

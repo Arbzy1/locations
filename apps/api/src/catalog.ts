@@ -24,6 +24,8 @@ import {
   haversineM,
   makeCoordPlaceKey,
   markAggregatesStale,
+  titleFromPlaceCache,
+  titleWithType,
   METERS_TO_MILES,
   type PathPoint,
   type TenantId,
@@ -122,28 +124,208 @@ async function placeDisplayNames(db: Db, tenant: TenantId, groups: PlaceGroup[])
 
   const coordKey = (g: PlaceGroup) => makeCoordPlaceKey(g.repLat, g.repLon);
   const keys = [...new Set(groups.map(coordKey))];
-  const cached = new Map<string, string>();
+  const cached = new Map<string, { name: string; data: unknown }>();
   for (let i = 0; i < keys.length; i += 500) {
     const rows = await db
-      .select({ placeId: placeCache.placeId, name: placeCache.name })
+      .select({ placeId: placeCache.placeId, data: placeCache.data })
       .from(placeCache)
       .where(inArray(placeCache.placeId, keys.slice(i, i + 500)));
-    for (const r of rows) if (r.name && r.name !== "Unknown") cached.set(r.placeId, r.name);
+    for (const r of rows) cached.set(r.placeId, { name: "", data: r.data });
   }
 
   const names = new Map<string, string>();
   for (const g of groups) {
     const semantic = g.semanticType && g.semanticType !== "Unknown" ? g.semanticType : "";
+    const hit = cached.get(coordKey(g));
+    const titled = hit ? titleFromPlaceCache(g.repLat, g.repLon, hit.data) : { name: "", kind: "none" as const };
+    const geocoded = titleWithType(titled, g.semanticType);
     names.set(
       g.key,
       labelByKey.get(g.key) ||
         g.googleName ||
-        cached.get(coordKey(g)) ||
+        geocoded ||
         semantic ||
         `Near ${g.lat.toFixed(3)}, ${g.lon.toFixed(3)}`,
     );
   }
   return names;
+}
+
+/** Display names for place keys (`g:` / `c:`). Other strings are left unchanged. */
+export async function labelsForPlaceKeys(
+  db: Db,
+  tenant: TenantId,
+  keys: string[],
+): Promise<Map<string, string>> {
+  const real = [...new Set(keys.filter((key) => isRealPlaceKey(key)))];
+  if (!real.length) return new Map();
+  const groups = await placeGroups(db, tenant, undefined, real);
+  return placeDisplayNames(db, tenant, groups);
+}
+
+function rememberKey(keys: string[], value: unknown) {
+  if (typeof value === "string" && isRealPlaceKey(value)) keys.push(value);
+}
+
+function chapterPlaceKeys(chapter: unknown, keys: string[]) {
+  if (!chapter || typeof chapter !== "object") return;
+  const row = chapter as { top_places?: [string, number][]; firsts?: { cluster?: string }[] };
+  for (const [name] of row.top_places ?? []) rememberKey(keys, name);
+  for (const first of row.firsts ?? []) rememberKey(keys, first.cluster);
+}
+
+function labelChapter(chapter: unknown, names: Map<string, string>): unknown {
+  if (!chapter || typeof chapter !== "object") return chapter;
+  const row = chapter as {
+    top_places?: [string, number][];
+    firsts?: { cluster: string; date: string; label?: string }[];
+  };
+  return {
+    ...row,
+    top_places: (row.top_places ?? []).map(([name, count]) => {
+      const label = names.get(name);
+      return label ? [name, count, label] : [name, count];
+    }),
+    firsts: (row.firsts ?? []).map((first) => ({
+      ...first,
+      label: names.get(first.cluster) ?? first.label ?? first.cluster,
+    })),
+  };
+}
+
+/**
+ * Add a display name beside each place key in the Insights payloads that name a
+ * place. The key stays, so hiding and links still use it. Region grids are unchanged.
+ */
+export async function attachPlaceLabels(
+  db: Db,
+  tenant: TenantId,
+  key: string,
+  data: unknown,
+): Promise<unknown> {
+  const keys: string[] = [];
+  if (key === "areas" && Array.isArray(data)) {
+    for (const row of data) {
+      if (row && typeof row === "object") rememberKey(keys, (row as { cluster?: string }).cluster);
+    }
+  } else if (key === "home-work" && data && typeof data === "object") {
+    const hw = data as { home?: { cluster?: string } | null; work?: { cluster?: string } | null };
+    rememberKey(keys, hw.home?.cluster);
+    rememberKey(keys, hw.work?.cluster);
+  } else if (key === "facts" && Array.isArray(data)) {
+    for (const fact of data) {
+      if (!fact || typeof fact !== "object") continue;
+      const row = fact as { placeKey?: string; value?: string };
+      rememberKey(keys, row.placeKey);
+      rememberKey(keys, row.value);
+    }
+  } else if (key === "monthly" && Array.isArray(data)) {
+    for (const month of data) {
+      if (!month || typeof month !== "object") continue;
+      for (const [name] of (month as { top_places?: [string, number][] }).top_places ?? []) rememberKey(keys, name);
+    }
+  } else if (key === "firsts" && data && typeof data === "object" && !Array.isArray(data)) {
+    for (const row of (data as { clusters?: { name?: string }[] }).clusters ?? []) rememberKey(keys, row.name);
+  } else if (key === "year-in-review" && data && typeof data === "object" && !Array.isArray(data)) {
+    if ("year" in data) chapterPlaceKeys(data, keys);
+    else for (const chapter of Object.values(data as Record<string, unknown>)) chapterPlaceKeys(chapter, keys);
+  } else if (key.startsWith("year-in-review:")) {
+    chapterPlaceKeys(data, keys);
+  } else if (key === "away-nights" && Array.isArray(data)) {
+    for (const row of data) {
+      if (row && typeof row === "object") rememberKey(keys, (row as { cluster?: string }).cluster);
+    }
+  } else if (key === "commute" && data && typeof data === "object" && !Array.isArray(data)) {
+    const row = data as { home?: string; work?: string };
+    rememberKey(keys, row.home);
+    rememberKey(keys, row.work);
+  } else {
+    return data;
+  }
+
+  const names = await labelsForPlaceKeys(db, tenant, keys);
+  if (!names.size && key !== "areas" && key !== "home-work") return data;
+
+  if (key === "areas" && Array.isArray(data)) {
+    return data.map((row) => {
+      if (!row || typeof row !== "object") return row;
+      const area = row as { cluster?: string };
+      const cluster = area.cluster ?? "";
+      return { ...area, label: names.get(cluster) ?? cluster };
+    });
+  }
+  if (key === "home-work" && data && typeof data === "object") {
+    const hw = data as {
+      home: { cluster: string; visits: number } | null;
+      work: { cluster: string; visits: number } | null;
+    };
+    const named = (place: { cluster: string; visits: number } | null) =>
+      place ? { ...place, label: names.get(place.cluster) ?? place.cluster } : null;
+    return { ...hw, home: named(hw.home), work: named(hw.work) };
+  }
+  if (key === "facts" && Array.isArray(data)) {
+    return data.map((fact) => {
+      if (!fact || typeof fact !== "object") return fact;
+      const row = fact as { label?: string; value?: string; placeKey?: string };
+      const placeKey = isRealPlaceKey(row.placeKey ?? "") ? row.placeKey! : isRealPlaceKey(row.value ?? "") ? row.value! : "";
+      const label = placeKey ? names.get(placeKey) : undefined;
+      if (!label) return fact;
+      return {
+        ...row,
+        label: typeof row.label === "string" && row.label.startsWith("Visits to ") ? `Visits to ${label}` : row.label,
+        value: row.value === placeKey ? label : row.value,
+      };
+    });
+  }
+  if (key === "monthly" && Array.isArray(data)) {
+    return data.map((month) => {
+      if (!month || typeof month !== "object") return month;
+      const row = month as { top_places?: [string, number][] };
+      return {
+        ...row,
+        top_places: (row.top_places ?? []).map(([name, count]) => {
+          const label = names.get(name);
+          return label ? [name, count, label] : [name, count];
+        }),
+      };
+    });
+  }
+  if (key === "firsts" && data && typeof data === "object" && !Array.isArray(data)) {
+    const row = data as { clusters?: { name: string; date: string }[] };
+    return {
+      ...row,
+      clusters: (row.clusters ?? []).map((item) => ({
+        ...item,
+        label: names.get(item.name) ?? item.name,
+      })),
+    };
+  }
+  if (key === "year-in-review" && data && typeof data === "object" && !Array.isArray(data)) {
+    if ("year" in data) return labelChapter(data, names);
+    const out: Record<string, unknown> = {};
+    for (const [year, chapter] of Object.entries(data as Record<string, unknown>)) {
+      out[year] = labelChapter(chapter, names);
+    }
+    return out;
+  }
+  if (key.startsWith("year-in-review:")) return labelChapter(data, names);
+  if (key === "away-nights" && Array.isArray(data)) {
+    return data.map((row) => {
+      if (!row || typeof row !== "object") return row;
+      const night = row as { cluster?: string };
+      const cluster = night.cluster ?? "";
+      return { ...night, label: names.get(cluster) ?? cluster };
+    });
+  }
+  if (key === "commute" && data && typeof data === "object" && !Array.isArray(data)) {
+    const row = data as { home?: string; work?: string };
+    return {
+      ...row,
+      homeLabel: row.home ? (names.get(row.home) ?? row.home) : undefined,
+      workLabel: row.work ? (names.get(row.work) ?? row.work) : undefined,
+    };
+  }
+  return data;
 }
 
 export async function listClusters(

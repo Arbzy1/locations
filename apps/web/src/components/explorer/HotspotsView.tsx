@@ -457,11 +457,11 @@ export default function HotspotsView() {
     };
     const homeAt = coordFor(homeWork?.home?.cluster);
     if (homeAt) {
-      pins.push({ kind: 'home', ...homeAt, label: homeWork!.home!.cluster });
+      pins.push({ kind: 'home', ...homeAt, label: homeWork!.home!.label || homeWork!.home!.cluster });
     }
     const workAt = coordFor(homeWork?.work?.cluster);
     if (workAt) {
-      pins.push({ kind: 'work', ...workAt, label: homeWork!.work!.cluster });
+      pins.push({ kind: 'work', ...workAt, label: homeWork!.work!.label || homeWork!.work!.cluster });
     }
     return pins;
   }, [heatmapPoints, areas, homeWork]);

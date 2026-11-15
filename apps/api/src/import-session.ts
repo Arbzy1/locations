@@ -4,6 +4,8 @@
  * validate and store small batches, so every request stays a few milliseconds of CPU.
  */
 import {
+  AGGREGATES_FORMAT,
+  AGGREGATES_FORMAT_KEY,
   AGGREGATES_STALE_KEY,
   MAX_PATH_POINTS,
   TRANSPORT_MODE_MAP,
@@ -16,6 +18,7 @@ import {
   dayStats,
   eq,
   gt,
+  inArray,
   importJobs,
   lt,
   markAggregatesStale,
@@ -545,11 +548,18 @@ export async function finishImportJob(
 /** True when the browser should recompute this tenant's aggregates. */
 export async function aggregatesStale(db: Db, tenant: TenantId): Promise<boolean> {
   const rows = await db
-    .select({ key: analyticsCache.key })
+    .select({ key: analyticsCache.key, data: analyticsCache.data })
     .from(analyticsCache)
-    .where(and(eq(analyticsCache.tenant, tenant), eq(analyticsCache.key, AGGREGATES_STALE_KEY)))
-    .limit(1);
-  return rows.length > 0;
+    .where(
+      and(
+        eq(analyticsCache.tenant, tenant),
+        inArray(analyticsCache.key, [AGGREGATES_STALE_KEY, AGGREGATES_FORMAT_KEY]),
+      ),
+    );
+  const stale = rows.some((row) => row.key === AGGREGATES_STALE_KEY);
+  const format = rows.find((row) => row.key === AGGREGATES_FORMAT_KEY);
+  const version = (format?.data as { v?: unknown } | undefined)?.v;
+  return stale || version !== AGGREGATES_FORMAT;
 }
 
 /** One page of stays or journeys (no GPS paths) for the browser to aggregate. */
@@ -685,6 +695,13 @@ export async function writeAggregates(
       });
   }
   if (chunk.done) {
+    await db
+      .insert(analyticsCache)
+      .values({ tenant, key: AGGREGATES_FORMAT_KEY, data: { v: AGGREGATES_FORMAT } })
+      .onConflictDoUpdate({
+        target: [analyticsCache.tenant, analyticsCache.key],
+        set: { data: { v: AGGREGATES_FORMAT }, updatedAt: new Date() },
+      });
     await db
       .delete(analyticsCache)
       .where(and(eq(analyticsCache.tenant, tenant), eq(analyticsCache.key, AGGREGATES_STALE_KEY)));

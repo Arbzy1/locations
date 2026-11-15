@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Stays of a day or longer are shown in days, then hours, then minutes. A place is called a building only when that building is within 40 m; otherwise Insights names the place itself (your name, Google's, or the street) instead of a 55 km grid square. Predicted lines in Day View follow the recorded GPS on roads, and a train uses its rail line.
+
 Hotspots are named after the actual place: your own name for it, Google's, Home or Work, or the street or building there (a road, a shop or a station), with the street and town underneath. Unnamed spots say "Near" their town or the closest named hotspot. The 0.5 degree grid label ("51.5°N 0.5°W"), which was the same for every place in a town, is gone. Renaming, tagging or hiding a hotspot now applies to that place only, not every hotspot in the same grid square, and "Place page" opens the place itself. The ranked list shows each place once (a place that covers a few heatmap squares used to appear several times, for example Home three times), with visits, time and days counted across all of it; the heatmap still shows every square.
 
 Day View shows where GPS went quiet: a stretch of a journey with no GPS point for over 10 minutes is drawn as a faint dash, so you can see which part of the line is a guess. Train journeys that Google recorded with the walk to and from the platform draw those ends as walking.

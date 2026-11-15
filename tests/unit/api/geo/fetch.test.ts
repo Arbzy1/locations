@@ -98,11 +98,12 @@ describe("geo HTTP helpers", () => {
   it("returns cached places without fetching", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
+    const data = { cached: true, raw: { lat: "40.7", lon: "-74", name: "Cafe" } };
     const db = geoDb({
-      placeRows: [{ name: "Cafe", address: "1 Main", data: { cached: true } }],
+      placeRows: [{ name: "Cafe", address: "1 Main", data }],
     });
     const result = await resolveCoords(db as never, 40.7, -74);
-    expect(result).toEqual({ name: "Cafe", address: "1 Main", data: { cached: true } });
+    expect(result).toEqual({ name: "Cafe", address: "1 Main", data });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

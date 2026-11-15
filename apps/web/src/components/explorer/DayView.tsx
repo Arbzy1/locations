@@ -36,7 +36,7 @@ import {
 const LINE_VARIANTS: { id: LineVariant; label: string; title: string }[] = [
   { id: 'best', label: 'Best', title: 'GPS points snapped onto roads where possible' },
   { id: 'recorded', label: 'Recorded', title: 'Only what your phone recorded: straight lines between GPS points' },
-  { id: 'predicted', label: 'Predicted', title: "OSRM's fastest route between each journey's start and end" },
+  { id: 'predicted', label: 'Predicted', title: 'A road route through your GPS points, or the rail line for a train' },
   { id: 'points', label: 'Points', title: 'Only the GPS points your phone recorded, with no lines between them' },
 ];
 

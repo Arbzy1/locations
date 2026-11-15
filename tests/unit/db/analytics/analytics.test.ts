@@ -14,6 +14,7 @@ import {
   computeAwayNights,
   computeFirsts,
   computeDataHealth,
+  computeAreas,
 } from "@locations/db";
 import type { ActivityRow, DayStatsRow, VisitRow } from "@locations/db";
 
@@ -28,6 +29,7 @@ function visit(partial: Partial<VisitRow> & { date: string; start: string }): Vi
     lat: partial.lat ?? 40.7,
     lon: partial.lon ?? -74,
     cluster: partial.cluster ?? "home",
+    placeKey: partial.placeKey ?? null,
     semanticType: partial.semanticType ?? "Unknown",
     placeId: null,
     durationMinutes: 60,
@@ -529,5 +531,24 @@ describe("timezone-aware nights", () => {
     );
     expect(inferHomeWork(evening).home?.cluster).toBe("hotel");
     expect(computeAwayNights(evening)).toEqual([]);
+  });
+});
+
+describe("place keys in insights", () => {
+  it("groups areas, home and the longest stay by place key", () => {
+    const stay = visit({
+      id: 1,
+      date: "2024-06-03",
+      start: "2024-06-03T22:00:00Z",
+      cluster: "51.5°N 0.1°W",
+      placeKey: "g:mill",
+      lat: 51.5,
+      lon: -0.12,
+      durationMinutes: 4000,
+    });
+    const store = buildStore([stay], [], [day("2024-06-03", { clusters: ["51.5°N 0.1°W"] })]);
+    expect(computeAreas(store)[0]?.cluster).toBe("g:mill");
+    expect(inferHomeWork(store).home?.cluster).toBe("g:mill");
+    expect(computeFunFacts(store).find((f) => f.label === "Longest stay without leaving")?.value).toBe("g:mill");
   });
 });

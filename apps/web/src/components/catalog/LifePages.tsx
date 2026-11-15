@@ -16,9 +16,10 @@ import { useSession } from '../../lib/auth';
 import type { ActivityGuessCount, BadgeSummary } from '../../types';
 
 export function FirstsPage() {
-  const { data } = useCachedAnalytics<{ clusters: { name: string; date: string }[]; types: { name: string; date: string }[] }>(
-    'firsts',
-  );
+  const { data } = useCachedAnalytics<{
+    clusters: { name: string; date: string; label?: string }[];
+    types: { name: string; date: string }[];
+  }>('firsts');
   const clusters = data && !Array.isArray(data) ? data.clusters : [];
   const types = data && !Array.isArray(data) ? data.types : [];
   return (
@@ -27,9 +28,9 @@ export function FirstsPage() {
       <ul className="space-y-1">
         {clusters.map((r) => (
           <li key={r.name} className="flex items-center gap-2">
-            <Button variant="ghost" asChild title={`Open ${r.name}`} className="h-11 min-w-0 flex-1 justify-between font-normal">
+            <Button variant="ghost" asChild title={`Open ${r.label || r.name}`} className="h-11 min-w-0 flex-1 justify-between font-normal">
               <Link to={placePath(r.name)}>
-                <span className="truncate">{r.name}</span>
+                <span className="truncate">{r.label || r.name}</span>
               </Link>
             </Button>
             <Button variant="ghost" asChild title={`Open ${r.date}`} className="h-11 shrink-0">

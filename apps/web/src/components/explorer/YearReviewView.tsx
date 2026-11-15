@@ -117,12 +117,15 @@ export default function YearReviewView() {
                 <motion.section key="places" {...enter} className="rounded-lg border border-border bg-bg p-4">
                   <h3 className="mb-3 text-sm font-semibold text-text-muted">Places</h3>
                   <ul className="space-y-1 text-sm">
-                    {places.slice(0, 12).map(([name, count]) => (
+                    {places.slice(0, 12).map((place) => {
+                      const [name, count] = place;
+                      return (
                       <li key={name} className="flex justify-between gap-2">
-                        <span className="truncate">{name}</span>
+                        <span className="truncate">{place[2] || name}</span>
                         <span className="shrink-0 font-mono text-text-muted">{count}</span>
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 </motion.section>
               )}
@@ -176,7 +179,7 @@ export default function YearReviewView() {
                   <ul className="space-y-1 text-sm">
                     {firsts.slice(0, 16).map((f) => (
                       <li key={`${f.cluster}-${f.date}`} className="flex justify-between gap-2">
-                        <span className="truncate">{f.cluster}</span>
+                        <span className="truncate">{f.label || f.cluster}</span>
                         <span className="shrink-0 font-mono text-text-muted">{f.date}</span>
                       </li>
                     ))}

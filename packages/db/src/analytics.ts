@@ -6,6 +6,16 @@ import {
 import type { ActivityRow, DayStatsRow, VisitRow } from "./schema.js";
 import { computeActivityGuesses, computeBadges } from "./activity-guess.js";
 
+/** Bump when place-level Insights change shape, so the browser rebuilds aggregates once. */
+export const AGGREGATES_FORMAT = 2;
+export const AGGREGATES_FORMAT_KEY = "_aggregates_format";
+
+/** The place a stay belongs to. Older rows with no place key keep their region label. */
+function stayPlaceKey(v: { placeKey?: string | null; cluster: string }): string {
+  const key = v.placeKey?.trim();
+  return key || v.cluster;
+}
+
 export type DayTrip = {
   date: string;
   clusters: string[];
@@ -46,6 +56,8 @@ export type FunFact = {
   miles?: number;
   date?: string;
   minutes?: number;
+  /** Place key when `value` or the "Visits to" label names a place. */
+  placeKey?: string;
 };
 
 export type Streaks = {
@@ -250,7 +262,7 @@ export function computeMonthlyStats(store: Store): MonthlyStats[] {
     m.distance += day.totalDistanceMiles;
     m.visits += day.visits.length;
     m.activities += day.activities.length;
-    for (const v of day.visits) m.places.set(v.cluster, (m.places.get(v.cluster) ?? 0) + 1);
+    for (const v of day.visits) m.places.set(stayPlaceKey(v), (m.places.get(stayPlaceKey(v)) ?? 0) + 1);
     for (const [mode, count] of Object.entries(day.modes as Record<string, number>)) {
       m.modes[mode] = (m.modes[mode] ?? 0) + count;
     }
@@ -456,11 +468,12 @@ export function computeFunFacts(store: Store): FunFact[] {
 
   const clusterCounts = new Map<string, number>();
   for (const v of store.visits) {
-    clusterCounts.set(v.cluster, (clusterCounts.get(v.cluster) ?? 0) + 1);
+    const place = stayPlaceKey(v);
+    clusterCounts.set(place, (clusterCounts.get(place) ?? 0) + 1);
   }
   const topClusters = [...clusterCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
   for (const [cluster, count] of topClusters) {
-    facts.push({ label: `Visits to ${cluster}`, value: String(count), description: "" });
+    facts.push({ label: `Visits to ${cluster}`, value: String(count), description: "", placeKey: cluster });
   }
 
   let longestDay = "";
@@ -497,18 +510,18 @@ export function computeFunFacts(store: Store): FunFact[] {
 
   const homeGuess = inferHomeWork(store).home;
   if (homeGuess) {
-    const homeVisits = store.visits.filter((v) => v.cluster === homeGuess.cluster);
+    const homeVisits = store.visits.filter((v) => stayPlaceKey(v) === homeGuess.cluster);
     if (homeVisits.length) {
       const homeLat = homeVisits.reduce((s, v) => s + v.lat, 0) / homeVisits.length;
       const homeLon = homeVisits.reduce((s, v) => s + v.lon, 0) / homeVisits.length;
       let farCluster = "";
       let farMiles = 0;
       for (const v of store.visits) {
-        if (v.cluster === homeGuess.cluster) continue;
+        if (stayPlaceKey(v) === homeGuess.cluster) continue;
         const miles = haversineKm(homeLat, homeLon, v.lat, v.lon) * KM_TO_MILES;
         if (miles > farMiles) {
           farMiles = miles;
-          farCluster = v.cluster;
+          farCluster = stayPlaceKey(v);
         }
       }
       if (farCluster) {
@@ -517,6 +530,7 @@ export function computeFunFacts(store: Store): FunFact[] {
           value: farCluster,
           description: "from guessed home",
           miles: Math.round(farMiles * 10) / 10,
+          placeKey: farCluster,
         });
       }
     }
@@ -542,11 +556,13 @@ export function computeFunFacts(store: Store): FunFact[] {
     const longestStay = store.visits.reduce((best, v) =>
       v.durationMinutes > best.durationMinutes ? v : best,
     );
+    const longestPlace = stayPlaceKey(longestStay);
     facts.push({
       label: "Longest stay without leaving",
-      value: longestStay.cluster,
+      value: longestPlace,
       description: longestStay.date,
       minutes: Math.round(longestStay.durationMinutes),
+      placeKey: longestPlace,
     });
   }
 
@@ -648,11 +664,12 @@ export function inferHomeWork(store: Store, timeZone?: string | null): HomeWorkG
   for (const v of store.visits) {
     const { hour, weekday: day } = utcWeekdayHour(v.start, timeZone);
     const weekday = day >= 1 && day <= 5;
+    const place = stayPlaceKey(v);
     if (isNightVisit(v, timeZone)) {
-      homeCounts.set(v.cluster, (homeCounts.get(v.cluster) ?? 0) + 1);
+      homeCounts.set(place, (homeCounts.get(place) ?? 0) + 1);
     }
     if (weekday && hour >= 9 && hour < 17) {
-      workCounts.set(v.cluster, (workCounts.get(v.cluster) ?? 0) + 1);
+      workCounts.set(place, (workCounts.get(place) ?? 0) + 1);
     }
   }
   const top = (m: Map<string, number>) => {
@@ -664,7 +681,10 @@ export function inferHomeWork(store: Store, timeZone?: string | null): HomeWorkG
     const counts = new Map<string, number>();
     for (const v of store.visits) {
       const type = (v.semanticType || "").toLowerCase();
-      if (type === kind || type === `inferred ${kind}`) counts.set(v.cluster, (counts.get(v.cluster) ?? 0) + 1);
+      if (type === kind || type === `inferred ${kind}`) {
+        const place = stayPlaceKey(v);
+        counts.set(place, (counts.get(place) ?? 0) + 1);
+      }
     }
     return top(counts);
   };
@@ -676,9 +696,10 @@ export type AreaStat = { cluster: string; visits: number; lat: number; lon: numb
 export function computeAreas(store: Store): AreaStat[] {
   const map = new Map<string, { visits: number; lat: number; lon: number }>();
   for (const v of store.visits) {
-    const cur = map.get(v.cluster) ?? { visits: 0, lat: v.lat, lon: v.lon };
+    const place = stayPlaceKey(v);
+    const cur = map.get(place) ?? { visits: 0, lat: v.lat, lon: v.lon };
     cur.visits += 1;
-    map.set(v.cluster, cur);
+    map.set(place, cur);
   }
   return [...map.entries()]
     .map(([cluster, v]) => ({ cluster, ...v }))
@@ -743,11 +764,12 @@ export function computeAwayNights(store: Store, timeZone?: string | null): AwayN
   const seen = new Set<string>();
   for (const v of store.visits) {
     if (!isNightVisit(v, timeZone)) continue;
-    if (v.cluster === home) continue;
-    const key = `${v.date}|${v.cluster}`;
+    const place = stayPlaceKey(v);
+    if (place === home) continue;
+    const key = `${v.date}|${place}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    nights.push({ date: v.date, cluster: v.cluster });
+    nights.push({ date: v.date, cluster: place });
   }
   return nights.sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -776,8 +798,8 @@ export function computeCommute(store: Store, timeZone?: string | null): CommuteS
       const from = visits[i - 1];
       const to = visits[i];
       const pair =
-        (from.cluster === home && to.cluster === work) ||
-        (from.cluster === work && to.cluster === home);
+        (stayPlaceKey(from) === home && stayPlaceKey(to) === work) ||
+        (stayPlaceKey(from) === work && stayPlaceKey(to) === home);
       if (!pair) continue;
       count += 1;
       const act = day.activities.find(
@@ -801,7 +823,8 @@ export function computeFirsts(store: Store): Firsts {
   const typeFirst = new Map<string, string>();
   const sorted = [...store.visits].sort((a, b) => a.start.localeCompare(b.start));
   for (const v of sorted) {
-    if (!clusterFirst.has(v.cluster)) clusterFirst.set(v.cluster, v.date);
+    const place = stayPlaceKey(v);
+    if (!clusterFirst.has(place)) clusterFirst.set(place, v.date);
     if (v.semanticType && v.semanticType !== "Unknown" && !typeFirst.has(v.semanticType)) {
       typeFirst.set(v.semanticType, v.date);
     }

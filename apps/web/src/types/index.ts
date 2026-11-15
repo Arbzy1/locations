@@ -132,7 +132,7 @@ export interface MonthlyStats {
   visits: number;
   activities: number;
   days_tracked?: number;
-  top_places: [string, number][];
+  top_places: [string, number, string?][];
   modes: Record<string, number>;
   mode_miles?: Record<string, number>;
 }
@@ -255,12 +255,12 @@ export interface YearInReviewChapter {
   visits: number;
   activities: number;
   days_tracked: number;
-  top_places: [string, number][];
+  top_places: [string, number, string?][];
   modes: Record<string, number>;
   drive_miles?: number;
   transit_miles?: number;
   trips?: MultiDayTrip[];
-  firsts?: { cluster: string; date: string }[];
+  firsts?: { cluster: string; date: string; label?: string }[];
   streaks?: { longest: number; current: number };
 }
 

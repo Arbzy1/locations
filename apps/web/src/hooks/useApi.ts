@@ -356,8 +356,8 @@ export function usePlaceLabels(opts?: { enabled?: boolean }) {
 export function useHomeWork() {
   const tenantKey = useTenantKey();
   return useQuery<{
-    home: { cluster: string; visits: number } | null;
-    work: { cluster: string; visits: number } | null;
+    home: { cluster: string; visits: number; label?: string } | null;
+    work: { cluster: string; visits: number; label?: string } | null;
   }>({
     queryKey: ['home-work', tenantKey],
     queryFn: () => fetchJson('/api/analytics/home-work'),
@@ -378,7 +378,7 @@ export function useYearInReview() {
 
 export function useAreas() {
   const tenantKey = useTenantKey();
-  return useQuery<{ cluster: string; visits: number; lat: number; lon: number }[]>({
+  return useQuery<{ cluster: string; visits: number; lat: number; lon: number; label?: string }[]>({
     queryKey: ['areas', tenantKey],
     queryFn: () => fetchJson('/api/analytics/areas'),
     staleTime: Infinity,
