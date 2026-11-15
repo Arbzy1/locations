@@ -58,8 +58,6 @@ type FC = {
   }>;
 };
 
-const emptyFc = (): FC => ({ type: 'FeatureCollection', features: [] });
-
 /** Heatmap intensity paint value for the intensity slider (percent). */
 const heatIntensity = (pct: number) => Math.max(0.35, Math.min(2, pct / 100));
 
@@ -305,9 +303,6 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const visitPopupById = useRef(new Map<string, string>());
   const overlayReady = useRef(false);
-  // Bumps whenever the heatmap data is replaced, so a delayed redraw cannot
-  // put an older, smaller set back on top of the one just loaded.
-  const heatDrawGen = useRef(0);
   const { theme, mood } = useTheme();
   const { unit, mapBookmarks, mapTileDarkUrl, mapTileLightUrl } = useUnits();
   const queryClient = useQueryClient();
@@ -456,64 +451,47 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
             ? [{ id: 'loc-heat', points: heatmapPoints }]
             : [];
 
-      const nextHeatIds = heatSpecs.map((s) => s.id);
-      for (const oldId of [...(map.getStyle().layers ?? [])]
-        .map((l) => l.id)
-        .filter((id) => id.startsWith('loc-heat'))) {
-        if (!nextHeatIds.includes(oldId) && map.getLayer(oldId)) map.removeLayer(oldId);
+      const nextHeatIds = new Set(heatSpecs.map((s) => s.id));
+      for (const oldId of [...(map.getStyle().layers ?? [])].map((l) => l.id)) {
+        // The tappable cells and the selected ring share the loc-heat prefix.
+        if (oldId === 'loc-heat-hit' || oldId === 'loc-heat-selected') continue;
+        if (!oldId.startsWith('loc-heat') || nextHeatIds.has(oldId)) continue;
+        if (map.getLayer(oldId)) map.removeLayer(oldId);
+        if (map.getSource(oldId)) map.removeSource(oldId);
       }
 
-      if (!heatSpecs.some((s) => s.id === 'loc-heat')) {
-        upsertSource(map, 'loc-heat', emptyFc());
-      }
-
-      const gen = ++heatDrawGen.current;
-      const payloads: { id: string; data: FC }[] = [];
       for (const spec of heatSpecs) {
-        const features = spec.points.map((p) => ({
+        // A straight scale uses the busiest cell as full heat, so a home with
+        // thousands of visits hides every other place. Log leaves those places
+        // visible and lets the busiest ones saturate.
+        const raws = spec.points.map((p) => Math.max(0, Number(p.weight ?? p.count) || 0));
+        const maxW = Math.max(Math.log1p(raws.reduce((max, value) => Math.max(max, value), 0)), 1e-6);
+        const features = spec.points.map((p, i) => ({
           type: 'Feature' as const,
-          properties: { weight: p.weight ?? p.count },
+          properties: { weight: Math.log1p(raws[i]) },
           geometry: { type: 'Point' as const, coordinates: toLngLat(p.lat, p.lon) },
         }));
-        const maxW = features.reduce((max, f) => Math.max(max, Number(f.properties.weight) || 1), 1);
-        const data: FC = { type: 'FeatureCollection', features };
-        payloads.push({ id: spec.id, data });
-        // Keep every cell. The default simplification folds points that land on
-        // the same spot, and a small buffer clips kernels on a tile edge.
-        upsertSource(map, spec.id, data, { tolerance: 0, buffer: 256 });
-        const weight: unknown[] = ['interpolate', ['linear'], ['get', 'weight'], 0, 0, maxW, 1];
-        ensureLayer(map, {
+        // Rebuild the source. setData keeps the first tile upload, which is
+        // often just the heaviest cells, and a later full set never appears.
+        if (map.getLayer(spec.id)) map.removeLayer(spec.id);
+        if (map.getSource(spec.id)) map.removeSource(spec.id);
+        map.addSource(spec.id, {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features },
+        });
+        map.addLayer({
           id: spec.id,
           type: 'heatmap',
           source: spec.id,
           paint: {
-            'heatmap-weight': weight,
+            'heatmap-weight': ['interpolate', ['linear'], ['get', 'weight'], 0, 0, maxW, 1],
             'heatmap-intensity': heatIntensity(intensityRef.current),
             'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 16, 9, 36],
             'heatmap-opacity': opacityRef.current / 100,
             'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], ...heatColorStops(spec.token)],
           },
         });
-        // The layer is created once. A later, heavier set of points would
-        // otherwise stay scaled to the first max weight.
-        if (map.getLayer(spec.id)) map.setPaintProperty(spec.id, 'heatmap-weight', weight as never);
       }
-      // The first setData often runs before the source is allowed to load
-      // tiles, and MapLibre then keeps that partial draw until a refresh.
-      // Push the same points again once a frame has actually finished.
-      const redraw = () => {
-        if (gen !== heatDrawGen.current) return;
-        const current = mapRef.current;
-        if (!current) return;
-        for (const item of payloads) {
-          const src = current.getSource(item.id) as GeoJSONSource | undefined;
-          if (!src || !current.getLayer(item.id)) continue;
-          src.setData(item.data);
-        }
-        current.triggerRepaint();
-      };
-      requestAnimationFrame(() => requestAnimationFrame(redraw));
-      map.once('idle', redraw);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [heatmapOn, heatmapLayers, heatmapPoints, theme, mood],
@@ -1327,19 +1305,13 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     let fitting = false;
     let fittedW = 0;
     let fittedH = 0;
-    let userMoved = false;
-    let timer = 0;
-    // A fit while the panel is still opening is a wide zoom. The heat then
-    // draws as a few blobs, and a refresh looks right only because the map
-    // already has its final size. Refit when the container grows. A shrink
-    // (the phone sheet) must not yank the camera back.
-    const markMoved = () => {
-      userMoved = true;
-    };
+    // Fit as soon as the map has a real size. Fitting earlier sticks at a wide
+    // zoom, and the heaviest places are then the only kernels large enough to see.
+    // A later grow (the panel finishing its layout) fits again. A shrink does not.
     const fit = () => {
       const current = mapRef.current;
       const b = dataBoundsRef.current;
-      if (!alive || fitting || userMoved || !current || followRef.current || !b) return;
+      if (!alive || fitting || !current || followRef.current || !b) return;
       const el = current.getContainer();
       const w = el.clientWidth;
       const h = el.clientHeight;
@@ -1354,7 +1326,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
             [b.west, b.south],
             [b.east, b.north],
           ],
-          { padding: 30, maxZoom: 15, duration: reducedMotion() ? 0 : 400 },
+          { padding: 30, maxZoom: 15, duration: 0 },
         );
         fittedW = w;
         fittedH = h;
@@ -1362,30 +1334,17 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         fitting = false;
       }
     };
-    const schedule = () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(fit, 60);
-    };
-    schedule();
-    map.on('idle', schedule);
-    map.on('resize', schedule);
-    map.on('dragstart', markMoved);
-    map.on('wheel', markMoved);
-    map.on('boxzoomstart', markMoved);
+    fit();
+    map.on('resize', fit);
     let observer: ResizeObserver | null = null;
     const el = hostRef.current;
     if (el && typeof ResizeObserver !== 'undefined') {
-      observer = new ResizeObserver(schedule);
+      observer = new ResizeObserver(fit);
       observer.observe(el);
     }
     return () => {
       alive = false;
-      window.clearTimeout(timer);
-      map.off('idle', schedule);
-      map.off('resize', schedule);
-      map.off('dragstart', markMoved);
-      map.off('wheel', markMoved);
-      map.off('boxzoomstart', markMoved);
+      map.off('resize', fit);
       observer?.disconnect();
     };
   }, [boundsKey, dataBoundsRef, followRef]);
