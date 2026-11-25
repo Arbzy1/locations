@@ -199,6 +199,12 @@ export default function ImportDropZone({
                 {preview.newDays} new days, {preview.overlappingDays} overlapping,{' '}
                 {preview.existingDays} already stored
               </p>
+              {preview.overlappingDays > 0 && preview.overlappingSample.length > 0 && (
+                <p className="text-xs text-text-muted">
+                  Overlapping sample: {preview.overlappingSample.slice(0, 5).join(', ')}
+                  {preview.overlappingDays > 5 ? ` (+${preview.overlappingDays - 5} more)` : ''}
+                </p>
+              )}
               <p className="text-text-muted">
                 Replace would remove {preview.replaceWouldRemoveVisits} existing visits. Merge would
                 append {preview.mergeWouldAppendVisits}. Skip overlap would add{' '}

@@ -183,6 +183,12 @@ function pickConsumption(
   if (l100Wltp !== undefined) return { value: l100Wltp, unit: "l/100km", cycle: "WLTP" };
   if (mpgNedc !== undefined) return { value: mpgNedc, unit: "mpg", cycle: hinted ?? "NEDC" };
   if (l100Nedc !== undefined) return { value: l100Nedc, unit: "l/100km", cycle: hinted ?? "NEDC" };
+  if (fuel === "phev") {
+    if (miKwh !== undefined) return { value: miKwh, unit: "mi/kWh", cycle: hinted ?? "WLTP" };
+    if (whKm !== undefined) {
+      return { value: kwhPer100kmToMilesPerKwh(whKm / 10), unit: "mi/kWh", cycle: hinted ?? "WLTP" };
+    }
+  }
   return undefined;
 }
 

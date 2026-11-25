@@ -1,7 +1,7 @@
 import StorageChoices from './components/legal/StorageChoices';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { usePublicConfig } from './hooks/useApi';
 import { useSession } from './lib/auth';
 import LoginPage from './components/auth/LoginPage';
@@ -9,6 +9,7 @@ import SignupPage from './components/auth/SignupPage';
 import ForgotPage from './components/auth/ForgotPage';
 import ResetPasswordPage from './components/auth/ResetPasswordPage';
 import LandingPage from './components/marketing/LandingPage';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Toaster } from './components/ui/sonner';
 import { Loader2 } from 'lucide-react';
 
@@ -98,27 +99,36 @@ function AuthGate() {
   );
 }
 
+function AppRoutes() {
+  const location = useLocation();
+  return (
+    <ErrorBoundary resetKey={location.pathname} title="This page encountered an error.">
+      <Suspense fallback={bootFallback()}>
+        <Routes>
+          <Route path="/dpa" element={<DpaRoute />} />
+          <Route path="/accessibility" element={<AccessibilityRoute />} />
+          <Route path="/impressum" element={<ImpressumRoute />} />
+          <Route path="/subprocessors" element={<SubprocessorsRoute />} />
+          <Route path="/privacy" element={<PrivacyRoute />} />
+          <Route path="/terms" element={<TermsRoute />} />
+          <Route path="/cookies" element={<CookiesRoute />} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/status" element={<StatusPage />} />
+          <Route path="/changelog" element={<ChangelogPage />} />
+          <Route path="/*" element={<AuthGate />} />
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Toaster />
         <StorageChoices />
-        <Suspense fallback={bootFallback()}>
-          <Routes>
-            <Route path="/dpa" element={<DpaRoute />} />
-            <Route path="/accessibility" element={<AccessibilityRoute />} />
-            <Route path="/impressum" element={<ImpressumRoute />} />
-            <Route path="/subprocessors" element={<SubprocessorsRoute />} />
-            <Route path="/privacy" element={<PrivacyRoute />} />
-            <Route path="/terms" element={<TermsRoute />} />
-            <Route path="/cookies" element={<CookiesRoute />} />
-            <Route path="/pricing" element={<PricingPage />} />
-            <Route path="/status" element={<StatusPage />} />
-            <Route path="/changelog" element={<ChangelogPage />} />
-            <Route path="/*" element={<AuthGate />} />
-          </Routes>
-        </Suspense>
+        <AppRoutes />
       </BrowserRouter>
     </QueryClientProvider>
   );

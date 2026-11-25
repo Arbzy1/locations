@@ -37,6 +37,7 @@ vi.mock("@locations/api/billing", () => ({
         }
       : null,
   priceIdForInterval: () => "price_monthly",
+  hasStripeEvent: vi.fn(async () => false),
   recordStripeEvent: vi.fn(async () => true),
   syncSubscriptionFromStripe: vi.fn(),
   tenantForStripeCustomer: vi.fn(),
@@ -208,6 +209,28 @@ describe("API threat matrix", () => {
       lastPortal = (await request("/api/billing/portal", { method: "POST" }, billingEnv)).status;
     }
     expect(lastPortal).toBe(429);
+
+    resetRateLimits();
+    let lastRewarm = 200;
+    for (let i = 0; i < 21; i++) {
+      lastRewarm = (await request("/api/routes/rewarm", { method: "POST" })).status;
+    }
+    expect(lastRewarm).toBe(429);
+
+    resetRateLimits();
+    let lastExport = 200;
+    for (let i = 0; i < 21; i++) {
+      lastExport = (await request("/api/export/csv")).status;
+    }
+    expect(lastExport).toBe(429);
+
+    resetRateLimits();
+    vi.mocked(env.UPLOADS.list).mockResolvedValue({ objects: [], truncated: false } as never);
+    let lastDelete = 200;
+    for (let i = 0; i < 6; i++) {
+      lastDelete = (await request("/api/account/delete", { method: "POST" })).status;
+    }
+    expect(lastDelete).toBe(429);
   });
 
   it("does not mass-assign role, tenant, priceId, or customerId", async () => {

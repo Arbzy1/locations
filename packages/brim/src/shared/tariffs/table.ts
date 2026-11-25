@@ -2,20 +2,20 @@ import type { EvNetworkTable } from "./types.js";
 
 /** Runtime copy of data/tariffs/networks.json. Keep the files in lockstep. */
 export const EV_NETWORK_TABLE: EvNetworkTable = {
-  verified_on: "2026-08-16",
+  verified_on: "2026-11-24",
   note: "Hand-maintained public-network averages. Not a live feed. Users can correct the figure on the estimate.",
   fallbacks: {
     home: {
       pencePerKwh: 7.5,
       source_url:
         "https://www.ofgem.gov.uk/energy-advice-households/get-cheaper-electricity-rates-electric-vehicles",
-      verified_on: "2026-08-16",
+      verified_on: "2026-11-24",
       note: "Typical overnight home rate when the user has not entered a tariff.",
     },
     public: {
       pencePerKwh: 70,
       source_url: "https://www.zap-map.com/ev-stats/charging-price-index",
-      verified_on: "2026-08-16",
+      verified_on: "2026-11-24",
       note: "Dated public DC average. Not a live median.",
     },
   },
@@ -26,7 +26,7 @@ export const EV_NETWORK_TABLE: EvNetworkTable = {
       speed: "dc",
       pencePerKwh: 74,
       source_url: "https://ionity.eu/en/for-drivers/our-pricing",
-      verified_on: "2026-08-16",
+      verified_on: "2026-11-24",
     },
     {
       id: "tesla-supercharger",
@@ -34,7 +34,7 @@ export const EV_NETWORK_TABLE: EvNetworkTable = {
       speed: "dc",
       pencePerKwh: 52,
       source_url: "https://www.tesla.com/en_gb/support/supercharger",
-      verified_on: "2026-08-16",
+      verified_on: "2026-11-24",
     },
     {
       id: "bp-pulse-dc",
@@ -43,7 +43,7 @@ export const EV_NETWORK_TABLE: EvNetworkTable = {
       pencePerKwh: 79,
       source_url:
         "https://www.bp.com/en_gb/united-kingdom/home/products-and-services/bp-pulse.html",
-      verified_on: "2026-08-16",
+      verified_on: "2026-11-24",
     },
     {
       id: "bp-pulse-ac",
@@ -52,7 +52,7 @@ export const EV_NETWORK_TABLE: EvNetworkTable = {
       pencePerKwh: 49,
       source_url:
         "https://www.bp.com/en_gb/united-kingdom/home/products-and-services/bp-pulse.html",
-      verified_on: "2026-08-16",
+      verified_on: "2026-11-24",
     },
     {
       id: "shell-recharge",
@@ -60,7 +60,7 @@ export const EV_NETWORK_TABLE: EvNetworkTable = {
       speed: "dc",
       pencePerKwh: 79,
       source_url: "https://www.shell-recharge.com/en-gb/charge-your-car",
-      verified_on: "2026-08-16",
+      verified_on: "2026-11-24",
     },
     {
       id: "instavolt",
@@ -68,7 +68,7 @@ export const EV_NETWORK_TABLE: EvNetworkTable = {
       speed: "dc",
       pencePerKwh: 74,
       source_url: "https://instavolt.co.uk/pricing/",
-      verified_on: "2026-08-16",
+      verified_on: "2026-11-24",
     },
     {
       id: "pod-point",
@@ -76,7 +76,7 @@ export const EV_NETWORK_TABLE: EvNetworkTable = {
       speed: "ac",
       pencePerKwh: 42,
       source_url: "https://pod-point.com/guides/driver/ev-public-charging-costs",
-      verified_on: "2026-08-16",
+      verified_on: "2026-11-24",
     },
     {
       id: "osprey",
@@ -84,7 +84,7 @@ export const EV_NETWORK_TABLE: EvNetworkTable = {
       speed: "dc",
       pencePerKwh: 75,
       source_url: "https://ospreycharging.co.uk/drivers/",
-      verified_on: "2026-08-16",
+      verified_on: "2026-11-24",
     },
     {
       id: "electroverse",
@@ -92,7 +92,47 @@ export const EV_NETWORK_TABLE: EvNetworkTable = {
       speed: "dc",
       pencePerKwh: 62,
       source_url: "https://electroverse.octopus.energy/",
-      verified_on: "2026-08-16",
+      verified_on: "2026-11-24",
+    },
+    {
+      id: "gridserve",
+      network: "Gridserve",
+      speed: "dc",
+      pencePerKwh: 79,
+      source_url: "https://www.gridserve.com/electric-vehicle-charging/pricing/",
+      verified_on: "2026-11-24",
+    },
+    {
+      id: "fastned",
+      network: "Fastned",
+      speed: "dc",
+      pencePerKwh: 69,
+      source_url: "https://fastnedcharging.com/en/rates",
+      verified_on: "2026-11-24",
+    },
+    {
+      id: "mfg-ev-power",
+      network: "MFG EV Power",
+      speed: "dc",
+      pencePerKwh: 79,
+      source_url: "https://www.mfgevpower.com/",
+      verified_on: "2026-11-24",
+    },
+    {
+      id: "chargeplace-scotland",
+      network: "ChargePlace Scotland",
+      speed: "dc",
+      pencePerKwh: 55,
+      source_url: "https://chargeplacescotland.org/",
+      verified_on: "2026-11-24",
+    },
+    {
+      id: "mer",
+      network: "Mer",
+      speed: "dc",
+      pencePerKwh: 68,
+      source_url: "https://uk.mer.eco/drivers/tariffs/",
+      verified_on: "2026-11-24",
     },
   ],
 };

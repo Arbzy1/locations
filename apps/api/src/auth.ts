@@ -33,6 +33,29 @@ async function sendAuthEmail(
   });
 }
 
+export function decodeVerifyTokenPayload(
+  urlRaw?: string,
+): { email?: string; updateTo?: string; requestType?: string } | null {
+  if (!urlRaw) return null;
+  try {
+    const token = new URL(urlRaw, "http://localhost").searchParams.get("token");
+    if (!token) return null;
+    const parts = token.split(".");
+    if (parts.length < 2 || !parts[1]) return null;
+    const b64 = parts[1].replaceAll("-", "+").replaceAll("_", "/");
+    const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+    const json = atob(b64 + pad);
+    const parsed = JSON.parse(json) as { email?: unknown; updateTo?: unknown; requestType?: unknown };
+    return {
+      email: typeof parsed.email === "string" ? parsed.email : undefined,
+      updateTo: typeof parsed.updateTo === "string" ? parsed.updateTo : undefined,
+      requestType: typeof parsed.requestType === "string" ? parsed.requestType : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // One Better Auth instance per isolate (per env object and signup flag). Building it
 // is not free and every authed request needs one; the HTTP driver holds no socket, so
 // sharing it across requests is safe.
@@ -97,6 +120,15 @@ function buildAuth(env: Env, disableSignUp: boolean) {
     emailVerification: {
       sendVerificationEmail: async ({ user, url }) => {
         await sendAuthEmail(env, "verify_email_link", user.email, { url });
+      },
+      afterEmailVerification: async (verifiedUser, request) => {
+        const payload = decodeVerifyTokenPayload(request?.url);
+        if (payload?.updateTo && payload.requestType === "change-email-verification") {
+          await sendAuthEmail(env, "email_changed", verifiedUser.email, {});
+          if (payload.email && payload.email.toLowerCase() !== verifiedUser.email.toLowerCase()) {
+            await sendAuthEmail(env, "email_changed", payload.email, {});
+          }
+        }
       },
     },
     user: {

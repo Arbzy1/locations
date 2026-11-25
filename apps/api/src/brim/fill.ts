@@ -27,7 +27,7 @@ import {
   type NearStation,
 } from './prices';
 import type { BrimDb } from './db/types';
-import { createDb, persistLive, type BrimContext } from "./context";
+import { persistLive, requestBrimDb, type BrimContext } from "./context";
 import type { Env } from "../env";
 
 const MAX_DETOUR_KM = 10;
@@ -137,9 +137,10 @@ export async function rankCheapestFillForRoute(
   const points = typeof input.polyline === 'string' ? decodePolyline(input.polyline) : input.polyline;
   if (points.length < 2) return undefined;
   const origin = input.origin ?? points[0];
-  const propulsion = input.propulsion ?? (input.grade === 'B7' ? 'diesel' : 'petrol');
+  const propulsion = input.propulsion ?? (input.grade === 'B7' || input.grade === 'SDV' ? 'diesel' : 'petrol');
   const baseline = await resolveEstimateFillBaseline(env, db, {
     propulsion,
+    fuelGrade: input.grade,
     ...(origin ? { origin } : {}),
   });
   if (!baseline || (baseline.source !== 'home-area-median' && baseline.source !== 'national-median')) {
@@ -205,13 +206,14 @@ export async function attachCheapestFill(input: {
   env: Env;
   db: BrimDb;
   propulsion: Propulsion;
+  fuelGrade?: FuelGrade;
   encodedPolyline: string;
   origin?: { lat: number; lng: number };
   vehicle?: VehicleProfile;
   lPer100km?: number;
 }): Promise<CheapestFillPayload | undefined> {
   if (input.propulsion === 'bev') return undefined;
-  const grade = gradeForPropulsion(input.propulsion);
+  const grade = input.fuelGrade ?? gradeForPropulsion(input.propulsion);
   if (!grade) return undefined;
   return rankCheapestFillForRoute(input.env, input.db, {
     polyline: input.encodedPolyline,
@@ -236,7 +238,7 @@ const nearRouteBody = z.object({
 });
 
 export async function handleStationsNearRoute(c: BrimContext) {
-  const db = createDb(c.env);
+  const db = requestBrimDb(c);
   const raw =
     c.req.method === 'GET'
       ? {

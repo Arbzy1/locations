@@ -10,15 +10,12 @@
     "is_restriction": false,
     "applies_hours_json": {
       "timezone": "Europe/London",
-      "always": true,
-      "exemptDates": [
-        "12-25"
-      ]
+      "always": true
     },
     "source_url": "https://www.birmingham.gov.uk/caz",
-    "verified_on": "2026-08-16",
+    "verified_on": "2026-11-24",
     "operator_url": "https://www.birmingham.gov.uk/caz",
-    "dataset_version": "2026-08-16"
+    "dataset_version": "2026-11-24"
   },
   "geometry": {
     "type": "MultiPolygon",
@@ -26,24 +23,36 @@
       [
         [
           [
-            -1.915,
-            52.472
+            -1.916,
+            52.473
           ],
           [
-            -1.87,
-            52.472
+            -1.895,
+            52.469
           ],
           [
-            -1.87,
-            52.495
+            -1.874,
+            52.476
           ],
           [
-            -1.915,
-            52.495
+            -1.872,
+            52.49
           ],
           [
-            -1.915,
-            52.472
+            -1.889,
+            52.496
+          ],
+          [
+            -1.912,
+            52.492
+          ],
+          [
+            -1.92,
+            52.482
+          ],
+          [
+            -1.916,
+            52.473
           ]
         ]
       ]

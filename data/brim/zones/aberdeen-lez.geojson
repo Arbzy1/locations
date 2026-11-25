@@ -1,0 +1,51 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "aberdeen-lez",
+    "name": "Aberdeen Low Emission Zone",
+    "authority": "Aberdeen City Council",
+    "kind": "lez",
+    "is_restriction": true,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true
+    },
+    "source_url": "https://www.aberdeencity.gov.uk/services/roads-transport-and-parking/low-emission-zone",
+    "verified_on": "2026-11-24",
+    "operator_url": "https://www.lowemissionzones.scot/",
+    "dataset_version": "2026-11-24"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -2.11,
+            57.143
+          ],
+          [
+            -2.09,
+            57.143
+          ],
+          [
+            -2.088,
+            57.152
+          ],
+          [
+            -2.108,
+            57.153
+          ],
+          [
+            -2.112,
+            57.148
+          ],
+          [
+            -2.11,
+            57.143
+          ]
+        ]
+      ]
+    ]
+  }
+}

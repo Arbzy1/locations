@@ -4,36 +4,41 @@
   "energy": {
     "kind": "liquid",
     "litres": {
-      "point": 10.67408695652174,
-      "low": 9.286455652173915,
-      "high": 12.061718260869567
+      "point": 2.9120772946859903,
+      "low": 2.5335072463768116,
+      "high": 3.2906473429951686
     },
     "kwh": {
       "battery": 5.6000000000000005,
       "grid": 6.363636363636364,
       "low": 5.536363636363637,
       "high": 7.190909090909091
+    },
+    "arrivalStateOfCharge": {
+      "percent": 0,
+      "verdict": "insufficient",
+      "shortfallKwh": 1.4000000000000001
     }
   },
   "cost": {
     "energyPence": {
-      "point": 1500,
-      "low": 1300,
-      "high": 1700
+      "point": 460,
+      "low": 400,
+      "high": 510
     },
     "chargesPence": 0,
     "totalPence": {
-      "point": 1500,
-      "low": 1300,
-      "high": 1700
+      "point": 460,
+      "low": 400,
+      "high": 510
     }
   },
   "charges": [],
-  "co2Kg": 25.81522866086957,
+  "co2Kg": 7.768223908651734,
   "consumption": {
-    "value": 20.160000000000004,
-    "unit": "l/100km",
-    "display": "14 mpg",
+    "value": 20.7,
+    "unit": "kWh/100km",
+    "display": "20.7 kWh/100km",
     "tier": 2,
     "label": "Official figure, adjusted"
   },
@@ -44,7 +49,7 @@
     "observedAt": "2026-01-15T12:00:00Z"
   },
   "reasons": [
-    "Adjusted the official figure up 12% - official tests run optimistic.",
+    "Adjusted the official figure up 15% - official tests run optimistic.",
     "No road mix available, so we left consumption unadjusted and widened the range.",
     "No forecast temperature, so we skipped the cold-weather adjustment.",
     "Cost is billed on energy drawn from the grid, not energy in the battery.",

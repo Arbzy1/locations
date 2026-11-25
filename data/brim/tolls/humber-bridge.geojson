@@ -1,0 +1,52 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "humber-bridge",
+    "name": "Humber Bridge",
+    "authority": "Humber Bridge Board",
+    "kind": "toll",
+    "charge_pence_by_class": {
+      "car": 150,
+      "van": 400,
+      "motorcycle": 0
+    },
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true
+    },
+    "source_url": "https://www.humberbridge.co.uk/toll-charges/",
+    "verified_on": "2026-11-24",
+    "operator_url": "https://www.humberbridge.co.uk/",
+    "dataset_version": "2026-11-24"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -0.456,
+            53.7
+          ],
+          [
+            -0.444,
+            53.7
+          ],
+          [
+            -0.444,
+            53.715
+          ],
+          [
+            -0.456,
+            53.715
+          ],
+          [
+            -0.456,
+            53.7
+          ]
+        ]
+      ]
+    ]
+  }
+}

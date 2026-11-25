@@ -10,8 +10,8 @@ export function lookaroundLinksHtml(lat: number, lon: number): string {
   const sv = streetViewUrl(lat, lon);
   const my = mapillaryUrl(lat, lon);
   return `<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border);font-size:12px;">
-    <a href="${sv}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Street View</a>
+    <a href="${sv}" target="_blank" rel="noopener noreferrer" title="Open location in Google Street View" style="color:var(--accent)">Street View</a>
     <span style="color:var(--text-muted)"> · </span>
-    <a href="${my}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Mapillary</a>
+    <a href="${my}" target="_blank" rel="noopener noreferrer" title="Open location in Mapillary" style="color:var(--accent)">Mapillary</a>
   </div>`;
 }

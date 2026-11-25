@@ -24,9 +24,30 @@ export type BadgeSummary = {
   badges: CoverageBadge[];
 };
 
-function hourFromStart(start: string): number {
+const HOUR_FORMATS = new Map<string, Intl.DateTimeFormat>();
+
+export function hourFromStart(start: string, timeZone?: string | null): number {
   const d = new Date(start);
-  return Number.isNaN(d.getTime()) ? 12 : d.getUTCHours();
+  if (Number.isNaN(d.getTime())) return 12;
+  const tz = timeZone?.trim();
+  if (!tz) return d.getUTCHours();
+  try {
+    let fmt = HOUR_FORMATS.get(tz);
+    if (!fmt) {
+      fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz,
+        hour: "numeric",
+        hourCycle: "h23",
+      });
+      HOUR_FORMATS.set(tz, fmt);
+    }
+    const raw = fmt.formatToParts(d).find((p) => p.type === "hour")?.value;
+    const hour = Number(raw);
+    if (Number.isFinite(hour)) return hour === 24 ? 0 : hour;
+  } catch {
+    // Fall back to UTC if an invalid timezone string was supplied.
+  }
+  return d.getUTCHours();
 }
 
 /** Heuristic only: dwell + hour + Google semantic type. No coordinates, no LLM. */
@@ -34,9 +55,10 @@ export function guessActivityLabel(input: {
   semanticType: string;
   durationMinutes: number;
   start: string;
+  timezone?: string | null;
 }): ActivityGuess {
   const type = (input.semanticType || "").toLowerCase();
-  const hour = hourFromStart(input.start);
+  const hour = hourFromStart(input.start, input.timezone);
   const mins = input.durationMinutes;
 
   if (type === "home") {
@@ -72,13 +94,17 @@ export function guessActivityLabel(input: {
   return { id: "stop", label: "A stop" };
 }
 
-export function computeActivityGuesses(visits: VisitRow[]): ActivityGuessCount[] {
+export function computeActivityGuesses(
+  visits: VisitRow[],
+  timezone?: string | null,
+): ActivityGuessCount[] {
   const counts = new Map<string, ActivityGuessCount>();
   for (const v of visits) {
     const guess = guessActivityLabel({
       semanticType: v.semanticType,
       durationMinutes: v.durationMinutes,
       start: v.start,
+      timezone,
     });
     const prev = counts.get(guess.id);
     if (prev) prev.count += 1;
@@ -146,7 +172,7 @@ export function computeBadges(input: {
       id: "walker",
       label: "Walker",
       earned: walkMiles >= 50,
-      detail: "At least 50 miles recorded as walking",
+      detail: "At least 50 mi (80 km) recorded as walking",
     },
     {
       id: "coverage_half",

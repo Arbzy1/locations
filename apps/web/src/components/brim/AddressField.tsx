@@ -53,6 +53,8 @@ export function AddressField({
   const focused = useRef(false);
   const { isDesktop: wide } = useBreakpoint();
   const showClear = Boolean(committed || value.trim());
+  const biasLat = bias?.lat;
+  const biasLng = bias?.lng;
 
   useEffect(() => {
     window.clearTimeout(timer.current);
@@ -62,8 +64,10 @@ export function AddressField({
       setOpen(false);
       return;
     }
+    const biasArg =
+      biasLat !== undefined && biasLng !== undefined ? { lat: biasLat, lng: biasLng } : undefined;
     timer.current = window.setTimeout(() => {
-      void fetchPlaceSuggestions(q, session.current, bias)
+      void fetchPlaceSuggestions(q, session.current, biasArg)
         .then((next) => {
           setHits(next);
           setOpen(focused.current);
@@ -74,7 +78,7 @@ export function AddressField({
         });
     }, 250);
     return () => window.clearTimeout(timer.current);
-  }, [value, bias?.lat, bias?.lng]);
+  }, [value, biasLat, biasLng]);
 
   async function applyHit(hit: PlaceSuggestion) {
     const place = await resolvePlaceSuggestion(hit, session.current);
@@ -127,6 +131,7 @@ export function AddressField({
   const input = (
     <Input
       id={id}
+      title={label}
       value={value}
       role="combobox"
       aria-expanded={open && !busy}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   IMPORT_CUT_IN_MS,
   importCutInCopy,
@@ -22,8 +22,10 @@ export default function ImportCutIn({ job, onHostSplit, onDone }: Props) {
   const timersRef = useRef<number[]>([]);
   const onHostSplitRef = useRef(onHostSplit);
   const onDoneRef = useRef(onDone);
-  onHostSplitRef.current = onHostSplit;
-  onDoneRef.current = onDone;
+  useLayoutEffect(() => {
+    onHostSplitRef.current = onHostSplit;
+    onDoneRef.current = onDone;
+  });
 
   useEffect(() => {
     const timers = timersRef.current;

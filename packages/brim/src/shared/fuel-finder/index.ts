@@ -41,10 +41,12 @@ export {
 } from "./pull.js";
 export {
   FUEL_FINDER_SOURCE,
+  PRICE_BATCH_UPSERT_SQL,
   PRICE_UPSERT_SQL,
   STALE_SWEEP_SQL,
+  STATION_BATCH_UPSERT_SQL,
   STATION_UPSERT_SQL,
   WATERMARK_SELECT_SQL,
   WATERMARK_UPSERT_SQL,
 } from "./sql.js";
-export { persistFuelFinder, type SqlQuery } from "./ingest.js";
+export { FUEL_FINDER_BATCH_SIZE, persistFuelFinder, type SqlQuery } from "./ingest.js";

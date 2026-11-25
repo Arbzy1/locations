@@ -45,6 +45,13 @@ export type EstimateInput = {
   charges?: Charge[] | undefined;
 };
 
+function isWeightedPhevOfficial(official: EstimateInput["official"]): boolean {
+  if (!official) return false;
+  if (official.unit === "mpg") return official.value > 100;
+  if (official.unit === "l/100km") return official.value > 0 && l100kmToMpg(official.value) > 100;
+  return false;
+}
+
 export function computeEstimate(input: EstimateInput): Estimate {
   const reasons: string[] = [];
   const warnings: Warning[] = [];
@@ -52,6 +59,8 @@ export function computeEstimate(input: EstimateInput): Estimate {
   const chargesPence = charges.reduce((sum, c) => sum + c.pence, 0);
 
   const kind = input.propulsion === "bev" || input.propulsion === "phev" ? "electric" : "liquid";
+  const weightedPhevDropped = input.propulsion === "phev" && isWeightedPhevOfficial(input.official);
+  const liquidOfficial = weightedPhevDropped ? undefined : input.official;
 
   if (input.propulsion === "phev" && input.vehicle?.startChargePercent === undefined) {
     reasons.push(
@@ -69,7 +78,7 @@ export function computeEstimate(input: EstimateInput): Estimate {
     propulsion: input.propulsion,
     calibration: input.calibration,
     userEntered: input.userEntered,
-    official: input.official,
+    official: input.propulsion === "bev" ? input.official : liquidOfficial,
     classAverage: input.classAverage,
     providerEstimate: input.providerEstimate
       ? { litres: input.providerEstimate.litres, distanceKm: metresToKm(input.distanceMeters) }
@@ -103,11 +112,11 @@ export function computeEstimate(input: EstimateInput): Estimate {
     });
     reasons.push(...ev.reasons);
     const energyPence = roundBandPence(ev.costPence);
-    const totalPence = roundBandPence({
+    const totalPence = {
       point: energyPence.point + chargesPence,
       low: energyPence.low + chargesPence,
       high: energyPence.high + chargesPence,
-    });
+    };
     const usable = input.vehicle?.batteryKwhUsable;
     const start = input.vehicle?.startChargePercent;
     const arrival =
@@ -164,54 +173,79 @@ export function computeEstimate(input: EstimateInput): Estimate {
     const usable = input.vehicle?.batteryKwhUsable;
     const start = input.vehicle?.startChargePercent;
     const km = metresToKm(input.distanceMeters);
-    if (usable !== undefined && start !== undefined && start > 0) {
+    if (usable !== undefined && start !== undefined && start >= 0) {
       const evResolved = resolveConsumption({
         kind: "electric",
         propulsion: "phev",
+        calibration: input.calibration,
         userEntered: input.userEntered,
         official: input.official,
         classAverage: input.classAverage,
       });
-      const evKwhPer100 = applyRoadShape(evResolved, "electric", input.roadComposition).value;
-      const evRangeKm = (usable * (start / 100) / evKwhPer100) * 100;
+      const evShaped = applyRoadShape(evResolved, "electric", input.roadComposition);
+      const evKwhPer100 = evShaped.value;
+      const evRangeKm = start > 0 ? (usable * (start / 100) / evKwhPer100) * 100 : 0;
       const electricKm = Math.min(km, evRangeKm);
       const iceKm = Math.max(0, km - electricKm);
+      const iceResolved = resolveConsumption({
+        kind: "liquid",
+        propulsion: "phev",
+        calibration: input.calibration,
+        userEntered: input.userEntered,
+        official: liquidOfficial,
+        classAverage: input.classAverage,
+      });
+      const iceShaped = applyRoadShape(iceResolved, "liquid", input.roadComposition);
+      const primaryResolved = evResolved.tier < iceResolved.tier ? evResolved : iceResolved;
+      const primaryValue = evResolved.tier < iceResolved.tier ? evKwhPer100 : iceShaped.value;
+      const phevHalfWidth = bandWidth(primaryResolved.tier, evShaped.fallbacks + varianceFallbacks);
+
       const evPart = estimateEv({
         distanceMeters: electricKm * 1000,
         kwhPer100km: evKwhPer100,
         pricePencePerKwh: input.pricePence,
         charging: input.charging ?? "acHome",
-        halfWidth,
+        halfWidth: phevHalfWidth,
         tempC: input.forecastTempC,
         hasHeatPump: input.vehicle?.hasHeatPump === true,
         gridIntensityGPerKwh: input.gridIntensityGPerKwh ?? 150,
       });
-      reasons.push(...evPart.reasons);
-      const iceResolved = resolveConsumption({
-        kind: "liquid",
-        propulsion: "petrol",
-        calibration: input.calibration,
-        official: input.official,
-        classAverage: input.classAverage,
-      });
+
+      const phevReasons: string[] = [
+        ...primaryResolved.reasons,
+        ...evShaped.reasons,
+      ];
+      if (varianceFallbacks > 0) phevReasons.push("Your fill-ups vary, so the range is wider.");
+      if (weightedPhevDropped && iceKm > 0) {
+        phevReasons.push(
+          "Ignored the battery-weighted WLTP mpg figure once the battery is empty and used typical hybrid petrol consumption instead.",
+        );
+      }
+      phevReasons.push(...evPart.reasons);
+
       const ice = estimateIce({
         distanceMeters: iceKm * 1000,
-        lPer100km: iceResolved.value,
+        lPer100km: iceShaped.value,
         pricePencePerLitre:
           input.priceUnit === "ppl" ? input.pricePence : (input.liquidPricePence ?? 140),
         propulsion: "petrol",
-        halfWidth,
+        halfWidth: phevHalfWidth,
       });
-      reasons.push("Treated the plug-in hybrid as electric until the battery is empty, then petrol.");
+      phevReasons.push("Treated the plug-in hybrid as electric until the battery is empty, then petrol.");
       const energyPence = roundBandPence({
         point: evPart.costPence.point + ice.costPence.point,
         low: evPart.costPence.low + ice.costPence.low,
         high: evPart.costPence.high + ice.costPence.high,
       });
-      const totalPence = roundBandPence({
+      const totalPence = {
         point: energyPence.point + chargesPence,
         low: energyPence.low + chargesPence,
         high: energyPence.high + chargesPence,
+      };
+      const arrival = arrivalStateOfCharge({
+        startPct: start,
+        batteryKwhUsed: evPart.batteryKwh.point,
+        usableBatteryKwh: usable,
       });
       return {
         distanceMeters: input.distanceMeters,
@@ -225,19 +259,20 @@ export function computeEstimate(input: EstimateInput): Estimate {
             low: evPart.gridKwh.low,
             high: evPart.gridKwh.high,
           },
+          arrivalStateOfCharge: arrival,
         },
         cost: { energyPence, chargesPence, totalPence },
         charges,
         co2Kg: evPart.co2Kg + ice.co2Kg,
         consumption: {
-          value: resolved.value,
-          unit: resolved.unit,
+          value: primaryValue,
+          unit: primaryResolved.unit,
           display:
-            resolved.unit === "l/100km"
-              ? `${l100kmToMpg(resolved.value).toFixed(0)} mpg`
-              : `${resolved.value.toFixed(1)} kWh/100km`,
-          tier: resolved.tier,
-          label: resolved.label,
+            primaryResolved.unit === "l/100km"
+              ? `${l100kmToMpg(primaryValue).toFixed(0)} mpg`
+              : `${primaryValue.toFixed(1)} kWh/100km`,
+          tier: primaryResolved.tier,
+          label: primaryResolved.label,
         },
         price: {
           pence: input.pricePence,
@@ -246,9 +281,14 @@ export function computeEstimate(input: EstimateInput): Estimate {
           stationId: input.stationId,
           observedAt: priceObservedAt,
         },
-        reasons,
+        reasons: phevReasons,
         warnings,
       };
+    }
+    if (weightedPhevDropped) {
+      reasons.push(
+        "Ignored the battery-weighted WLTP mpg figure without a known starting charge and used typical hybrid petrol consumption instead.",
+      );
     }
   }
 
@@ -260,11 +300,11 @@ export function computeEstimate(input: EstimateInput): Estimate {
     halfWidth,
   });
   const energyPence = roundBandPence(ice.costPence);
-  const totalPence = roundBandPence({
+  const totalPence = {
     point: energyPence.point + chargesPence,
     low: energyPence.low + chargesPence,
     high: energyPence.high + chargesPence,
-  });
+  };
 
   return {
     distanceMeters: input.distanceMeters,

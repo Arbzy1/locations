@@ -372,6 +372,33 @@ export async function listTariffs(
   });
 }
 
+export async function getTariff(
+  db: BrimDb,
+  ownerId: string,
+  vehicleId: string,
+  tariffId: string,
+): Promise<TariffRow | undefined> {
+  return withRls(db, { tenant: ownerId }, async (tx) => {
+    const owned = await tx
+      .select({ id: vehicles.id })
+      .from(vehicles)
+      .where(and(eq(vehicles.id, vehicleId), eq(vehicles.tenant, ownerId)));
+    if (!owned[0]) return undefined;
+    const rows = await tx
+      .select()
+      .from(tariffs)
+      .where(
+        and(
+          eq(tariffs.tenant, ownerId),
+          eq(tariffs.vehicleId, vehicleId),
+          eq(tariffs.id, tariffId),
+        ),
+      );
+    const row = rows[0];
+    return row ? fromTariff(row) : undefined;
+  });
+}
+
 export async function saveTariff(
   db: BrimDb,
   ownerId: string,
@@ -384,7 +411,16 @@ export async function saveTariff(
       .where(and(eq(vehicles.id, row.vehicle_id), eq(vehicles.tenant, ownerId)));
     if (!owned[0]) return undefined;
     if (row.is_default) {
-      await tx.update(tariffs).set({ isDefault: false }).where(and(eq(tariffs.tenant, ownerId), eq(tariffs.vehicleId, row.vehicle_id)));
+      await tx
+        .update(tariffs)
+        .set({ isDefault: false })
+        .where(
+          and(
+            eq(tariffs.tenant, ownerId),
+            eq(tariffs.vehicleId, row.vehicle_id),
+            eq(tariffs.kind, row.kind),
+          ),
+        );
     }
     const values = { ...tariffValues(row), tenant: ownerId };
     await tx
@@ -402,6 +438,32 @@ export async function saveTariff(
         },
       });
     return row;
+  });
+}
+
+export async function deleteTariff(
+  db: BrimDb,
+  ownerId: string,
+  vehicleId: string,
+  tariffId: string,
+): Promise<boolean> {
+  return withRls(db, { tenant: ownerId }, async (tx) => {
+    const owned = await tx
+      .select({ id: vehicles.id })
+      .from(vehicles)
+      .where(and(eq(vehicles.id, vehicleId), eq(vehicles.tenant, ownerId)));
+    if (!owned[0]) return false;
+    const deleted = await tx
+      .delete(tariffs)
+      .where(
+        and(
+          eq(tariffs.tenant, ownerId),
+          eq(tariffs.vehicleId, vehicleId),
+          eq(tariffs.id, tariffId),
+        ),
+      )
+      .returning({ id: tariffs.id });
+    return deleted.length > 0;
   });
 }
 
@@ -694,19 +756,36 @@ export async function ytdMiles(
   ownerId: string,
   taxYearStartIso: string,
   nowIso: string,
+  kind?: VehicleRow["kind"],
 ): Promise<number> {
   return withRls(db, { tenant: ownerId }, async (tx) => {
+    const effectiveAt = sql`COALESCE(${journeys.departsAt}, ${journeys.createdAt})`;
+    const startDate = new Date(taxYearStartIso);
+    const endDate = new Date(nowIso);
     const rows = await tx
-      .select({ distanceMeters: journeys.distanceMeters })
+      .select({
+        distanceMeters: journeys.distanceMeters,
+        vehicleKind: vehicles.kind,
+      })
       .from(journeys)
+      .leftJoin(
+        vehicles,
+        and(eq(vehicles.id, journeys.vehicleId), eq(vehicles.tenant, ownerId)),
+      )
       .where(
         and(
           eq(journeys.tenant, ownerId),
-          gte(journeys.createdAt, new Date(taxYearStartIso)),
-          lte(journeys.createdAt, new Date(nowIso)),
+          sql`${effectiveAt} >= ${startDate}`,
+          sql`${effectiveAt} <= ${endDate}`,
         ),
       );
-    return rows.reduce((sum, row) => sum + row.distanceMeters / 1609.344, 0);
+    return rows
+      .filter((row) => {
+        if (!kind) return true;
+        if (kind === "motorcycle") return row.vehicleKind === "motorcycle";
+        return row.vehicleKind !== "motorcycle";
+      })
+      .reduce((sum, row) => sum + row.distanceMeters / 1609.344, 0);
   });
 }
 
@@ -745,7 +824,12 @@ export async function getDefaultTariff(
   vehicleId: string,
 ): Promise<TariffRow | undefined> {
   const all = await listTariffs(db, ownerId, vehicleId);
-  return all.find((t) => t.is_default) ?? all[0];
+  return (
+    all.find((t) => t.is_default && t.kind === "home") ??
+    all.find((t) => t.is_default) ??
+    all.find((t) => t.kind === "home") ??
+    all[0]
+  );
 }
 
 /**

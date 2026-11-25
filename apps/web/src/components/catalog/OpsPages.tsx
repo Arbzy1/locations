@@ -5,14 +5,19 @@ import { useCachedAnalytics, useImportJobs, useImportStatus } from '../../hooks/
 import { TIMEZONE_SKEW_COPY } from '../explorer/ImportDropZone';
 import ChangelogList from '../marketing/ChangelogList';
 import GetStarted from '../shell/GetStarted';
+import { useSession } from '../../lib/auth';
 
 /** `/onboarding` is the same first-run screen new accounts land on. */
 export function OnboardingPage() {
-  return <GetStarted />;
+  const { data: session } = useSession();
+  const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
+  return <GetStarted isDemo={isDemo} />;
 }
 
 export function ImportsPage() {
   const { data: jobs = [] } = useImportJobs();
+  const { data: session } = useSession();
+  const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
   return (
     <CatalogPage title="Import history" description="Counts only. Object storage keys are not shown.">
       <ul className="space-y-2 text-sm">
@@ -28,9 +33,11 @@ export function ImportsPage() {
         ))}
         {jobs.length === 0 && <p className="text-text-muted">No import jobs yet.</p>}
       </ul>
-      <Button variant="outline" asChild title="Open Settings to import again">
-        <Link to="/settings">Import again from Settings</Link>
-      </Button>
+      {!isDemo && (
+        <Button variant="outline" asChild title="Open Settings to import again">
+          <Link to="/settings">Import again from Settings</Link>
+        </Button>
+      )}
     </CatalogPage>
   );
 }

@@ -52,21 +52,24 @@ export default function SettingsView() {
   const user = session?.user as
     | { email?: string; name?: string; emailVerified?: boolean; role?: string }
     | undefined;
+  const isDemo = user?.role === "demo";
   const currentToken = (session as { session?: { token?: string } } | null | undefined)?.session
     ?.token;
 
-  const section = useMemo(
+  const parsedSection = useMemo(
     () => parseSettingsSection(searchParams, typeof window === "undefined" ? "" : window.location.hash),
     [searchParams],
   );
+  const section: SettingsSection = isDemo ? "display" : parsedSection;
 
   const setSection = useCallback(
     (next: SettingsSection) => {
       setMessage("");
       setError("");
-      setSearchParams(settingsSectionSearch(next, searchParams), { replace: true });
+      const target = isDemo ? "display" : next;
+      setSearchParams(settingsSectionSearch(target, searchParams), { replace: true });
     },
-    [searchParams, setSearchParams],
+    [isDemo, searchParams, setSearchParams],
   );
 
   useEffect(() => {
@@ -151,16 +154,22 @@ export default function SettingsView() {
             </p>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            <Badge
-              title={user?.emailVerified ? "Email is verified" : "Verify email before import"}
-            >
-              {user?.emailVerified ? "Verified" : "Unverified"}
-            </Badge>
-            <Badge title={`Billing status: ${status}`}>
-              {PLAN_BADGE[status] ?? (entitlements?.entitled ? 'Can import' : 'No plan')}
-            </Badge>
-            {graceActive && (
-              <Badge title="Import is paused during the read-only grace period">Grace</Badge>
+            {isDemo ? (
+              <Badge title="Public demo session: local display settings only">Demo</Badge>
+            ) : (
+              <>
+                <Badge
+                  title={user?.emailVerified ? "Email is verified" : "Verify email before import"}
+                >
+                  {user?.emailVerified ? "Verified" : "Unverified"}
+                </Badge>
+                <Badge title={`Billing status: ${status}`}>
+                  {PLAN_BADGE[status] ?? (entitlements?.entitled ? 'Can import' : 'No plan')}
+                </Badge>
+                {graceActive && (
+                  <Badge title="Import is paused during the read-only grace period">Grace</Badge>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -178,13 +187,13 @@ export default function SettingsView() {
             <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
               Workspace
             </p>
-            <SettingsNav section={section} onSelect={setSection} orientation="rail" />
+            <SettingsNav section={section} onSelect={setSection} orientation="rail" isDemo={isDemo} />
           </aside>
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {!isDesktop && (
             <div className="shrink-0 border-b border-border px-3 py-2">
-              <SettingsNav section={section} onSelect={setSection} orientation="chips" />
+              <SettingsNav section={section} onSelect={setSection} orientation="chips" isDemo={isDemo} />
             </div>
           )}
           <div className="min-h-0 flex-1 overflow-y-auto">

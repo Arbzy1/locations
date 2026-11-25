@@ -9,7 +9,9 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: read
     steps:
@@ -32,10 +34,14 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - run: npm run rules:check
       - run: npm run test:placement
+      - run: node scripts/brim/verify-zones.mjs
+      - run: npm run lint:web
       - run: npm run test:unit
       - run: npm run test:integration
       - run: npm run test:admin
+      - run: npm run test:security
       - run: npm run typecheck:all
       - run: npm run build:all
       - name: Deploy Worker (production)

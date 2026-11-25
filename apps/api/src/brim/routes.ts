@@ -7,9 +7,11 @@ import { handlePlaceResolve, handlePlaceReverse, handlePlaces } from "./places";
 import {
   createTariffHandler,
   createVehicleHandler,
+  deleteTariffHandler,
   deleteVehicleHandler,
   listTariffsHandler,
   listVehiclesHandler,
+  patchTariffHandler,
   patchVehicleHandler,
 } from "./vehicles";
 import { handleVehiclesResolve } from "./vehicles-resolve";
@@ -24,8 +26,14 @@ import {
   deleteFillUpHandler,
   getCalibrationHandler,
   listFillUpsHandler,
+  patchFillUpHandler,
 } from "./fill-ups";
-import { createPlaceHandler, deletePlaceHandler, listPlacesHandler, patchPlaceHandler } from "./places-saved";
+import {
+  createPlaceHandler,
+  deletePlaceHandler,
+  listPlacesHandler,
+  patchPlaceHandler,
+} from "./places-saved";
 import { getSettingsHandler, patchSettingsHandler } from "./settings";
 import {
   deleteJourneyHandler,
@@ -38,16 +46,10 @@ import {
 import { handleMetaPrices, handleStationsNear, handleStationsNearRoute } from "./stations";
 import { handleMetaEvTariffs } from "./ev";
 import { handleChargesForRoute, handleVehicleCompliance, handleZones } from "./charges";
+import type { BrimVariables } from "./context";
 
-type Variables = {
-  user: { id: string; email: string; name: string; role: string } | null;
-  tenant: string;
-  /** Neon pools opened by the request, closed after the response (index.ts). */
-  pools: { end: () => Promise<void> }[];
-};
-
-type BrimApp = Hono<{ Bindings: Env; Variables: Variables }>;
-type BrimMiddleware = MiddlewareHandler<{ Bindings: Env; Variables: Variables }>;
+type BrimApp = Hono<{ Bindings: Env; Variables: BrimVariables }>;
+type BrimMiddleware = MiddlewareHandler<{ Bindings: Env; Variables: BrimVariables }>;
 
 /** The demo tenant is shared by every visitor, so it can estimate but never save. */
 const blockDemoWrites: BrimMiddleware = async (c, next) => {
@@ -57,10 +59,14 @@ const blockDemoWrites: BrimMiddleware = async (c, next) => {
   return next();
 };
 
-/** Per-tenant limit for routes that call paid routing, geocoding, or DVLA providers. */
+/** Per-tenant limit for routes that call paid routing, geocoding, DVLA, or corridor queries. */
 function limitPerTenant(bucket: string, limit: number): BrimMiddleware {
   return async (c, next) => {
-    const limited = rateLimit({ key: `brim:${bucket}:${c.get("tenant")}`, limit, windowMs: 60_000 });
+    const limited = rateLimit({
+      key: `brim:${bucket}:${c.get("tenant")}`,
+      limit,
+      windowMs: 60_000,
+    });
     if (!limited.ok) {
       c.header("Retry-After", String(limited.retryAfterSec));
       return c.json({ error: "Too many requests. Try again later." }, 429);
@@ -77,6 +83,8 @@ export function registerBrimRoutes(app: BrimApp) {
   const estimateLimit = limitPerTenant("estimate", 60);
   const placesLimit = limitPerTenant("places", 120);
   const lookupLimit = limitPerTenant("lookup", 20);
+  const stationsLimit = limitPerTenant("stations", 60);
+  const chargesLimit = limitPerTenant("charges", 60);
 
   app.get("/api/brim/status", (c) => {
     const fixtureMode = isFixtureMode(c.env.BRIM_FIXTURES);
@@ -94,13 +102,13 @@ export function registerBrimRoutes(app: BrimApp) {
   app.post("/api/brim/estimate", estimateLimit, handleEstimate);
   app.post("/api/brim/estimate/from-maps-url", estimateLimit, handleFromMapsUrl);
   app.get("/api/brim/stations/near", handleStationsNear);
-  app.get("/api/brim/stations/near-route", handleStationsNearRoute);
-  app.post("/api/brim/stations/near-route", handleStationsNearRoute);
+  app.get("/api/brim/stations/near-route", stationsLimit, handleStationsNearRoute);
+  app.post("/api/brim/stations/near-route", stationsLimit, handleStationsNearRoute);
   app.get("/api/brim/meta/prices", handleMetaPrices);
   app.get("/api/brim/meta/ev-tariffs", handleMetaEvTariffs);
   app.get("/api/brim/zones", handleZones);
-  app.get("/api/brim/charges/for-route", handleChargesForRoute);
-  app.post("/api/brim/charges/for-route", handleChargesForRoute);
+  app.get("/api/brim/charges/for-route", chargesLimit, handleChargesForRoute);
+  app.post("/api/brim/charges/for-route", chargesLimit, handleChargesForRoute);
 
   app.get("/api/brim/vehicles/catalogue/makes", listMakesHandler);
   app.get("/api/brim/vehicles/catalogue/models", listModelsHandler);
@@ -114,6 +122,8 @@ export function registerBrimRoutes(app: BrimApp) {
   app.get("/api/brim/vehicles/:id/compliance", handleVehicleCompliance);
   app.get("/api/brim/vehicles/:id/tariffs", listTariffsHandler);
   app.post("/api/brim/vehicles/:id/tariffs", blockDemoWrites, createTariffHandler);
+  app.patch("/api/brim/vehicles/:id/tariffs/:tariffId", blockDemoWrites, patchTariffHandler);
+  app.delete("/api/brim/vehicles/:id/tariffs/:tariffId", blockDemoWrites, deleteTariffHandler);
   app.get("/api/brim/vehicles/:id/fill-ups", listFillUpsHandler);
   app.get("/api/brim/vehicles/:id/calibration", getCalibrationHandler);
 
@@ -125,6 +135,7 @@ export function registerBrimRoutes(app: BrimApp) {
   app.delete("/api/brim/saved-places/:id", blockDemoWrites, deletePlaceHandler);
 
   app.post("/api/brim/fill-ups", blockDemoWrites, createFillUpHandler);
+  app.patch("/api/brim/fill-ups/:id", blockDemoWrites, patchFillUpHandler);
   app.delete("/api/brim/fill-ups/:id", blockDemoWrites, deleteFillUpHandler);
 
   app.post("/api/brim/journeys", blockDemoWrites, saveJourneyHandler);

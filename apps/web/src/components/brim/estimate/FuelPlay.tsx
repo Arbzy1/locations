@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   playFuelFromText,
   type FuelPlaySeed,
@@ -9,6 +9,8 @@ import { Button } from "../../ui/button";
 import { FormItem } from "../../ui/form";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
+import { formatBrimMiles, mpgToL100km, mphToKmh } from "../../../lib/brim/units";
+import { useUnits } from "../../../lib/units";
 
 export type FuelPlayReport = { result: PlayFuelSuccess | null; engaged: boolean };
 
@@ -43,6 +45,8 @@ export function FuelPlay({
   chargesPence,
   propulsion,
   priceNote,
+  externalPriceOverride,
+  externalPriceSeq,
   onReport,
 }: {
   routeMeters: number;
@@ -51,10 +55,15 @@ export function FuelPlay({
   chargesPence: number;
   propulsion: "petrol" | "diesel";
   priceNote?: string | undefined;
+  externalPriceOverride?: number | undefined;
+  externalPriceSeq?: number | undefined;
   onReport: (report: FuelPlayReport) => void;
 }) {
+  const { unit } = useUnits();
   const seedRef = useRef(seed);
-  seedRef.current = seed;
+  useLayoutEffect(() => {
+    seedRef.current = seed;
+  });
   const touched = useRef({ mpg: false, price: false, speed: false, miles: false });
   const [mpgText, setMpgText] = useState(seed.mpg);
   const [priceText, setPriceText] = useState(seed.price);
@@ -64,7 +73,8 @@ export function FuelPlay({
   const [milesText, setMilesText] = useState("");
   const [useMiles, setUseMiles] = useState(seed.miles <= 0);
   const [engaged, setEngaged] = useState(false);
-  const lastGood = useRef<PlayFuelSuccess | null>(null);
+  const [milesTouched, setMilesTouched] = useState(false);
+  const [lastGood, setLastGood] = useState<PlayFuelSuccess | null>(null);
 
   useEffect(() => {
     const next = seedRef.current;
@@ -77,6 +87,12 @@ export function FuelPlay({
       setMilesText("");
     }
   }, [seedKey]);
+
+  useEffect(() => {
+    if (!externalPriceSeq || externalPriceOverride === undefined) return;
+    touched.current.price = false;
+    setPriceText(onePlace(externalPriceOverride));
+  }, [externalPriceSeq, externalPriceOverride]);
 
   const outcome = useMemo(
     () =>
@@ -94,16 +110,20 @@ export function FuelPlay({
     [routeMeters, useMiles, milesText, mpgText, priceText, speedText, referenceMph, chargesPence, propulsion, saveText],
   );
 
-  if (outcome.ok) lastGood.current = outcome;
-  const shown = outcome.ok ? outcome : outcome.pending ? lastGood.current : null;
+  useEffect(() => {
+    if (outcome.ok) setLastGood(outcome);
+  }, [outcome]);
+
+  const shown = outcome.ok ? outcome : outcome.pending ? lastGood : null;
 
   useEffect(() => {
-    const result = outcome.ok ? outcome : outcome.pending ? lastGood.current : null;
+    const result = outcome.ok ? outcome : outcome.pending ? lastGood : null;
     onReport({ result, engaged });
-  }, [outcome, engaged, onReport]);
+  }, [outcome, lastGood, engaged, onReport]);
 
   function mark(field: "mpg" | "price" | "speed" | "miles") {
     touched.current[field] = true;
+    if (field === "miles") setMilesTouched(true);
     setEngaged(true);
   }
 
@@ -117,6 +137,7 @@ export function FuelPlay({
   function resetToEstimate() {
     const next = seedRef.current;
     touched.current = { mpg: false, price: false, speed: false, miles: false };
+    setMilesTouched(false);
     setEngaged(false);
     setMpgText(next.mpg);
     setPriceText(next.price);
@@ -129,7 +150,7 @@ export function FuelPlay({
 
   const rawIssues = !outcome.ok && !outcome.pending ? outcome.issues : [];
   const issues =
-    engaged || touched.current.miles
+    engaged || milesTouched
       ? rawIssues
       : rawIssues.filter(
           (issue) => !(issue.field === "miles" && issue.message === "Enter the miles for this drive."),
@@ -138,6 +159,10 @@ export function FuelPlay({
   const issueList = saveIssue ? [...issues, { field: "save" as PlayField, message: saveIssue }] : issues;
   const invalid = (field: PlayField) => issueList.some((issue) => issue.field === field);
   const fuelName = propulsion === "diesel" ? "diesel" : "petrol";
+  const speedLabel =
+    unit === "km"
+      ? `Steady speed (mph · ${onePlace(mphToKmh(rangeValue(speedText, 20, 80, 60)))} km/h)`
+      : "Steady speed (mph)";
 
   return (
     <section className="mt-3 border-t border-border pt-3" aria-label="Play with this drive">
@@ -169,7 +194,12 @@ export function FuelPlay({
           />
         </FormItem>
         <FormItem>
-          <Label htmlFor="play-mpg">mpg at {onePlace(referenceMph)} mph</Label>
+          <Label htmlFor="play-mpg">
+            mpg at {onePlace(referenceMph)} mph
+            {unit === "km" && Number(mpgText) > 0
+              ? ` (${onePlace(mpgToL100km(Number(mpgText)))} L/100km)`
+              : ""}
+          </Label>
           <Input
             id="play-mpg"
             title="Fuel economy in miles per gallon"
@@ -194,7 +224,7 @@ export function FuelPlay({
           />
         </FormItem>
         <FormItem>
-          <Label htmlFor="play-speed">Steady speed (mph)</Label>
+          <Label htmlFor="play-speed">{speedLabel}</Label>
           <Input
             id="play-speed"
             title="Steady speed in miles per hour"
@@ -243,7 +273,9 @@ export function FuelPlay({
           </FormItem>
         ) : (
           <p className="tabular-nums font-mono text-sm text-text-muted">
-            {seed.miles > 0 ? `${onePlace(seed.miles)} miles on the route` : "No route miles yet"}
+            {seed.miles > 0
+              ? `${formatBrimMiles(seed.miles, unit, 1)} on the route`
+              : "No route distance yet"}
           </p>
         )}
         <FormItem>
@@ -276,7 +308,10 @@ export function FuelPlay({
       {shown ? (
         <div className="mt-3 space-y-1 text-sm">
           <p className="tabular-nums font-mono">
-            {shown.miles.toFixed(1)} miles · {shown.litres.toFixed(2)} L of {fuelName} · {shown.effectiveMpg.toFixed(1)} mpg
+            {formatBrimMiles(shown.miles, unit, 1)} · {shown.litres.toFixed(2)} L of {fuelName} ·{" "}
+            {unit === "km"
+              ? `${mpgToL100km(shown.effectiveMpg).toFixed(1)} L/100km (${shown.effectiveMpg.toFixed(1)} mpg)`
+              : `${shown.effectiveMpg.toFixed(1)} mpg`}{" "}
             at this speed
           </p>
           <p className="tabular-nums font-mono">
@@ -284,7 +319,8 @@ export function FuelPlay({
           </p>
           <p className="tabular-nums font-mono">
             Fuel {money(shown.fuelPence)}
-            {shown.chargesPence > 0 ? ` · charges ${money(shown.chargesPence)}` : ""} · total {money(shown.totalPence)}
+            {shown.chargesPence > 0 ? ` · charges ${money(shown.chargesPence)}` : ""} · total{" "}
+            {money(shown.totalPence)}
           </p>
           {Math.abs(shown.versusReference.litresDelta) >= 0.005 ? (
             <p className="tabular-nums font-mono text-text-muted">
@@ -307,15 +343,20 @@ export function FuelPlay({
         <Button
           type="button"
           variant="outline"
-          title={useMiles ? "Use the route miles" : "Type miles instead of the route"}
+          title={useMiles ? "Use the route distance" : "Type miles instead of the route"}
           onClick={() => {
             mark("miles");
             setUseMiles((current) => !current);
           }}
         >
-          {useMiles ? "Use the route miles" : "Type miles"}
+          {useMiles ? "Use the route distance" : "Type miles"}
         </Button>
-        <Button type="button" variant="outline" title="Reset price, mpg, and speed to this estimate" onClick={resetToEstimate}>
+        <Button
+          type="button"
+          variant="outline"
+          title="Reset price, mpg, and speed to this estimate"
+          onClick={resetToEstimate}
+        >
           Reset to this estimate
         </Button>
       </div>

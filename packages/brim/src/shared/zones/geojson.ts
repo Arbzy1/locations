@@ -12,6 +12,10 @@ export function schemeToGeoJsonFeature(scheme: ChargeScheme) {
       ...(scheme.cazClass ? { caz_class: scheme.cazClass } : {}),
       ...(scheme.chargePence !== undefined ? { charge_pence: scheme.chargePence } : {}),
       ...(scheme.chargePenceByClass ? { charge_pence_by_class: scheme.chargePenceByClass } : {}),
+      ...(scheme.offpeakChargePenceByClass
+        ? { offpeak_charge_pence_by_class: scheme.offpeakChargePenceByClass }
+        : {}),
+      ...(scheme.peakHours ? { peak_hours_json: scheme.peakHours } : {}),
       is_restriction: scheme.isRestriction,
       applies_hours_json: scheme.appliesHours,
       source_url: scheme.sourceUrl,

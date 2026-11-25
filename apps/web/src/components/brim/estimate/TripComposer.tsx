@@ -9,8 +9,18 @@ import { Button } from "../../ui/button";
 import { Form, FormItem } from "../../ui/form";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
+import { Switch } from "../../ui/switch";
 import { AddressField } from "../AddressField";
-import type { FocusStop, Health, MapBias, Place, ViaDraft } from "../../../lib/brim/estimate/types";
+import type {
+  FocusStop,
+  FuelGrade,
+  Health,
+  MapBias,
+  Place,
+  Propulsion,
+  ViaDraft,
+} from "../../../lib/brim/estimate/types";
 
 function StopBadge({ label }: { label: string }) {
   return (
@@ -19,6 +29,17 @@ function StopBadge({ label }: { label: string }) {
     </span>
   );
 }
+
+const PETROL_GRADES: Array<{ value: FuelGrade; label: string }> = [
+  { value: "E10", label: "Regular unleaded (E10)" },
+  { value: "E5", label: "Super unleaded (E5)" },
+  { value: "LPG", label: "Autogas (LPG)" },
+];
+
+const DIESEL_GRADES: Array<{ value: FuelGrade; label: string }> = [
+  { value: "B7", label: "Standard diesel (B7)" },
+  { value: "SDV", label: "Premium diesel" },
+];
 
 export function TripComposer({
   collapsed,
@@ -52,6 +73,13 @@ export function TripComposer({
   departsAt,
   setDepartsAt,
   onNow,
+  roundTrip,
+  onRoundTripChange,
+  passengers,
+  onPassengersChange,
+  propulsion,
+  fuelGrade,
+  onFuelGradeChange,
   loading,
   onSubmit,
   geoError,
@@ -96,6 +124,13 @@ export function TripComposer({
   departsAt: string;
   setDepartsAt: (value: string) => void;
   onNow: () => void;
+  roundTrip: boolean;
+  onRoundTripChange: (checked: boolean) => void;
+  passengers: string;
+  onPassengersChange: (value: string) => void;
+  propulsion: Propulsion;
+  fuelGrade: FuelGrade;
+  onFuelGradeChange: (grade: FuelGrade) => void;
   loading: boolean;
   onSubmit: (e: FormEvent) => void;
   geoError: string | null;
@@ -111,13 +146,16 @@ export function TripComposer({
 }) {
   const originArmed = pinArmed && focusStop === "origin";
   const destArmed = pinArmed && focusStop === "destination";
+  const gradeOptions = propulsion === "diesel" ? DIESEL_GRADES : PETROL_GRADES;
 
   if (collapsed) {
     return (
       <>
         <p className="mb-1 text-text-muted">True journey cost</p>
         {stale ? (
-          <p className="mb-3 text-sm text-train">Last estimate on this device. Edit the trip or move a pin to refresh.</p>
+          <p className="mb-3 text-sm text-train">
+            Last estimate on this device. Edit the trip or move a pin to refresh.
+          </p>
         ) : null}
         <div className="mb-3 flex gap-2">
           <div className="flex flex-col items-center" aria-hidden>
@@ -127,10 +165,19 @@ export function TripComposer({
           </div>
           <div className="min-w-0 flex-1 space-y-3">
             <p className="truncate text-sm">{origin || "From"}</p>
-            <p className="truncate text-sm">{destination || "To"}</p>
+            <p className="truncate text-sm">
+              {destination || "To"}
+              {roundTrip ? " (return)" : ""}
+            </p>
           </div>
         </div>
-        <Button title="Choose the car for this trip" type="button" variant="outline" className="mb-2 w-full justify-start" onClick={onOpenVehicle}>
+        <Button
+          title="Choose the car for this trip"
+          type="button"
+          variant="outline"
+          className="mb-2 w-full justify-start"
+          onClick={onOpenVehicle}
+        >
           {vehicleLabel}
         </Button>
         <Button title="Edit trip" type="button" className="w-full" onClick={onExpand}>
@@ -156,7 +203,7 @@ export function TripComposer({
       )}
       {stale ? (
         <p className="mb-3 text-sm text-train">
-          Showing the last estimate stored on this device. Move a pin or tap Estimate to refresh.
+          Showing a stored snapshot. Move a pin or tap Estimate to refresh live prices and traffic.
         </p>
       ) : null}
 
@@ -195,7 +242,8 @@ export function TripComposer({
                 {...(originDescribedBy ? { describedBy: originDescribedBy } : {})}
                 {...(bias ? { bias } : {})}
               />
-              <Button title="Pin"
+              <Button
+                title="Arm map pin for origin"
                 type="button"
                 variant="outline"
                 size="sm"
@@ -211,7 +259,11 @@ export function TripComposer({
               return (
                 <div
                   key={via.id}
-                  className={armed ? "mb-3 rounded-lg ring-2 ring-accent ring-offset-2 ring-offset-card" : "mb-3"}
+                  className={
+                    armed
+                      ? "mb-3 rounded-lg ring-2 ring-accent ring-offset-2 ring-offset-card"
+                      : "mb-3"
+                  }
                 >
                   <AddressField
                     id={`via-${via.id}`}
@@ -226,7 +278,8 @@ export function TripComposer({
                     {...(bias ? { bias } : {})}
                   />
                   <div className="mt-1 flex flex-wrap gap-1">
-                    <Button title="Pin"
+                    <Button
+                      title={`Arm map pin for stop ${index + 1}`}
                       type="button"
                       variant="outline"
                       size="sm"
@@ -235,7 +288,13 @@ export function TripComposer({
                     >
                       Pin
                     </Button>
-                    <Button title="Remove stop" type="button" variant="outline" size="sm" onClick={() => onRemoveVia(index)}>
+                    <Button
+                      title={`Remove stop ${index + 1}`}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onRemoveVia(index)}
+                    >
                       Remove stop
                     </Button>
                   </div>
@@ -261,7 +320,8 @@ export function TripComposer({
                 {...(destDescribedBy ? { describedBy: destDescribedBy } : {})}
                 {...(bias ? { bias } : {})}
               />
-              <Button title="Pin"
+              <Button
+                title="Arm map pin for destination"
                 type="button"
                 variant="outline"
                 size="sm"
@@ -279,29 +339,85 @@ export function TripComposer({
             ) : null}
           </div>
         </div>
-        <Button title="Add stop" type="button" variant="outline" size="sm" onClick={onAddStop}>
-          Add stop
-        </Button>
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button title="Add an intermediate stop" type="button" variant="outline" size="sm" onClick={onAddStop}>
+            Add stop
+          </Button>
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
+            <Switch
+              title="Include return journey"
+              checked={roundTrip}
+              onCheckedChange={onRoundTripChange}
+            />
+            Return trip
+          </label>
+        </div>
+
         <FormItem>
           <Label htmlFor="leave">Leave</Label>
           <div className="flex gap-1">
-            <Input title="Leave"
+            <Input
+              title="Departure date and time"
               id="leave"
               type="datetime-local"
               enterKeyHint="next"
               value={departsAt}
               onChange={(ev) => setDepartsAt(ev.target.value)}
             />
-            <Button title="Now" type="button" variant="outline" size="sm" onClick={onNow}>
+            <Button title="Set departure to now" type="button" variant="outline" size="sm" onClick={onNow}>
               Now
             </Button>
           </div>
         </FormItem>
-        <Button title={loading ? "Working out the number…" : "Estimate"} type="submit">{loading ? "Working out the number…" : "Estimate"}</Button>
+
+        {propulsion !== "bev" ? (
+          <FormItem>
+            <Label htmlFor="fuel-grade">Fuel grade</Label>
+            <Select value={fuelGrade} onValueChange={(v) => onFuelGradeChange(v as FuelGrade)}>
+              <SelectTrigger id="fuel-grade" title="Select pump fuel grade">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {gradeOptions.map((g) => (
+                  <SelectItem key={g.value} value={g.value}>
+                    {g.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormItem>
+        ) : null}
+
+        <FormItem>
+          <Label htmlFor="trip-passengers">Business passengers (HMRC +5p/mi)</Label>
+          <Select value={passengers} onValueChange={onPassengersChange}>
+            <SelectTrigger id="trip-passengers" title="Fellow business passengers for HMRC allowance">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="0">None (driver only)</SelectItem>
+              <SelectItem value="1">1 passenger (+5p/mi)</SelectItem>
+              <SelectItem value="2">2 passengers (+10p/mi)</SelectItem>
+              <SelectItem value="3">3 passengers (+15p/mi)</SelectItem>
+              <SelectItem value="4">4 passengers (+20p/mi)</SelectItem>
+            </SelectContent>
+          </Select>
+        </FormItem>
+
+        <Button
+          title={loading ? "Working out the number..." : "Estimate journey cost"}
+          type="submit"
+        >
+          {loading ? "Working out the number..." : "Estimate"}
+        </Button>
       </Form>
+
       <Accordion type="single" collapsible className="mt-3">
         <AccordionItem value="maps">
-          <AccordionTrigger>Have a Maps link?</AccordionTrigger>
+          <AccordionTrigger title="Paste a Google, Apple, or Bing Maps link">
+            Have a Maps link?
+          </AccordionTrigger>
           <AccordionContent>
             <form
               onSubmit={(e) => {
@@ -311,7 +427,8 @@ export function TripComposer({
             >
               <FormItem>
                 <Label htmlFor="maps">Paste a Maps link</Label>
-                <Input title="Paste a Maps link"
+                <Input
+                  title="Paste a Maps link"
                   id="maps"
                   value={maps}
                   onChange={(ev) => setMaps(ev.target.value)}
@@ -326,14 +443,20 @@ export function TripComposer({
                   above.
                 </p>
               </FormItem>
-              <Button title="Estimate from link" type="submit" variant="outline">
+              <Button title="Estimate from Maps link" type="submit" variant="outline">
                 Estimate from link
               </Button>
             </form>
           </AccordionContent>
         </AccordionItem>
       </Accordion>
-      <Button title="Choose the car for this trip" type="button" variant="outline" className="mt-3 w-full justify-start" onClick={onOpenVehicle}>
+      <Button
+        title="Choose the car for this trip"
+        type="button"
+        variant="outline"
+        className="mt-3 w-full justify-start"
+        onClick={onOpenVehicle}
+      >
         {vehicleLabel}
       </Button>
     </>

@@ -177,3 +177,100 @@ export function lineNearPolygon(points: LatLng[], geometry: ZoneGeometry, meters
   if (lineIntersectsPolygon(points, geometry)) return false;
   return minDistanceMetersToPolygon(points, geometry) <= meters;
 }
+
+function segmentIntersectionT(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  dx: number,
+  dy: number,
+): number | undefined {
+  const d1x = bx - ax;
+  const d1y = by - ay;
+  const d2x = dx - cx;
+  const d2y = dy - cy;
+  const cross = d1x * d2y - d1y * d2x;
+  if (Math.abs(cross) < 1e-18) {
+    if (pointOnSegment(ax, ay, cx, cy, dx, dy)) return 0;
+    if (pointOnSegment(bx, by, cx, cy, dx, dy)) return 1;
+    return undefined;
+  }
+  const t = ((cx - ax) * d2y - (cy - ay) * d2x) / cross;
+  const u = ((cx - ax) * d1y - (cy - ay) * d1x) / cross;
+  if (t >= 0 && t <= 1 && u >= 0 && u <= 1) return t;
+  return undefined;
+}
+
+/**
+ * Compute fractional distance [0..1] along `points` where the polyline first enters
+ * and last exits `geometry`. Returns `undefined` when the polyline does not intersect.
+ */
+export function linePolygonSpan(
+  points: LatLng[],
+  geometry: ZoneGeometry,
+): { entryFraction: number; exitFraction: number } | undefined {
+  if (points.length === 0) return undefined;
+  if (points.length === 1) {
+    const only = points[0]!;
+    return pointInPolygon(only.lng, only.lat, geometry)
+      ? { entryFraction: 0, exitFraction: 1 }
+      : undefined;
+  }
+
+  const segLengths: number[] = [];
+  let totalMeters = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const len = distanceMeters(points[i]!, points[i + 1]!);
+    segLengths.push(len);
+    totalMeters += len;
+  }
+
+  if (totalMeters <= 0) {
+    return points.some((p) => pointInPolygon(p.lng, p.lat, geometry))
+      ? { entryFraction: 0, exitFraction: 1 }
+      : undefined;
+  }
+
+  const polygons = asPolygons(geometry);
+  let minMeters = Infinity;
+  let maxMeters = -Infinity;
+  let cumBefore = 0;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i]!;
+    const b = points[i + 1]!;
+    const segLen = segLengths[i] ?? 0;
+
+    if (pointInPolygon(a.lng, a.lat, geometry)) {
+      minMeters = Math.min(minMeters, cumBefore);
+      maxMeters = Math.max(maxMeters, cumBefore);
+    }
+    if (pointInPolygon(b.lng, b.lat, geometry)) {
+      minMeters = Math.min(minMeters, cumBefore + segLen);
+      maxMeters = Math.max(maxMeters, cumBefore + segLen);
+    }
+
+    for (const rings of polygons) {
+      for (const ring of rings) {
+        for (const [cx, cy, dx, dy] of ringEdges(ring)) {
+          const t = segmentIntersectionT(a.lng, a.lat, b.lng, b.lat, cx, cy, dx, dy);
+          if (t !== undefined) {
+            const atMeters = cumBefore + t * segLen;
+            minMeters = Math.min(minMeters, atMeters);
+            maxMeters = Math.max(maxMeters, atMeters);
+          }
+        }
+      }
+    }
+
+    cumBefore += segLen;
+  }
+
+  if (!Number.isFinite(minMeters) || maxMeters < 0) return undefined;
+  const entryFraction = Math.max(0, Math.min(1, minMeters / totalMeters));
+  const exitFraction = Math.max(entryFraction, Math.min(1, maxMeters / totalMeters));
+  return { entryFraction, exitFraction };
+}

@@ -1,5 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import { loadEnvFiles } from "../../packages/db/src/load-env.ts";
+import { TENANT_TABLES } from "./tenant-tables";
 
 /** Same `.env` / `.dev.vars` load as `db:migrate`. Does not override an existing `DATABASE_URL`. */
 loadEnvFiles();
@@ -41,12 +42,22 @@ export async function prepareRlsAppRole(sql: NeonSql): Promise<AppRoleMode> {
   try {
     await sql`GRANT locations_app TO CURRENT_USER`;
     await sql`GRANT USAGE ON SCHEMA public TO locations_app`;
-    await sql`GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE place_labels TO locations_app`;
-    try {
-      await sql`GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE named_trips TO locations_app`;
-    } catch {
-      /* older DBs may lack this GRANT until 0012+ is applied */
-    }
+    await sql`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO locations_app`;
+    await sql`
+      DO $$
+      DECLARE
+        t text;
+      BEGIN
+        FOREACH t IN ARRAY ${[...TENANT_TABLES]}
+        LOOP
+          BEGIN
+            EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE %I TO locations_app', t);
+          EXCEPTION
+            WHEN undefined_table THEN NULL;
+          END;
+        END LOOP;
+      END $$;
+    `;
     appRoleMode = "set-role";
     return appRoleMode;
   } catch {

@@ -17,6 +17,9 @@ export type Env = {
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_PRICE_MONTHLY?: string;
   STRIPE_PRICE_YEARLY?: string;
+  PUBLIC_PRICE_MONTHLY_LABEL?: string;
+  PUBLIC_PRICE_YEARLY_LABEL?: string;
+  PUBLIC_TRIAL_DAYS?: string;
   GRACE_DAYS?: string;
   MAP_TILE_DARK_URL?: string;
   MAP_TILE_LIGHT_URL?: string;

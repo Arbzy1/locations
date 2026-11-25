@@ -53,9 +53,23 @@ export function daysWindowApplies(
   hours: ChargeHoursJson,
   departsAtIso: string,
   durationSeconds: number,
+  span?: { entryFraction?: number | undefined; exitFraction?: number | undefined },
 ): string[] {
-  const start = Date.parse(departsAtIso);
-  const end = start + Math.max(0, durationSeconds) * 1000;
+  const tripStart = Date.parse(departsAtIso);
+  const totalDurationMs = Math.max(0, durationSeconds) * 1000;
+  if (!Number.isFinite(tripStart)) return [];
+  const entryFrac =
+    span?.entryFraction !== undefined && Number.isFinite(span.entryFraction)
+      ? Math.max(0, Math.min(1, span.entryFraction))
+      : 0;
+  const exitFrac =
+    span?.exitFraction !== undefined && Number.isFinite(span.exitFraction)
+      ? Math.max(entryFrac, Math.min(1, span.exitFraction))
+      : span?.entryFraction !== undefined
+        ? entryFrac
+        : 1;
+  const start = tripStart + entryFrac * totalDurationMs;
+  const end = tripStart + exitFrac * totalDurationMs;
   if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
   const days: string[] = [];
   const seen = new Set<string>();

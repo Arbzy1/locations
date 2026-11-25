@@ -29,13 +29,13 @@ export const BRIM_ROUTE_CATALOG: ApiRoute[] = [
   compute("/api/brim/estimate", true),
   compute("/api/brim/estimate/from-maps-url", true),
   read("/api/brim/stations/near"),
-  read("/api/brim/stations/near-route"),
-  compute("/api/brim/stations/near-route", false),
+  read("/api/brim/stations/near-route", "/api/brim/stations/near-route", "none", true),
+  compute("/api/brim/stations/near-route", true),
   read("/api/brim/meta/prices"),
   read("/api/brim/meta/ev-tariffs"),
   read("/api/brim/zones"),
-  read("/api/brim/charges/for-route"),
-  compute("/api/brim/charges/for-route", false),
+  read("/api/brim/charges/for-route", "/api/brim/charges/for-route", "none", true),
+  compute("/api/brim/charges/for-route", true),
 
   read("/api/brim/vehicles/catalogue/makes"),
   read("/api/brim/vehicles/catalogue/models"),
@@ -49,6 +49,18 @@ export const BRIM_ROUTE_CATALOG: ApiRoute[] = [
   read("/api/brim/vehicles/:id/compliance", `/api/brim/vehicles/${OTHER}/compliance`, "tenantRow"),
   read("/api/brim/vehicles/:id/tariffs", `/api/brim/vehicles/${OTHER}/tariffs`, "tenantRow"),
   write("POST", "/api/brim/vehicles/:id/tariffs", `/api/brim/vehicles/${OTHER}/tariffs`, "tenantRow"),
+  write(
+    "PATCH",
+    "/api/brim/vehicles/:id/tariffs/:tariffId",
+    `/api/brim/vehicles/${OTHER}/tariffs/${OTHER}`,
+    "tenantRow",
+  ),
+  write(
+    "DELETE",
+    "/api/brim/vehicles/:id/tariffs/:tariffId",
+    `/api/brim/vehicles/${OTHER}/tariffs/${OTHER}`,
+    "tenantRow",
+  ),
   read("/api/brim/vehicles/:id/fill-ups", `/api/brim/vehicles/${OTHER}/fill-ups`, "tenantRow"),
   read("/api/brim/vehicles/:id/calibration", `/api/brim/vehicles/${OTHER}/calibration`, "tenantRow"),
 
@@ -60,6 +72,7 @@ export const BRIM_ROUTE_CATALOG: ApiRoute[] = [
   write("DELETE", "/api/brim/saved-places/:id", `/api/brim/saved-places/${OTHER}`, "tenantRow"),
 
   write("POST", "/api/brim/fill-ups"),
+  write("PATCH", "/api/brim/fill-ups/:id", `/api/brim/fill-ups/${OTHER}`, "tenantRow"),
   write("DELETE", "/api/brim/fill-ups/:id", `/api/brim/fill-ups/${OTHER}`, "tenantRow"),
 
   write("POST", "/api/brim/journeys"),

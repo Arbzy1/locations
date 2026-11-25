@@ -6,9 +6,9 @@
     "authority": "National Highways",
     "kind": "toll",
     "charge_pence_by_class": {
-      "car": 250,
-      "van": 300,
-      "motorcycle": 250
+      "car": 350,
+      "van": 420,
+      "motorcycle": 0
     },
     "is_restriction": false,
     "applies_hours_json": {
@@ -30,9 +30,9 @@
       ]
     },
     "source_url": "https://www.gov.uk/dart-charge",
-    "verified_on": "2026-08-16",
+    "verified_on": "2026-11-24",
     "operator_url": "https://www.gov.uk/dart-charge",
-    "dataset_version": "2026-08-16"
+    "dataset_version": "2026-11-24"
   },
   "geometry": {
     "type": "MultiPolygon",
@@ -40,24 +40,24 @@
       [
         [
           [
-            0.23,
-            51.455
+            0.242,
+            51.456
           ],
           [
-            0.29,
-            51.455
+            0.274,
+            51.456
           ],
           [
-            0.29,
-            51.478
+            0.274,
+            51.474
           ],
           [
-            0.23,
-            51.478
+            0.242,
+            51.474
           ],
           [
-            0.23,
-            51.455
+            0.242,
+            51.456
           ]
         ]
       ]

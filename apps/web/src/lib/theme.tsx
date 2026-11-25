@@ -65,12 +65,22 @@ export function resolveInitialTheme(): Theme {
   return readStoredTheme() ?? systemTheme();
 }
 
+function syncThemeColorMeta() {
+  if (typeof document === 'undefined') return;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) return;
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  if (bg) meta.setAttribute('content', bg);
+}
+
 function applyTheme(theme: Theme) {
   document.documentElement.setAttribute('data-theme', theme);
+  syncThemeColorMeta();
 }
 
 function applyMood(mood: MoodId) {
   document.documentElement.setAttribute('data-mood', mood);
+  syncThemeColorMeta();
 }
 
 if (typeof document !== 'undefined') {

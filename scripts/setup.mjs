@@ -93,13 +93,6 @@ Your data stays in YOUR Neon project after this setup.
   upsertEnv("BETTER_AUTH_URL", "http://localhost:8787");
   upsertEnv("DATA_PATH", dataPath);
 
-  // Mirror for wrangler local
-  writeFileSync(
-    resolve(root, ".dev.vars"),
-    `DATABASE_URL=${databaseUrl}\nBETTER_AUTH_SECRET=${secret}\nBETTER_AUTH_URL=http://localhost:8787\n`,
-    "utf-8",
-  );
-
   console.log("\nInstalling dependencies (if needed)...");
   try {
     run("npm install");
@@ -107,9 +100,12 @@ Your data stays in YOUR Neon project after this setup.
     /* already installed */
   }
 
+  // Sync all configured keys from .env into .dev.vars for local Wrangler.
+  run("npm run env:sync -- --env local");
+
   run("npm run db:migrate:dev");
-  run("npm run db:import");
   run(`npm run auth:create-user -- "${email}" "${password}" "${name}" admin`);
+  run(`npm run db:import -- --email "${email}"`);
 
   console.log(`
 Setup complete

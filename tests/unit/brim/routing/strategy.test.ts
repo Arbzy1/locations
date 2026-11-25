@@ -219,6 +219,36 @@ describe("google adapter", () => {
     expect(payload.origin).toEqual({ address: "Crawley" });
     expect(payload.destination).toEqual({ address: "London" });
   });
+
+  it("omits departureTime when in the past and forwards it when safely in the future", async () => {
+    let payload: Record<string, unknown> = {};
+    const provider = new GoogleRoutesProvider("test", async (_url, init) => {
+      payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(
+        JSON.stringify({
+          routes: [{ distanceMeters: 10, duration: "1s", polyline: { encodedPolyline: "abc" } }],
+        }),
+        { status: 200 },
+      );
+    });
+    const pastIso = new Date(Date.now() - 120_000).toISOString();
+    await provider.computeRoute({
+      origin: "Crawley",
+      destination: "London",
+      mode: "advanced",
+      departureTime: pastIso,
+    });
+    expect(payload.departureTime).toBeUndefined();
+
+    const futureIso = new Date(Date.now() + 3_600_000).toISOString();
+    await provider.computeRoute({
+      origin: "Crawley",
+      destination: "London",
+      mode: "advanced",
+      departureTime: futureIso,
+    });
+    expect(payload.departureTime).toBe(futureIso);
+  });
 });
 
 describe("osrm adapter", () => {

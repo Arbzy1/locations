@@ -10,15 +10,12 @@
     "is_restriction": false,
     "applies_hours_json": {
       "timezone": "Europe/London",
-      "always": true,
-      "exemptDates": [
-        "12-25"
-      ]
+      "always": true
     },
     "source_url": "https://www.bradford.gov.uk/breathe-better-bradford/clean-air-zone/",
-    "verified_on": "2026-08-16",
+    "verified_on": "2026-11-24",
     "operator_url": "https://www.bradford.gov.uk/breathe-better-bradford/clean-air-zone/",
-    "dataset_version": "2026-08-16"
+    "dataset_version": "2026-11-24"
   },
   "geometry": {
     "type": "MultiPolygon",
@@ -26,23 +23,31 @@
       [
         [
           [
-            -1.77,
+            -1.772,
             53.785
           ],
           [
-            -1.735,
+            -1.74,
             53.785
           ],
           [
-            -1.735,
-            53.805
+            -1.734,
+            53.798
           ],
           [
-            -1.77,
-            53.805
+            -1.748,
+            53.812
           ],
           [
-            -1.77,
+            -1.775,
+            53.81
+          ],
+          [
+            -1.78,
+            53.795
+          ],
+          [
+            -1.772,
             53.785
           ]
         ]

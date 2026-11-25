@@ -68,6 +68,28 @@ describe("guessActivityLabel", () => {
     });
     expect(JSON.stringify(guess)).not.toMatch(/-?\d+\.\d+/);
   });
+
+  it("uses IANA timezone when classifying local morning and evening stops", () => {
+    // 22:30 UTC is 07:30 next morning in Tokyo
+    expect(
+      guessActivityLabel({
+        semanticType: "Unknown",
+        durationMinutes: 30,
+        start: "2024-06-01T22:30:00Z",
+        timezone: "Asia/Tokyo",
+      }),
+    ).toEqual({ id: "morning", label: "Morning stop" });
+
+    // Invalid timezone falls back safely to UTC without throwing
+    expect(
+      guessActivityLabel({
+        semanticType: "Unknown",
+        durationMinutes: 30,
+        start: "2024-06-01T07:30:00Z",
+        timezone: "Not/AZone",
+      }),
+    ).toEqual({ id: "morning", label: "Morning stop" });
+  });
 });
 
 describe("computeActivityGuesses", () => {
@@ -101,7 +123,9 @@ describe("computeBadges", () => {
     expect(summary.daysWithData).toBe(3);
     expect(summary.coveragePercent).toBe(75);
     expect(summary.badges.find((b) => b.id === "first_import")?.earned).toBe(true);
-    expect(summary.badges.find((b) => b.id === "walker")?.earned).toBe(true);
+    const walker = summary.badges.find((b) => b.id === "walker");
+    expect(walker?.earned).toBe(true);
+    expect(walker?.detail).toBe("At least 50 mi (80 km) recorded as walking");
     expect(summary.visitCount).toBe(3);
   });
 });

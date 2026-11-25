@@ -5,6 +5,7 @@ import { RoutingError } from "../types.js";
 const AUTOCOMPLETE_URL = "https://places.googleapis.com/v1/places:autocomplete";
 const GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 const ROADS_URL = "https://roads.googleapis.com/v1/snapToRoads";
+const TIMEOUT_MS = 8_000;
 const UK_RECT = {
   low: { latitude: 49.8, longitude: -8.2 },
   high: { latitude: 58.7, longitude: 1.8 },
@@ -49,6 +50,7 @@ export class GoogleGeocoder implements Geocoder {
           "suggestions.placePrediction.placeId,suggestions.placePrediction.text.text",
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (res.status === 401 || res.status === 403) throw new RoutingError("auth", "Google places auth failed");
     if (res.status === 429) throw new RoutingError("quota", "Google places quota exceeded");
@@ -74,6 +76,7 @@ export class GoogleGeocoder implements Geocoder {
         "X-Goog-Api-Key": this.apiKey,
         "X-Goog-FieldMask": "id,formattedAddress,location",
       },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (res.status === 401 || res.status === 403) throw new RoutingError("auth", "Google places auth failed");
     if (res.status === 429) throw new RoutingError("quota", "Google places quota exceeded");
@@ -111,7 +114,9 @@ export class GoogleGeocoder implements Geocoder {
     url.searchParams.set("region", "gb");
     url.searchParams.set("key", this.apiKey);
     if (resultType) url.searchParams.set("result_type", resultType);
-    const res = await this.fetchImpl(url.toString());
+    const res = await this.fetchImpl(url.toString(), {
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
     if (res.status === 401 || res.status === 403) throw new RoutingError("auth", "Google geocode auth failed");
     if (res.status === 429) throw new RoutingError("quota", "Google geocode quota exceeded");
     if (!res.ok) throw new RoutingError("upstream", `Google geocode ${res.status}`);
@@ -136,7 +141,9 @@ export class GoogleGeocoder implements Geocoder {
     url.searchParams.set("path", `${lat},${lng}`);
     url.searchParams.set("interpolate", "false");
     url.searchParams.set("key", this.apiKey);
-    const res = await this.fetchImpl(url.toString());
+    const res = await this.fetchImpl(url.toString(), {
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
     if (!res.ok) return { lat, lng };
     const json = (await res.json()) as {
       snappedPoints?: Array<{ location?: { latitude?: number; longitude?: number } }>;

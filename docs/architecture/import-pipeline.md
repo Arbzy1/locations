@@ -36,12 +36,12 @@ Road lines also use the fixes: GPS spikes are dropped before map matching (`clea
 
 ## Upload import (removed)
 
-The older path uploaded the file to R2 and parsed it in the Worker through a queue (`POST /api/import/preview`, `POST /api/import`). It could not fit the free plan's CPU limit and the website stopped calling it, so the routes and the job runner were removed. The CLI (`db:import`) still parses files directly. `wrangler.toml` still binds the import queues; the Worker's queue handler only acknowledges messages until those bindings are removed.
+The older path uploaded the file to R2 and parsed it in the Worker through a queue (`POST /api/import/preview`, `POST /api/import`). It could not fit the free plan's CPU limit and the website stopped calling it, so the routes and the job runner were removed. The CLI (`db:import`) still parses files directly. When `IMPORT_QUEUE` is bound in `wrangler.toml`, it now processes background GDPR export-pack jobs (`export_pack`) rather than upload imports.
 
 The UI polls `GET /api/import/status` (includes `chosenFile` and `timezoneWarning`).
 
 Progress fields: `status`, `parsedCount`, `visitCount`, `activityCount`, `chosenFile`, `error`.
 
-`POST /api/routes/rewarm` warms up to 100 uncached walking/driving journeys for the session tenant. `GET /api/route-progress` counts cache hits for that tenant's activities only.
+`POST /api/routes/rewarm` warms up to 8 uncached walking/driving journeys per call for the session tenant outside the RLS transaction. `GET /api/route-progress` counts cache hits for that tenant's activities only.
 
-`DELETE /api/days?from=&to=&sourceId=` deletes visits and activities in the inclusive date window, then rebuilds aggregates. Demo 403. Unknown `sourceId` is 404.
+`DELETE /api/days?from=&to=&sourceId=` deletes visits and activities in the inclusive date window, then marks aggregates stale. Demo 403. Unknown `sourceId` is 404.

@@ -419,3 +419,16 @@ export interface HotspotDaysResponse {
   truncated: boolean;
   days: HotspotDay[];
 }
+
+export interface PublicPricingInfo {
+  monthlyLabel?: string;
+  yearlyLabel?: string;
+  trialDays?: number;
+}
+
+export interface EntitlementSummary {
+  entitled: boolean;
+  status: string;
+  graceUntil: string | null;
+  readOnlyGrace?: boolean;
+}

@@ -11,6 +11,7 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useUnits } from '../../lib/units';
 import { isTypingTarget } from '../../lib/nav/command-query';
 import { formatMilesOrKm } from '../../utils/format';
+import { localTodayIso } from '../../lib/explorer/year-review';
 import { MODE_COLORS, MODE_LABELS, type DaySummary, type MapFocusTarget } from '../../types';
 import { cn } from '../../lib/utils';
 
@@ -51,7 +52,7 @@ export default function RoutesView() {
   const { data: dayData } = useDays();
   const days = dayData ?? NO_DAYS;
   const { data: sources } = useSources();
-  const { unit } = useUnits();
+  const { unit, timezone } = useUnits();
   const { isDesktop } = useBreakpoint();
   const [hiddenModes, setHiddenModes] = useState<string[]>([]);
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
@@ -61,7 +62,7 @@ export default function RoutesView() {
   const [focusTarget, setFocusTarget] = useState<MapFocusTarget | null>(null);
   const stripRef = useRef<HTMLDivElement>(null);
 
-  const latest = days[days.length - 1]?.date ?? format(new Date(), 'yyyy-MM-dd');
+  const latest = days[days.length - 1]?.date ?? localTodayIso(timezone);
   const period: Period = (['day', 'month', 'year', 'range'] as const).find((p) => p === sp.get('period')) ?? 'month';
   const { from, to } = windowFor(period, sp, latest);
   const { data, isFetching, isError } = useRouteLines({

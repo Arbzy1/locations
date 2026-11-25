@@ -13,6 +13,11 @@
       "grid": 15.909090909090908,
       "low": 14.795454545454545,
       "high": 17.022727272727273
+    },
+    "arrivalStateOfCharge": {
+      "percent": 0,
+      "verdict": "insufficient",
+      "shortfallKwh": 1.4000000000000001
     }
   },
   "cost": {
@@ -29,7 +34,7 @@
     }
   },
   "charges": [],
-  "co2Kg": 3.325204363636364,
+  "co2Kg": 3.611568,
   "consumption": {
     "value": 3.2,
     "unit": "l/100km",

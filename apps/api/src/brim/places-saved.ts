@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { Context } from 'hono';
 import type { SavedPlaceRow } from './db/rows';
 import { deletePlace, getPlace, listPlaces, savePlace } from './db/repo';
-import { createDb, brimTenant, type BrimContext } from "./context";
+import { brimTenant, requestBrimDb, type BrimContext } from "./context";
 
 const FAVOURITE_CAP = 20;
 
@@ -25,7 +25,7 @@ function publicPlace(row: SavedPlaceRow) {
 
 export async function listPlacesHandler(c: BrimContext) {
   const tenant = brimTenant(c);
-  const places = await listPlaces(createDb(c.env), tenant);
+  const places = await listPlaces(requestBrimDb(c), tenant);
   return c.json({ places: places.map(publicPlace) });
 }
 
@@ -33,7 +33,7 @@ export async function createPlaceHandler(c: BrimContext) {
   const tenant = brimTenant(c);
   const parsed = placeBody.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_request' }, 400);
-  const db = createDb(c.env);
+  const db = requestBrimDb(c);
   const existing = await listPlaces(db, tenant);
   if (parsed.data.kind === 'favourite') {
     const favs = existing.filter((p) => p.kind === 'favourite');
@@ -57,7 +57,7 @@ export async function createPlaceHandler(c: BrimContext) {
 
 export async function patchPlaceHandler(c: BrimContext) {
   const tenant = brimTenant(c);
-  const db = createDb(c.env);
+  const db = requestBrimDb(c);
   const existing = await getPlace(db, tenant, c.req.param('id') ?? '');
   if (!existing) return c.json({ error: 'not_found' }, 404);
   const parsed = placeBody.partial().safeParse(await c.req.json());
@@ -72,7 +72,7 @@ export async function patchPlaceHandler(c: BrimContext) {
 
 export async function deletePlaceHandler(c: BrimContext) {
   const tenant = brimTenant(c);
-  if (!(await deletePlace(createDb(c.env), tenant, c.req.param('id') ?? ''))) {
+  if (!(await deletePlace(requestBrimDb(c), tenant, c.req.param('id') ?? ''))) {
     return c.json({ error: 'not_found' }, 404);
   }
   return c.json({ ok: true });

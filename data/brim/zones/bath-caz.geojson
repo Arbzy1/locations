@@ -10,15 +10,12 @@
     "is_restriction": false,
     "applies_hours_json": {
       "timezone": "Europe/London",
-      "always": true,
-      "exemptDates": [
-        "12-25"
-      ]
+      "always": true
     },
     "source_url": "https://beta.bathnes.gov.uk/clean-air-zone",
-    "verified_on": "2026-08-16",
+    "verified_on": "2026-11-24",
     "operator_url": "https://beta.bathnes.gov.uk/check-if-you-need-pay-clean-air-zone-charge",
-    "dataset_version": "2026-08-16"
+    "dataset_version": "2026-11-24"
   },
   "geometry": {
     "type": "MultiPolygon",
@@ -26,23 +23,31 @@
       [
         [
           [
-            -2.375,
+            -2.374,
+            51.376
+          ],
+          [
+            -2.352,
             51.376
           ],
           [
             -2.348,
-            51.376
+            51.385
           ],
           [
-            -2.348,
+            -2.354,
+            51.391
+          ],
+          [
+            -2.371,
             51.39
           ],
           [
-            -2.375,
-            51.39
+            -2.377,
+            51.383
           ],
           [
-            -2.375,
+            -2.374,
             51.376
           ]
         ]

@@ -7,6 +7,8 @@ import {
   tenantForUser,
   withTenant,
   isEntitled,
+  isReadOnlyGrace,
+  subscriptionAllowsImport,
   isStaffRole,
   quotaForEntitled,
   PLAN_QUOTAS,
@@ -15,7 +17,7 @@ import {
 } from "@locations/db";
 import { APP_VERSION } from "./version";
 import { googleAuthEnabled, type Env } from "./env";
-import { createAuth } from "./auth";
+import { createAuth, decodeVerifyTokenPayload } from "./auth";
 import { corsOriginFor } from "./cors";
 import { blockDemo, isDemoBlockedAuthPath } from "./guards";
 import { clientIp, rateLimit } from "./rate-limit";
@@ -38,6 +40,7 @@ import { deleteR2Prefix } from "./r2-prefix";
 import {
   stripeClient,
   priceIdForInterval,
+  hasStripeEvent,
   recordStripeEvent,
   syncSubscriptionFromStripe,
 } from "./billing";
@@ -102,6 +105,8 @@ import { billingEmailKind, sendProductEmail } from "./email";
 import { parsePlaceColor, sanitizePlaceTags } from "./place-labels";
 import { runMonthlyRecaps } from "./monthly-recap";
 import { runRetention } from "./retention";
+import { runHousekeeping } from "./housekeeping";
+import { notifyImportJob } from "./import-notify";
 import { isProbePath, probeNotFound } from "./probe-paths";
 import {
   AGGREGATE_INPUT_PAGE,
@@ -291,6 +296,32 @@ app.all("/api/auth/*", async (c) => {
       /* ignore */
     }
   }
+  if (
+    (res.ok || (res.status >= 300 && res.status < 400)) &&
+    c.req.path.endsWith("/verify-email") &&
+    decodeVerifyTokenPayload(c.req.url)?.requestType === "change-email-verification"
+  ) {
+    try {
+      await auth.api.revokeOtherSessions({ headers: c.req.raw.headers });
+    } catch {
+      /* ignore */
+    }
+  }
+  if (res.ok && c.req.method === "POST" && c.req.path.endsWith("/email-otp/change-email")) {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    const email = session?.user?.email;
+    const role = (session?.user as { role?: string } | undefined)?.role;
+    if (email) {
+      c.executionCtx.waitUntil(
+        sendProductEmail(c.env, { kind: "email_changed", to: email, role }),
+      );
+    }
+    try {
+      await auth.api.revokeOtherSessions({ headers: c.req.raw.headers });
+    } catch {
+      /* ignore */
+    }
+  }
   return res;
 });
 
@@ -431,6 +462,11 @@ app.get("/api/config", async (c) => {
     googleAuth: googleAuthEnabled(c.env),
     globe: flags.globeEnabled,
     billingConfigured: Boolean(c.env.STRIPE_SECRET_KEY),
+    pricing: {
+      monthlyLabel: c.env.PUBLIC_PRICE_MONTHLY_LABEL || "£4 / month",
+      yearlyLabel: c.env.PUBLIC_PRICE_YEARLY_LABEL || "£36 / year",
+      trialDays: Number(c.env.PUBLIC_TRIAL_DAYS || 0) || null,
+    },
     version: APP_VERSION,
     flags: {
       globe: flags.globeEnabled,
@@ -450,11 +486,13 @@ app.get("/api/me", async (c) => {
   ]);
   const entitled =
     isEntitled(sub, { isDemo: user?.role === "demo" }) || isStaffRole(user?.role);
+  const readOnlyGrace = isReadOnlyGrace(sub);
   return c.json({
     user,
     tenant,
     entitlements: {
       entitled,
+      readOnlyGrace,
       status: sub?.status ?? "none",
       graceUntil: sub?.graceUntil ?? null,
     },
@@ -678,9 +716,13 @@ app.get("/api/route-progress", async (c) => {
 app.post("/api/routes/rewarm", async (c) => {
   const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
+  const user = c.get("user")!;
+  const ip = clientIp(c.req.raw.headers);
+  const limited = await rejectIfLimited(c, `rewarm:${user.id}:${ip}`, 20, 60_000);
+  if (limited) return limited;
   const db = requestDb(c);
   const tenant = c.get("tenant");
-  return c.json(await withTenant(db, tenant, (tx) => rewarmRoutes(tx, tenant)));
+  return c.json(await rewarmRoutes(db, tenant));
 });
 
 app.get("/api/place/:placeId", async (c) => {
@@ -805,11 +847,11 @@ app.post("/api/import/start", async (c) => {
 
   const db = requestDb(c);
   const sub = await withTenant(db, tenant, (tx) => getSubscription(tx, tenant));
-  const entitled = isEntitled(sub, { isDemo: false }) || isStaffRole(user.role);
-  if (c.env.STRIPE_SECRET_KEY && !entitled) {
+  const canImport = subscriptionAllowsImport(sub?.status) || isStaffRole(user.role);
+  if (c.env.STRIPE_SECRET_KEY && !canImport) {
     return c.json({ error: "An active subscription is required to import" }, 402);
   }
-  const quota = quotaForEntitled(Boolean(c.env.STRIPE_SECRET_KEY) ? entitled : true);
+  const quota = quotaForEntitled(Boolean(c.env.STRIPE_SECRET_KEY) ? canImport : true);
   if (visitCount + activityCount > quota.maxImportRows) {
     return c.json({ error: `This plan stores up to ${quota.maxImportRows.toLocaleString("en-GB")} stays and journeys per import` }, 413);
   }
@@ -875,7 +917,7 @@ app.post("/api/import/:jobId/finish", async (c) => {
   });
   if (!done) return c.json({ error: "Import not found" }, 404);
   if (typeof done !== "string") return c.json({ error: done.invalid }, 400);
-  c.executionCtx.waitUntil(notifyImportJob(c.env, getDb(c.env), tenant, done).catch(() => undefined));
+  c.executionCtx.waitUntil(notifyImportJob(c.env, tenant, done).catch(() => undefined));
   return c.json({ jobId: done, status: "ready", aggregatesStale: true });
 });
 
@@ -888,6 +930,7 @@ app.post("/api/import/:jobId/cancel", async (c) => {
   const jobId = c.req.param("jobId");
   const cancelled = await withTenant(db, tenant, (tx) => cancelImportJob(tx, tenant, jobId));
   if (!cancelled) return c.json({ error: "Import not found" }, 404);
+  c.executionCtx.waitUntil(notifyImportJob(c.env, tenant, jobId).catch(() => undefined));
   return c.json({ jobId, status: "error" });
 });
 
@@ -1085,6 +1128,10 @@ app.get("/api/insights/range", async (c) => {
 });
 
 app.get("/api/export/:format", async (c) => {
+  const user = c.get("user")!;
+  const ip = clientIp(c.req.raw.headers);
+  const limited = await rejectIfLimited(c, `export-file:${user.id}:${ip}`, 20, 60_000);
+  if (limited) return limited;
   const format = c.req.param("format") as ExportFormat;
   if (!EXPORT_FORMATS.includes(format)) return c.json({ error: "Format must be gpx, geojson or csv" }, 400);
   const db = requestDb(c);
@@ -1340,12 +1387,32 @@ app.patch("/api/account/settings", async (c) => {
     mapBookmarks = sanitizeBookmarks(body.mapBookmarks);
     if (!Array.isArray(mapBookmarks)) return c.json({ error: mapBookmarks.error }, 400);
   }
+  let validatedTimezone: string | null | undefined = undefined;
+  if (body?.timezone !== undefined) {
+    if (body.timezone === null) {
+      validatedTimezone = null;
+    } else if (typeof body.timezone !== "string") {
+      return c.json({ error: "Invalid IANA timezone" }, 400);
+    } else {
+      const trimmed = body.timezone.trim();
+      if (trimmed === "") {
+        validatedTimezone = null;
+      } else {
+        try {
+          new Intl.DateTimeFormat(undefined, { timeZone: trimmed });
+          validatedTimezone = trimmed;
+        } catch {
+          return c.json({ error: "Invalid IANA timezone" }, 400);
+        }
+      }
+    }
+  }
   const db = requestDb(c);
   const tenant = c.get("tenant");
   const settings = await withTenant(db, tenant, (tx) =>
     upsertUserSettings(tx, tenant, {
       distanceUnit: body?.distanceUnit,
-      timezone: body?.timezone,
+      timezone: validatedTimezone,
       monthlyRecapEnabled: body?.monthlyRecapEnabled,
       mapBookmarks: Array.isArray(mapBookmarks) ? mapBookmarks : undefined,
       mapTileDarkUrl: body?.mapTileDarkUrl,
@@ -1372,7 +1439,9 @@ app.patch("/api/account/settings", async (c) => {
 app.get("/api/account/export", async (c) => {
   const db = requestDb(c);
   const tenant = c.get("tenant");
-  const data = await withTenant(db, tenant, (tx) => getAccountExportPayload(tx, tenant));
+  const data = await withTenant(db, tenant, (tx) =>
+    getAccountExportPayload(tx, tenant, { vrmEncryptionKey: c.env.VRM_ENCRYPTION_KEY }),
+  );
   const stamp = new Date().toISOString().slice(0, 10);
   c.header("Content-Disposition", `attachment; filename="locations-export-${stamp}.json"`);
   return c.json({ tenant, exportedAt: new Date().toISOString(), ...data });
@@ -1401,7 +1470,12 @@ app.post("/api/account/export-pack", async (c) => {
   await withTenant(db, tenant, (tx) =>
     createExportJob(tx, { id: jobId, tenant, userId: user.id, r2Key, status: "pending" }),
   );
-  c.executionCtx.waitUntil(runExportPackJob(c.env, { jobId, tenant, userId: user.id, r2Key }));
+  const message = { kind: "export_pack" as const, jobId, tenant, userId: user.id, r2Key };
+  if (c.env.IMPORT_QUEUE) {
+    await c.env.IMPORT_QUEUE.send(message);
+  } else {
+    c.executionCtx.waitUntil(runExportPackJob(c.env, message));
+  }
   return c.json({ jobId, status: "pending" });
 });
 
@@ -1456,6 +1530,9 @@ app.post("/api/account/delete", async (c) => {
   const blocked = blockDemo(c.get("user"));
   if (blocked) return c.json(blocked, 403);
   const user = c.get("user")!;
+  const ip = clientIp(c.req.raw.headers);
+  const limited = await rejectIfLimited(c, `account-delete:${user.id}:${ip}`, 5, 60 * 60_000);
+  if (limited) return limited;
   const tenant = c.get("tenant");
   const db = requestDb(c);
   const prefix = `uploads/${user.id}/`;
@@ -1596,8 +1673,9 @@ app.post("/api/billing/webhook", async (c) => {
     return c.json({ error: "Invalid signature" }, 400);
   }
   const db = requestDb(c);
-  const fresh = await recordStripeEvent(db, event.id, event.type);
-  if (!fresh) return c.json({ received: true, duplicate: true });
+  if (await hasStripeEvent(db, event.id)) {
+    return c.json({ received: true, duplicate: true });
+  }
 
   const obj = event.data.object as {
     customer?: string;
@@ -1612,14 +1690,22 @@ app.post("/api/billing/webhook", async (c) => {
     tenant = sub.metadata?.tenant;
     if (tenant) {
       await withTenant(db, tenant, (tx) => syncSubscriptionFromStripe(tx, c.env, sub, tenant!));
+      const fresh = await recordStripeEvent(db, event.id, event.type);
+      if (!fresh) return c.json({ received: true, duplicate: true });
       await sendBillingNotice(c.env, db, tenant, event.type, sub.status, event.id);
+      return c.json({ received: true });
     }
+    const fresh = await recordStripeEvent(db, event.id, event.type);
+    if (!fresh) return c.json({ received: true, duplicate: true });
     return c.json({ received: true });
   }
   if (event.type.startsWith("customer.subscription") && tenant && obj.id) {
     const sub = await stripe.subscriptions.retrieve(obj.id);
     await withTenant(db, tenant, (tx) => syncSubscriptionFromStripe(tx, c.env, sub, tenant!));
+    const fresh = await recordStripeEvent(db, event.id, event.type);
+    if (!fresh) return c.json({ received: true, duplicate: true });
     await sendBillingNotice(c.env, db, tenant, event.type, sub?.status, event.id);
+    return c.json({ received: true });
   }
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as { subscription?: string; client_reference_id?: string };
@@ -1627,9 +1713,14 @@ app.post("/api/billing/webhook", async (c) => {
     if (tenant && session.subscription) {
       const sub = await stripe.subscriptions.retrieve(String(session.subscription));
       await withTenant(db, tenant, (tx) => syncSubscriptionFromStripe(tx, c.env, sub, tenant!));
+      const fresh = await recordStripeEvent(db, event.id, event.type);
+      if (!fresh) return c.json({ received: true, duplicate: true });
       await sendBillingNotice(c.env, db, tenant, event.type, sub?.status, event.id);
+      return c.json({ received: true });
     }
   }
+  const fresh = await recordStripeEvent(db, event.id, event.type);
+  if (!fresh) return c.json({ received: true, duplicate: true });
   return c.json({ received: true });
 });
 
@@ -1658,36 +1749,6 @@ async function sendBillingNotice(
   });
 }
 
-async function notifyImportJob(
-  env: Env,
-  db: ReturnType<typeof getDb>,
-  tenant: string,
-  jobId: string,
-): Promise<void> {
-  const job = await withTenant(db, tenant, (tx) => getImportJob(tx, jobId, tenant));
-  if (!job || job.notifiedAt) return;
-  if (job.status !== "ready" && job.status !== "error") return;
-  const recipient = await emailForTenant(db, tenant);
-  const kind = job.status === "ready" ? "import_ready" : "import_failed";
-  const result = recipient
-    ? await sendProductEmail(env, {
-        kind,
-        to: recipient.email,
-        role: recipient.role,
-        vars:
-          job.status === "ready"
-            ? { visitCount: job.visitCount ?? 0, activityCount: job.activityCount ?? 0 }
-            : {},
-        idempotencyKey: `import:${jobId}`,
-      })
-    : "skipped";
-  if (result !== "failed") {
-    await withTenant(db, tenant, (tx) =>
-      updateImportJob(tx, jobId, { notifiedAt: new Date() }, tenant),
-    );
-  }
-}
-
 function withAssetSecurityHeaders(
   response: Response,
   env: Env,
@@ -1707,11 +1768,16 @@ function withAssetSecurityHeaders(
   });
 }
 
+export function isDailyTick(controller: Pick<ScheduledController, "cron" | "scheduledTime">): boolean {
+  if (controller.cron !== BRIM_SYNC_CRON) return true;
+  const at = new Date(controller.scheduledTime);
+  return at.getUTCHours() === 8 && at.getUTCMinutes() === 0;
+}
+
 /**
- * The monthly jobs (retention, recap email) run on the 08:00 UTC tick of the 1st.
- * They ride the 20-minute cron because the free plan allows only 5 cron triggers
- * per account, shared with other Workers. Any other cron (the old "0 8 1 * *"
- * trigger, a manual run) still means "run the monthly jobs".
+ * The monthly recap runs on the 08:00 UTC tick of the 1st, before daily retention.
+ * Both ride the 20-minute cron because the free plan allows only 5 cron triggers
+ * per account, shared with other Workers. Any other cron trigger runs both.
  */
 export function isMonthlyTick(controller: Pick<ScheduledController, "cron" | "scheduledTime">): boolean {
   if (controller.cron !== BRIM_SYNC_CRON) return true;
@@ -1729,20 +1795,63 @@ export default {
     const asset = await env.ASSETS.fetch(request);
     return withAssetSecurityHeaders(asset, env, request.url);
   },
-  // The upload import that fed this queue is gone (imports run in the browser). The
-  // consumer stays while wrangler.toml still binds the queue; it only clears messages.
-  async queue(batch: MessageBatch<unknown>): Promise<void> {
-    batch.ackAll();
+  async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
+    for (const msg of batch.messages) {
+      const body = msg.body as {
+        kind?: string;
+        jobId?: string;
+        tenant?: string;
+        userId?: string;
+        r2Key?: string;
+      } | null;
+      if (
+        body?.kind === "export_pack" &&
+        typeof body.jobId === "string" &&
+        typeof body.tenant === "string" &&
+        typeof body.userId === "string" &&
+        typeof body.r2Key === "string"
+      ) {
+        try {
+          await runExportPackJob(env, {
+            kind: "export_pack",
+            jobId: body.jobId,
+            tenant: body.tenant,
+            userId: body.userId,
+            r2Key: body.r2Key,
+          });
+          msg.ack();
+        } catch {
+          msg.retry();
+        }
+      } else {
+        msg.ack();
+      }
+    }
   },
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    const now = controller.scheduledTime ? new Date(controller.scheduledTime) : new Date();
     const jobs: Array<[kind: string, run: () => Promise<unknown>]> = [];
     if (controller.cron === BRIM_SYNC_CRON) {
-      jobs.push(["brim_sync", () => runBrimSync(env, new Date(controller.scheduledTime).toISOString())]);
+      jobs.push(
+        ["brim_sync", () => runBrimSync(env, now.toISOString())],
+        ["housekeeping", () => runHousekeeping(env, now)],
+      );
     }
-    if (isMonthlyTick(controller)) {
-      jobs.push(["retention", () => runRetention(env)], ["monthly_recap", () => runMonthlyRecaps(env)]);
+    if (isDailyTick(controller)) {
+      jobs.push([
+        "daily_maintenance",
+        async () => {
+          if (isMonthlyTick(controller)) {
+            try {
+              await runMonthlyRecaps(env, now);
+            } catch {
+              console.error(JSON.stringify({ kind: "monthly_recap", ok: false }));
+            }
+          }
+          await runRetention(env, now);
+        },
+      ]);
     }
-    // Independent jobs: one failing must not skip the others.
     const results = await Promise.allSettled(jobs.map(([, run]) => run()));
     for (const [i, r] of results.entries()) {
       if (r.status === "rejected") console.error(JSON.stringify({ kind: jobs[i][0], ok: false }));

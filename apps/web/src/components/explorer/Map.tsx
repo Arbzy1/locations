@@ -43,6 +43,7 @@ import { spiderfyOffsets } from '../../lib/map/mapSpiderfy';
 import { lookaroundLinksHtml } from '../../lib/map/mapLinks';
 import type { MapBookmark } from '../../lib/map/mapBookmarks';
 import { MAX_MAP_BOOKMARKS } from '../../lib/map/mapBookmarks';
+import { loadMapPreferences, saveMapPreferences } from '../../lib/map/mapPreferences';
 import MapChrome from './MapChrome';
 import DayModeLegend from './DayModeLegend';
 
@@ -136,12 +137,12 @@ export type HeatmapLayerSpec = {
 
 const HEAT_COLORS: [number, string][] = [
   [0, 'rgba(0,0,0,0)'],
-  [0.1, '#2d4a7c'],
-  [0.28, '#58a6ff'],
-  [0.48, '#3fb950'],
-  [0.68, '#d29922'],
-  [0.88, '#f47067'],
-  [1, '#ffa198'],
+  [0.1, 'rgb(45, 74, 124)'],
+  [0.28, 'rgb(76, 154, 255)'],
+  [0.48, 'rgb(63, 185, 80)'],
+  [0.68, 'rgb(210, 153, 34)'],
+  [0.88, 'rgb(244, 112, 103)'],
+  [1, 'rgb(255, 161, 152)'],
 ];
 
 
@@ -152,12 +153,12 @@ function cssToken(name: string, fallback: string): string {
 
 /** MapLibre paint (and `${hex}22` suffixes) need a literal colour, not `var(--token)`. */
 function literalColor(value: string): string {
-  return resolveCssColor(value, cssToken('--accent', '#58a6ff'));
+  return resolveCssColor(value, cssToken('--accent', 'rgb(76, 154, 255)'));
 }
 
 function heatColorStops(token?: string | null): (number | string)[] {
   if (!token) return HEAT_COLORS.flat();
-  const color = cssToken(`--${token}`, cssToken('--accent', '#58a6ff'));
+  const color = cssToken(`--${token}`, cssToken('--accent', 'rgb(76, 154, 255)'));
   return [0, 'rgba(0,0,0,0)', 0.2, color, 0.55, color, 1, color];
 }
 
@@ -304,18 +305,23 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   const visitPopupById = useRef(new Map<string, string>());
   const overlayReady = useRef(false);
   const { theme, mood } = useTheme();
-  const { unit, mapBookmarks, mapTileDarkUrl, mapTileLightUrl } = useUnits();
+  const { unit, timezone, mapBookmarks, mapTileDarkUrl, mapTileLightUrl } = useUnits();
   const queryClient = useQueryClient();
   const { isDesktop } = useBreakpoint();
   const { data: session } = useSession();
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
   const { data: mapConfig } = usePublicConfig();
 
-  const [basemap, setBasemap] = useState<BasemapId>('auto');
-  const [buildings3d, setBuildings3d] = useState(false);
-  const [heatmapOn, setHeatmapOn] = useState(true);
-  const [opacityPct, setOpacityPct] = useState(72);
-  const [intensityPct, setIntensityPct] = useState(100);
+  const initialPrefs = useMemo(() => loadMapPreferences(), []);
+  const [basemap, setBasemap] = useState<BasemapId>(initialPrefs.basemap);
+  const [buildings3d, setBuildings3d] = useState(initialPrefs.buildings3d);
+  const [heatmapOn, setHeatmapOn] = useState(initialPrefs.heatmapOn);
+  const [opacityPct, setOpacityPct] = useState(initialPrefs.opacityPct);
+  const [intensityPct, setIntensityPct] = useState(initialPrefs.intensityPct);
+
+  useEffect(() => {
+    saveMapPreferences({ basemap, buildings3d, heatmapOn, opacityPct, intensityPct });
+  }, [basemap, buildings3d, heatmapOn, opacityPct, intensityPct]);
   const [measuring, setMeasuring] = useState(false);
   const [measurePts, setMeasurePts] = useState<{ lat: number; lon: number }[]>([]);
   const [bookmarkOpen, setBookmarkOpen] = useState(false);
@@ -500,9 +506,9 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   /** Area pins, corridors and gap connectors. */
   const syncAreas = useCallback(
     (map: MLMap) => {
-      const accent = cssToken('--accent', '#58a6ff');
-      const onAccent = cssToken('--on-accent', '#fff');
-      const muted = cssToken('--text-muted', '#8b949e');
+      const accent = cssToken('--accent', 'rgb(76, 154, 255)');
+      const onAccent = cssToken('--on-accent', 'rgb(255, 255, 255)');
+      const muted = cssToken('--text-muted', 'rgb(139, 148, 158)');
       upsertSource(map, 'loc-areas', {
         type: 'FeatureCollection',
         features: areaMarkers.map((m, i) => ({
@@ -555,7 +561,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           return {
             type: 'Feature' as const,
             id: i,
-            properties: { html: connectorPopupHtml(c, unit) },
+            properties: { html: connectorPopupHtml(c, unit, timezone) },
             geometry: { type: 'LineString' as const, coordinates: lineCoords(positions) },
           };
         }),
@@ -573,13 +579,13 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [areaMarkers, corridorLines, connectors, unit, theme, mood],
+    [areaMarkers, corridorLines, connectors, unit, timezone, theme, mood],
   );
 
   /** Journey lines, or raw GPS fixes in Points mode. */
   const syncActivities = useCallback(
     (map: MLMap) => {
-      const surface = cssToken('--surface', '#161b22');
+      const surface = cssToken('--surface', 'rgb(22, 27, 34)');
       const colorForActivity = (a: Activity, i: number) =>
         literalColor(journeyColor(a, i, totalJourneys, coloring, sourceColors));
       // One journey in focus: it stays bright and a little thicker, the rest fade back.
@@ -596,7 +602,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         const positions = drawnPositions(a, lineVariant);
         if (!positions) return [];
         const color = colorForActivity(a, i);
-        const html = activityPopupHtml(a, i, totalJourneys, color, unit);
+        const html = activityPopupHtml(a, i, totalJourneys, color, unit, timezone);
         const focusWidth = focusedStart === a.start ? 2 : 0;
         // Walks to and from the platform draw as walking; long gaps in the GPS as a faint dash.
         return journeyPieces(positions, a.gps_fixes, a.mode).map((piece) => {
@@ -652,7 +658,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
             const fixes = a.gps_fixes ?? [];
             return fixes.map(([lat, lon, s], k) => {
               const gapMin = k > 0 ? Math.round((s - fixes[k - 1][2]) / 60) : null;
-              const time = formatTime(new Date(s * 1000).toISOString());
+              const time = formatTime(new Date(s * 1000).toISOString(), timezone);
               return {
                 type: 'Feature' as const,
                 properties: {
@@ -683,13 +689,13 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pointsMode, lineVariant, sortedActivities, sourceColors, totalJourneys, coloring, focusedStart, hiddenDayModes, unit, theme, mood],
+    [pointsMode, lineVariant, sortedActivities, sourceColors, totalJourneys, coloring, focusedStart, hiddenDayModes, unit, timezone, theme, mood],
   );
 
   /** Period route lines, filtered by the hidden modes. */
   const syncPeriod = useCallback(
     (map: MLMap) => {
-      const muted = cssToken('--text-muted', '#8b949e');
+      const muted = cssToken('--text-muted', 'rgb(139, 148, 158)');
       const modeColor: unknown[] = ['match', ['get', 'mode']];
       for (const [mode, hex] of Object.entries(MODE_COLORS)) modeColor.push(mode, literalColor(hex));
       modeColor.push(literalColor(MODE_COLORS.unknown ?? muted));
@@ -698,7 +704,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         features: routeLines.map((l, i) => ({
           type: 'Feature' as const,
           id: i,
-          properties: { mode: l.mode, recorded: l.recorded, html: routeLinePopupHtml(l, unit) },
+          properties: { mode: l.mode, recorded: l.recorded, html: routeLinePopupHtml(l, unit, timezone) },
           geometry: { type: 'LineString' as const, coordinates: lineCoords(l.coords) },
         })),
       });
@@ -723,14 +729,14 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [routeLines, hiddenModes, unit, theme, mood],
+    [routeLines, hiddenModes, unit, timezone, theme, mood],
   );
 
   /** Tappable hotspot cells and the selected-hotspot ring. */
   const syncHotspotHit = useCallback(
     (map: MLMap) => {
-      const accent = cssToken('--accent', '#58a6ff');
-      const onAccent = cssToken('--on-accent', '#fff');
+      const accent = cssToken('--accent', 'rgb(76, 154, 255)');
+      const onAccent = cssToken('--on-accent', 'rgb(255, 255, 255)');
       // Tappable hotspot cells once zoomed in (the heatmap itself is not clickable).
       upsertSource(map, 'loc-heat-hit', {
         type: 'FeatureCollection',
@@ -788,12 +794,12 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   /** Visit stops (clustered). */
   const syncVisits = useCallback(
     (map: MLMap) => {
-      const visitColor = cssToken('--visit', '#bc8cff');
-      const onAccent = cssToken('--on-accent', '#fff');
+      const visitColor = cssToken('--visit', 'rgb(188, 140, 255)');
+      const onAccent = cssToken('--on-accent', 'rgb(255, 255, 255)');
       visitPopupById.current.clear();
       const visitFeatures = visits.map((v, i) => {
         const id = `v-${i}`;
-        visitPopupById.current.set(id, visitPopupHtml(v, i, visits.length, dayDate));
+        visitPopupById.current.set(id, visitPopupHtml(v, i, visits.length, dayDate, timezone, unit));
         return {
           type: 'Feature' as const,
           properties: { id, stop: v.stop_number || i + 1 },
@@ -845,14 +851,14 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visits, dayDate, theme, mood],
+    [visits, dayDate, timezone, unit, theme, mood],
   );
 
   /** Measure tool line and points. */
   const syncMeasure = useCallback(
     (map: MLMap) => {
-      const accent = cssToken('--accent', '#58a6ff');
-      const onAccent = cssToken('--on-accent', '#fff');
+      const accent = cssToken('--accent', 'rgb(76, 154, 255)');
+      const onAccent = cssToken('--on-accent', 'rgb(255, 255, 255)');
       const measureFc: FC = {
         type: 'FeatureCollection',
         features:
@@ -901,10 +907,10 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
   /** HTML markers: home/work pins, plus zoom-gated labels, stops and arrows. */
   const syncMarkers = useCallback(
     (map: MLMap) => {
-      const visitColor = cssToken('--visit', '#bc8cff');
-      const onAccent = cssToken('--on-accent', '#fff');
-      const surface = cssToken('--surface', '#161b22');
-      const drive = cssToken('--drive', '#f778ba');
+      const visitColor = cssToken('--visit', 'rgb(188, 140, 255)');
+      const onAccent = cssToken('--on-accent', 'rgb(255, 255, 255)');
+      const surface = cssToken('--surface', 'rgb(22, 27, 34)');
+      const drive = cssToken('--drive', 'rgb(247, 120, 186)');
       const colorForActivity = (a: Activity, i: number) =>
         literalColor(journeyColor(a, i, totalJourneys, coloring, sourceColors));
       const colorForVisit = (v: Visit) =>
@@ -917,17 +923,18 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
 
       homeWorkPins.forEach((p) => {
         const color = p.kind === 'home' ? visitColor : drive;
+        const pinLabel = p.kind === 'home' ? 'Home guess' : 'Work guess';
         const marker = htmlMarker(
-          `<div style="width:16px;height:16px;border-radius:50%;background:${color};border:2px solid ${surface};box-shadow:0 0 0 2px ${color}"></div>`,
+          `<button type="button" title="${pinLabel}" aria-label="${pinLabel}" style="all:unset;cursor:pointer;width:44px;height:44px;display:flex;align-items:center;justify-content:center"><span style="width:16px;height:16px;border-radius:50%;background:${color};border:2px solid ${surface};box-shadow:0 0 0 2px ${color}"></span></button>`,
         );
         marker.setLngLat(toLngLat(p.lat, p.lon));
         marker.getElement().style.pointerEvents = 'auto';
-        marker.getElement().title = p.kind === 'home' ? 'Home guess' : 'Work guess';
+        marker.getElement().title = pinLabel;
         marker.getElement().addEventListener('click', (ev) => {
           ev.stopPropagation();
           showPopup(
             toLngLat(p.lat, p.lon),
-            `<strong>${p.kind === 'home' ? 'Home guess' : 'Work guess'}</strong><br/>${escapeHtml(p.label)}${lookaroundLinksHtml(p.lat, p.lon)}`,
+            `<strong>${pinLabel}</strong><br/>${escapeHtml(p.label)}${lookaroundLinksHtml(p.lat, p.lon)}`,
           );
         });
         marker.addTo(map);
@@ -988,9 +995,9 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           if (!at) return;
           const color = colorForActivity(a, i);
           const dim = focusedStart && focusedStart !== a.start;
-          const label = `Journey ${i + 1}: ${MODE_LABELS[a.mode] || a.mode} at ${formatTime(a.start)}`;
+          const label = `Journey ${i + 1}: ${MODE_LABELS[a.mode] || a.mode} at ${formatTime(a.start, timezone)}`;
           const marker = htmlMarker(
-            `<button type="button" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" style="all:unset;cursor:pointer;display:flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 4px;box-sizing:border-box;border-radius:10px;background:${color};color:${onAccent};font:700 11px/1 system-ui,sans-serif;border:2px solid ${surface};box-shadow:0 1px 4px rgba(0,0,0,.35);opacity:${dim ? 0.35 : 1}">${i + 1}</button>`,
+            `<button type="button" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" style="all:unset;cursor:pointer;display:flex;align-items:center;justify-content:center;min-width:44px;height:44px"><span style="display:flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 4px;box-sizing:border-box;border-radius:10px;background:${color};color:${onAccent};font:700 11px/1 system-ui,sans-serif;border:2px solid ${surface};box-shadow:0 1px 4px rgba(0,0,0,.35);opacity:${dim ? 0.35 : 1}">${i + 1}</span></button>`,
           );
           marker.setLngLat(toLngLat(at[0], at[1]));
           const el = marker.getElement();
@@ -998,7 +1005,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           el.addEventListener('click', (ev) => {
             ev.stopPropagation();
             focusJourneyRef.current(focusedStart === a.start ? null : a.start);
-            showPopup(toLngLat(at[0], at[1]), activityPopupHtml(a, i, totalJourneys, color, unit));
+            showPopup(toLngLat(at[0], at[1]), activityPopupHtml(a, i, totalJourneys, color, unit, timezone));
           });
           marker.addTo(map);
           markersRef.current.push(marker);
@@ -1027,7 +1034,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
           const color = colorForActivity(a, i);
           const mode = MODE_LABELS[a.mode] || a.mode;
           const marker = htmlMarker(
-            `<div style="background:${color}22;border:1px solid ${color}55;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:600;color:${color};white-space:nowrap;text-shadow:0 0 4px rgba(0,0,0,0.9)">${escapeHtml(formatTime(a.start))} ${escapeHtml(mode)}</div>`,
+            `<div style="background:${color}22;border:1px solid ${color}55;border-radius:4px;padding:1px 5px;font-size:9px;font-weight:600;color:${color};white-space:nowrap;text-shadow:0 0 4px rgba(0,0,0,0.9)">${escapeHtml(formatTime(a.start, timezone))} ${escapeHtml(mode)}</div>`,
             'bottom',
           );
           marker.setLngLat(toLngLat(pts[0].lat, pts[0].lon));
@@ -1039,7 +1046,7 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
       markerZoomBand.current = zoomBand(z);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [homeWorkPins, hotspotLabels, visits, pointsMode, lineVariant, compact, sortedActivities, sourceColors, totalJourneys, coloring, focusedStart, hiddenDayModes, unit, showPopup, focusJourneyRef, theme, mood],
+    [homeWorkPins, hotspotLabels, visits, pointsMode, lineVariant, compact, sortedActivities, sourceColors, totalJourneys, coloring, focusedStart, hiddenDayModes, unit, timezone, showPopup, focusJourneyRef, theme, mood],
   );
 
   // Every group at once, in layer order: on load and after a style change, when the
@@ -1224,6 +1231,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
         );
       }
     };
+    const markersList = markersRef.current;
+    const spiderList = spiderMarkersRef.current;
     map.once('load', onReady);
     map.on('style.load', () => {
       overlayReady.current = false;
@@ -1232,8 +1241,8 @@ const MapView = forwardRef<MapHandle, MapProps>(function MapView(
     });
     return () => {
       popupRef.current?.remove();
-      clearMarkers(markersRef.current);
-      clearMarkers(spiderMarkersRef.current);
+      clearMarkers(markersList);
+      clearMarkers(spiderList);
       playheadMarkerRef.current?.remove();
       map.remove();
       mapRef.current = null;

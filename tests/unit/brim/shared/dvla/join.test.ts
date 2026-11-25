@@ -21,11 +21,18 @@ function vesFromFixture(plate: string) {
 }
 
 describe("normaliseVrm", () => {
-  it("accepts the current UK format and rejects the rest", () => {
+  it("accepts valid UK VRM formats and rejects invalid strings", () => {
     expect(normaliseVrm("ab12 cde")).toBe("AB12CDE");
     expect(normaliseVrm("AB12CDE")).toBe("AB12CDE");
+    expect(normaliseVrm("A1 BCD")).toBe("A1BCD");
+    expect(normaliseVrm("A123 BCD")).toBe("A123BCD");
+    expect(normaliseVrm("ABC 123D")).toBe("ABC123D");
+    expect(normaliseVrm("AZ 1234")).toBe("AZ1234");
+    expect(normaliseVrm("1 A")).toBe("1A");
     expect(normaliseVrm("NOPE")).toBeUndefined();
-    expect(normaliseVrm("A1BCD")).toBeUndefined();
+    expect(normaliseVrm("A1B2C3D")).toBeUndefined();
+    expect(normaliseVrm("12345")).toBeUndefined();
+    expect(normaliseVrm("AB1234567")).toBeUndefined();
   });
 });
 

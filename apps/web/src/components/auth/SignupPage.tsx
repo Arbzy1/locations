@@ -23,10 +23,44 @@ export default function SignupPage() {
   const [otp, setOtp] = useState('');
   const [otpError, setOtpError] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMessage, setResendMessage] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   useEffect(() => {
     document.title = 'Create account · Locations';
   }, []);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = window.setInterval(() => {
+      setResendCooldown((c) => (c > 1 ? c - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [resendCooldown]);
+
+  const resendOtp = async () => {
+    if (!email) return;
+    setOtpError('');
+    setResendMessage('');
+    setResendLoading(true);
+    try {
+      const result = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: 'email-verification',
+      });
+      if (result.error) {
+        setOtpError(result.error.message || 'Could not send another code.');
+        return;
+      }
+      setResendMessage('Sent a new 6-digit code. Check your inbox and spam folder.');
+      setResendCooldown(30);
+    } catch {
+      setOtpError('Unable to send another code.');
+    } finally {
+      setResendLoading(false);
+    }
+  };
 
   const verifyOtp = async () => {
     setOtpError('');
@@ -109,6 +143,7 @@ export default function SignupPage() {
             />
           </EjectField>
           {otpError ? <p className="text-sm text-train">{otpError}</p> : null}
+          {resendMessage ? <p className="text-xs text-walk">{resendMessage}</p> : null}
           <Button
             type="button"
             className="w-full"
@@ -117,6 +152,20 @@ export default function SignupPage() {
             onClick={() => void verifyOtp()}
           >
             {otpLoading ? 'Verifying…' : 'Verify code'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            title="Send another six-digit verification code"
+            disabled={resendLoading || otpLoading || resendCooldown > 0}
+            onClick={() => void resendOtp()}
+          >
+            {resendLoading
+              ? 'Sending…'
+              : resendCooldown > 0
+                ? `Send code again (${resendCooldown}s)`
+                : 'Send code again'}
           </Button>
         </div>
       ) : (

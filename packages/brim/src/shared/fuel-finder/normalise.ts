@@ -215,11 +215,16 @@ export function normaliseFuelFinder(input: {
 
   const { stations, aliases, skipped: dupes } = dedupeStations(stationRows);
   skipped.push(...dupes);
-  const prices: NormalisedPrice[] = [];
+  const priceByKey = new Map<string, NormalisedPrice>();
   for (const price of priceRows) {
     const stationId = aliases.get(price.stationId) ?? price.stationId;
-    prices.push({ ...price, stationId });
+    const key = `${stationId}|${price.grade}`;
+    const next: NormalisedPrice = { ...price, stationId };
+    const prev = priceByKey.get(key);
+    if (!prev || Date.parse(next.observedAt) >= Date.parse(prev.observedAt)) {
+      priceByKey.set(key, next);
+    }
   }
 
-  return { stations, prices, skipped };
+  return { stations, prices: [...priceByKey.values()], skipped };
 }

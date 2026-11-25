@@ -16,6 +16,9 @@ import { Link } from 'react-router-dom';
 import { MODE_COLORS, MODE_LABELS } from '../../types';
 import type { DaySummary } from '../../types';
 import { Button } from '../ui/button';
+import { useUnits } from '../../lib/units';
+import { formatMilesOrKm } from '../../utils/format';
+import { localTodayIso } from '../../lib/explorer/year-review';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
@@ -40,6 +43,7 @@ function topModes(modes: Record<string, number>, limit = 3): string[] {
 }
 
 export default function DayCalendar({ days, selectedDate, onSelectDate }: Props) {
+  const { unit, timezone } = useUnits();
   const byDate = useMemo(() => {
     const map = new Map<string, DaySummary>();
     for (const d of days) map.set(d.date, d);
@@ -67,9 +71,7 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
   useEffect(() => {
     if (!selectedDate) return;
     const sel = parseISO(selectedDate);
-    if (!isSameMonth(sel, viewMonth)) {
-      setViewMonth(startOfMonth(sel));
-    }
+    setViewMonth((prev) => (isSameMonth(sel, prev) ? prev : startOfMonth(sel)));
   }, [selectedDate]);
 
   const gridDays = useMemo(() => {
@@ -97,7 +99,8 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
     ? addMonths(viewMonth, 1) <= startOfMonth(dataRange.max)
     : false;
 
-  const todayKey = format(new Date(), 'yyyy-MM-dd');
+  const todayKey = localTodayIso(timezone);
+  const selectedSummary = selectedDate ? byDate.get(selectedDate) : undefined;
 
   /** Months with data, for the year/month jump menus. */
   const monthsWithData = useMemo(() => new Set(days.map((d) => d.date.slice(0, 7))), [days]);
@@ -113,7 +116,7 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
     setViewMonth(startOfMonth(parseISO(`${target}-01`)));
   };
   const selectClass =
-    'h-9 min-w-0 flex-1 rounded border border-border bg-bg px-2 text-sm text-text transition-colors duration-ui-fast ease-ui hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40';
+    'h-11 min-w-0 flex-1 rounded border border-border bg-bg px-2 text-sm text-text transition-colors duration-ui-fast ease-ui hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40';
 
   return (
     <div className="mt-3">
@@ -207,7 +210,7 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
               onClick={() => hasData && onSelectDate(key)}
               title={
                 summary
-                  ? `${key} · ${summary.total_distance_miles.toFixed(1)} mi · ${summary.visit_count} visits · ${summary.activity_count} journeys`
+                  ? `${key} · ${formatMilesOrKm(summary.total_distance_miles, unit)} · ${summary.visit_count} visits · ${summary.activity_count} journeys`
                   : key
               }
               className={[
@@ -250,6 +253,17 @@ export default function DayCalendar({ days, selectedDate, onSelectDate }: Props)
           );
         })}
       </div>
+
+      {selectedSummary && (
+        <div className="mt-2 rounded-md border border-border bg-bg/70 px-2.5 py-1.5 text-xs text-text">
+          <span className="font-mono font-medium">{selectedSummary.date}</span>
+          <span className="text-text-muted">
+            {' '}· {formatMilesOrKm(selectedSummary.total_distance_miles, unit)} · {selectedSummary.visit_count}{' '}
+            {selectedSummary.visit_count === 1 ? 'visit' : 'visits'} · {selectedSummary.activity_count}{' '}
+            {selectedSummary.activity_count === 1 ? 'journey' : 'journeys'}
+          </span>
+        </div>
+      )}
 
       <div className="mt-2 space-y-1.5 text-[11px] text-text-muted">
         <div className="flex items-center gap-2">

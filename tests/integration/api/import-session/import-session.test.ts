@@ -22,6 +22,8 @@ vi.mock("@locations/api/import-session", async () => {
 });
 
 import { app } from "@locations/api/index";
+import { getSubscription } from "@locations/api/services";
+import { resetRateLimits } from "@locations/api/rate-limit";
 import {
   appendImportRows,
   cancelImportJob,
@@ -61,7 +63,9 @@ const stay = {
 const start = { visitCount: 1, activityCount: 0, parsedCount: 1 };
 
 beforeEach(() => {
+  resetRateLimits();
   getSession.mockReset();
+  vi.mocked(getSubscription).mockReset().mockResolvedValue(null);
   vi.mocked(startImportJob).mockReset();
   vi.mocked(openImportJob).mockReset().mockResolvedValue(null);
   vi.mocked(appendImportRows).mockClear();
@@ -193,6 +197,48 @@ describe("browser import routes", () => {
       visitCount: 3,
       dates: ["2024-06-01"],
     });
+  });
+
+  it("blocks new imports during past_due read-only grace when Stripe is configured, while allowing active and staff", async () => {
+    const billedEnv = testEnv({ STRIPE_SECRET_KEY: "sk_test" });
+    const postBilled = (body: unknown) =>
+      requestApp(
+        app,
+        "/api/import/start",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+        billedEnv,
+      );
+
+    getSession.mockResolvedValue(sessionUser({ id: "user-a", emailVerified: true }));
+    vi.mocked(getSubscription).mockResolvedValue({
+      tenant: "user-a",
+      status: "past_due",
+      graceUntil: new Date(Date.now() + 48 * 60 * 60_000),
+    } as never);
+    const graceBlocked = await postBilled(start);
+    expect(graceBlocked.status).toBe(402);
+    expect(startImportJob).not.toHaveBeenCalled();
+
+    vi.mocked(getSubscription).mockResolvedValue({
+      tenant: "user-a",
+      status: "active",
+      graceUntil: null,
+    } as never);
+    vi.mocked(startImportJob).mockResolvedValue({
+      status: 200,
+      jobId: "job-active",
+      sourceId: "src-1",
+      label: "Google account 1",
+    });
+    expect((await postBilled(start)).status).toBe(200);
+
+    getSession.mockResolvedValue(sessionUser({ id: "staff-1", role: "admin", emailVerified: true }));
+    vi.mocked(getSubscription).mockResolvedValue(null);
+    expect((await postBilled(start)).status).toBe(200);
   });
 });
 

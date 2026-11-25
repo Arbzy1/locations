@@ -1,0 +1,52 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "mersey-tunnels",
+    "name": "Mersey Tunnels (Queensway and Kingsway)",
+    "authority": "Liverpool City Region Combined Authority",
+    "kind": "toll",
+    "charge_pence_by_class": {
+      "car": 210,
+      "van": 420,
+      "motorcycle": 0
+    },
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true
+    },
+    "source_url": "https://www.merseytunnels.co.uk/tolls-and-fees/",
+    "verified_on": "2026-11-24",
+    "operator_url": "https://www.merseytunnels.co.uk/",
+    "dataset_version": "2026-11-24"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -3.018,
+            53.388
+          ],
+          [
+            -2.992,
+            53.388
+          ],
+          [
+            -2.992,
+            53.416
+          ],
+          [
+            -3.018,
+            53.416
+          ],
+          [
+            -3.018,
+            53.388
+          ]
+        ]
+      ]
+    ]
+  }
+}

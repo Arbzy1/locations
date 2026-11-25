@@ -5,8 +5,6 @@ import { Label } from "../ui/label";
 import { api } from "../../lib/brim/api";
 import type { CatalogueVehicle } from "./VehicleCatalogue";
 
-export { euroFromVes } from "../../lib/brim/estimate/vehicle-label";
-
 export type VesSummary = {
   make: string;
   propulsion: CatalogueVehicle["propulsion"];
@@ -90,8 +88,8 @@ export function RegLookup({
           enterKeyHint="go"
           className="tabular-nums font-mono"
         />
-        <Button title={busy ? "Looking up…" : "Lookup"} type="button" variant="outline" disabled={busy || vrm.trim().length < 5} onClick={() => void lookup()}>
-          {busy ? "Looking up…" : "Lookup"}
+        <Button title={busy ? "Looking up..." : "Lookup"} type="button" variant="outline" disabled={busy || vrm.trim().length < 2} onClick={() => void lookup()}>
+          {busy ? "Looking up..." : "Lookup"}
         </Button>
       </div>
       <p className="text-xs text-text-muted">Optional. Make and model still work if you would rather not use a reg.</p>

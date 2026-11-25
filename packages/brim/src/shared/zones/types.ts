@@ -43,6 +43,8 @@ export type ChargeScheme = {
   cazClass?: CazClass;
   chargePence?: number;
   chargePenceByClass?: ChargePenceByClass;
+  offpeakChargePenceByClass?: ChargePenceByClass;
+  peakHours?: ChargeHoursJson;
   isRestriction: boolean;
   appliesHours: ChargeHoursJson;
   sourceUrl: string;
@@ -55,4 +57,8 @@ export type ChargeScheme = {
 export type ChargeHit = {
   scheme: ChargeScheme;
   relation: ChargeRelation;
+  /** Fractional distance [0..1] along the route where the vehicle first enters the scheme. */
+  entryFraction?: number;
+  /** Fractional distance [0..1] along the route where the vehicle last exits the scheme. */
+  exitFraction?: number;
 };

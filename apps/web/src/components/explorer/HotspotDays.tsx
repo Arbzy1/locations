@@ -1,10 +1,23 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { ArrowLeft, ExternalLink, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useHotspotDays } from '../../hooks/useApi';
-import { formatDuration, formatTime } from '../../utils/format';
+import { formatDuration, formatTime, type DistanceUnit } from '../../utils/format';
 import { useUnits } from '../../lib/units';
+
+const RADIUS_OPTIONS_M = [50, 150, 500, 1000] as const;
+
+function formatRadiusOption(radiusM: number, unit: DistanceUnit): string {
+  if (unit === 'km') {
+    return radiusM >= 1000 ? `${radiusM / 1000} km` : `${radiusM} m`;
+  }
+  if (radiusM >= 500) {
+    return `${(radiusM * 0.000621371).toFixed(1)} mi`;
+  }
+  return `${Math.round((radiusM * 1.09361) / 5) * 5} yd`;
+}
 
 interface Props {
   point: { lat: number; lon: number };
@@ -14,24 +27,52 @@ interface Props {
 
 /** Days with a stay at one hotspot, each one tap from Day View (new tab keeps this list). */
 export default function HotspotDays({ point, label, onBack }: Props) {
-  const { data, isLoading, isError } = useHotspotDays(point);
-  const { timezone } = useUnits();
+  const [radiusM, setRadiusM] = useState<number>(150);
+  const { data, isLoading, isError } = useHotspotDays(point, radiusM);
+  const { timezone, unit } = useUnits();
 
   return (
     <div className="ui-enter p-3">
       <div className="mb-3 flex items-start gap-2">
-        <Button variant="ghost" size="icon" title="Back to the hotspot list" aria-label="Back to the hotspot list" onClick={onBack}>
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Back to the hotspot list"
+          aria-label="Back to the hotspot list"
+          onClick={onBack}
+        >
           <ArrowLeft size={16} />
         </Button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-text">{label}</div>
           {data && (
             <div className="text-xs text-text-muted">
               {data.total_days} day{data.total_days === 1 ? '' : 's'} · {formatDuration(data.total_minutes)} in total ·
-              within {data.radius_m} m
+              within {formatRadiusOption(data.radius_m, unit)}
             </div>
           )}
         </div>
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Search radius">
+        <span className="mr-1 text-xs text-text-muted">Radius:</span>
+        {RADIUS_OPTIONS_M.map((r) => {
+          const text = formatRadiusOption(r, unit);
+          const active = radiusM === r;
+          return (
+            <Button
+              key={r}
+              type="button"
+              size="sm"
+              variant={active ? 'default' : 'outline'}
+              aria-pressed={active}
+              title={`Show stays within ${text}`}
+              onClick={() => setRadiusM(r)}
+            >
+              {text}
+            </Button>
+          );
+        })}
       </div>
 
       {isLoading && (
@@ -40,7 +81,7 @@ export default function HotspotDays({ point, label, onBack }: Props) {
         </div>
       )}
       {isError && <p className="p-2 text-sm text-train">Could not load days for this spot.</p>}
-      {data && !data.days.length && <p className="p-2 text-sm text-text-muted">No stays recorded right here.</p>}
+      {data && !data.days.length && <p className="p-2 text-sm text-text-muted">No stays recorded within this radius.</p>}
 
       <ul className="flex flex-col gap-1">
         {data?.days.map((d) => (

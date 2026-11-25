@@ -207,3 +207,27 @@ describe("POST /api/billing/portal", () => {
     });
   });
 });
+
+describe("GET /api/me readOnlyGrace", () => {
+  beforeEach(() => {
+    getSession.mockReset();
+    vi.mocked(getSubscription).mockReset();
+  });
+
+  it("exposes entitled: true and readOnlyGrace: true during past_due grace window", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a", email: "a@example.com" }));
+    vi.mocked(getSubscription).mockResolvedValue({
+      tenant: "user-a",
+      status: "past_due",
+      graceUntil: new Date(Date.now() + 24 * 60 * 60_000),
+    } as never);
+    const res = await request("/api/me");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      entitlements: { entitled: boolean; readOnlyGrace: boolean; status: string };
+    };
+    expect(body.entitlements.entitled).toBe(true);
+    expect(body.entitlements.readOnlyGrace).toBe(true);
+    expect(body.entitlements.status).toBe("past_due");
+  });
+});

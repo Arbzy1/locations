@@ -24,6 +24,11 @@ describe("GET /api/config", () => {
     expect(body.customTiles).toBe(false);
     expect(body.globe).toBe(true);
     expect(body.billingConfigured).toBe(false);
+    expect(body.pricing).toEqual({
+      monthlyLabel: "£4 / month",
+      yearlyLabel: "£36 / year",
+      trialDays: null,
+    });
     expect(body.googleAuth).toBe(false);
     expect(body.flags).toEqual({ globe: true, demoTour: true, landing: true });
     expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
@@ -101,5 +106,35 @@ describe("GET /api/config", () => {
       testEnv({ GOOGLE_CLIENT_ID: "gid.apps.googleusercontent.com" }),
     );
     expect(((await idOnly.json()) as { googleAuth: boolean }).googleAuth).toBe(false);
+  });
+
+  it("exposes custom public pricing labels and trialDays while keeping Stripe price IDs secret", async () => {
+    const res = await requestApp(
+      app,
+      "/api/config",
+      {},
+      testEnv({
+        STRIPE_SECRET_KEY: "sk_live_secret",
+        STRIPE_PRICE_MONTHLY: "price_live_monthly_secret",
+        STRIPE_PRICE_YEARLY: "price_live_yearly_secret",
+        PUBLIC_PRICE_MONTHLY_LABEL: "£5 / month",
+        PUBLIC_PRICE_YEARLY_LABEL: "£45 / year",
+        PUBLIC_TRIAL_DAYS: "14",
+      }),
+    );
+    const body = (await res.json()) as {
+      billingConfigured: boolean;
+      pricing: { monthlyLabel: string; yearlyLabel: string; trialDays: number | null };
+    };
+    expect(body.billingConfigured).toBe(true);
+    expect(body.pricing).toEqual({
+      monthlyLabel: "£5 / month",
+      yearlyLabel: "£45 / year",
+      trialDays: 14,
+    });
+    const raw = JSON.stringify(body);
+    expect(raw).not.toContain("sk_live_secret");
+    expect(raw).not.toContain("price_live_monthly_secret");
+    expect(raw).not.toContain("price_live_yearly_secret");
   });
 });

@@ -31,7 +31,14 @@ import {
   saveDismissedPersonality,
   visiblePersonality,
 } from '../../lib/explorer/personality';
-import { WALK_GOAL_KEY, loadWalkGoal, saveWalkGoal, walkProgress, type WalkGoal } from '../../lib/explorer/walk-goal';
+import {
+  WALK_GOAL_KEY,
+  convertWalkGoalTarget,
+  loadWalkGoal,
+  saveWalkGoal,
+  walkProgress,
+  type WalkGoal,
+} from '../../lib/explorer/walk-goal';
 import { isGridCluster } from '../../lib/explorer/trips';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -61,11 +68,19 @@ export function InsightsStory({
   monthly,
   hiddenKeys,
   chart,
+  pickedA: controlledA,
+  pickedB: controlledB,
+  onPickA,
+  onPickB,
 }: {
   yearly: YearlyStats[] | undefined;
   monthly: MonthlyStats[] | undefined;
   hiddenKeys: Set<string>;
   chart: { muted: string; surface: string; border: string; text: string; accent: string };
+  pickedA?: number | null;
+  pickedB?: number | null;
+  onPickA?: (year: number) => void;
+  onPickB?: (year: number) => void;
 }) {
   const { unit, timezone } = useUnits();
   const { theme, mood } = useTheme();
@@ -75,8 +90,8 @@ export function InsightsStory({
   const { data: hourRaw } = useHourOfWeek();
   const { data: personalityRaw } = usePersonality();
   const streaks = isStreaks(streaksRaw) ? streaksRaw : null;
-  const deltas = Array.isArray(deltasRaw) ? deltasRaw : [];
-  const lapsed = Array.isArray(lapsedRaw) ? lapsedRaw : [];
+  const deltas = useMemo(() => (Array.isArray(deltasRaw) ? deltasRaw : []), [deltasRaw]);
+  const lapsed = useMemo(() => (Array.isArray(lapsedRaw) ? lapsedRaw : []), [lapsedRaw]);
   const hourGrid = Array.isArray(hourRaw) && hourRaw.length === 7 ? hourRaw : null;
   const tags = Array.isArray(personalityRaw) ? personalityRaw : [];
 
@@ -86,22 +101,39 @@ export function InsightsStory({
   const prevDelta = deltas.find((d) => d.month === prevYm);
 
   const years = (yearly ?? []).map((y) => y.year);
-  const [pickedA, setPickedA] = useState<number | null>(null);
-  const [pickedB, setPickedB] = useState<number | null>(null);
+  const [localA, setLocalA] = useState<number | null>(null);
+  const [localB, setLocalB] = useState<number | null>(null);
+  const pickedA = controlledA !== undefined ? controlledA : localA;
+  const pickedB = controlledB !== undefined ? controlledB : localB;
+  const setPickedA = onPickA ?? setLocalA;
+  const setPickedB = onPickB ?? setLocalB;
+
   const yearA = pickedA ?? years[years.length - 1] ?? '';
   const yearB = pickedB ?? years[Math.max(0, years.length - 2)] ?? years[0] ?? '';
 
   const rowA = yearly?.find((y) => y.year === yearA);
   const rowB = yearly?.find((y) => y.year === yearB);
 
+  const hasModeMiles = useMemo(
+    () => Boolean(yearly?.some((y) => y.mode_miles && Object.keys(y.mode_miles).length > 0)),
+    [yearly],
+  );
+
   const areaData = useMemo(() => {
     return (yearly ?? []).map((y) => {
       const row: Record<string, number> = { year: y.year };
-      const source = y.mode_miles && Object.keys(y.mode_miles).length ? y.mode_miles : y.modes;
-      for (const [mode, n] of Object.entries(source)) row[mode] = n;
+      if (hasModeMiles) {
+        const source = y.mode_miles ?? {};
+        for (const [mode, miles] of Object.entries(source)) {
+          row[mode] = unit === 'km' ? Math.round((miles / 0.621371) * 10) / 10 : miles;
+        }
+      } else {
+        for (const [mode, count] of Object.entries(y.modes)) row[mode] = count;
+      }
       return row;
     });
-  }, [yearly]);
+  }, [yearly, hasModeMiles, unit]);
+
   const areaModes = useMemo(() => {
     const set = new Set<string>();
     for (const row of areaData) {
@@ -109,6 +141,31 @@ export function InsightsStory({
     }
     return [...set];
   }, [areaData]);
+
+  const visibleThisNew = useMemo(
+    () =>
+      (thisDelta?.newClusters ?? [])
+        .filter((c) => !hiddenKeys.has(c))
+        .map((c) => thisDelta?.labels?.[c] ?? c)
+        .filter((name) => !isGridCluster(name)),
+    [thisDelta, hiddenKeys],
+  );
+  const visiblePrevNew = useMemo(
+    () =>
+      (prevDelta?.newClusters ?? [])
+        .filter((c) => !hiddenKeys.has(c))
+        .map((c) => prevDelta?.labels?.[c] ?? c)
+        .filter((name) => !isGridCluster(name)),
+    [prevDelta, hiddenKeys],
+  );
+  const visibleLapsed = useMemo(
+    () =>
+      lapsed
+        .filter((p) => !hiddenKeys.has(p.cluster))
+        .map((p) => ({ ...p, display: p.label || p.cluster }))
+        .filter((p) => !isGridCluster(p.display)),
+    [lapsed, hiddenKeys],
+  );
 
   const walkMiles = monthly?.find((m) => m.month === monthYm)?.mode_miles?.walking ?? 0;
   void theme;
@@ -134,33 +191,24 @@ export function InsightsStory({
         <div className="rounded-lg border border-border bg-bg p-4">
           <h3 className="mb-3 text-sm font-semibold text-text-muted">New places this month vs last</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <PlaceDeltaCol
-              title={monthYm}
-              clusters={(thisDelta?.newClusters ?? []).filter((c) => !hiddenKeys.has(c) && !isGridCluster(c))}
-            />
-            <PlaceDeltaCol
-              title={prevYm || 'Previous'}
-              clusters={(prevDelta?.newClusters ?? []).filter((c) => !hiddenKeys.has(c) && !isGridCluster(c))}
-            />
+            <PlaceDeltaCol title={monthYm} clusters={visibleThisNew} />
+            <PlaceDeltaCol title={prevYm || 'Previous'} clusters={visiblePrevNew} />
           </div>
         </div>
       )}
 
-      {lapsed.some((p) => !hiddenKeys.has(p.cluster) && !isGridCluster(p.cluster)) && (
+      {visibleLapsed.length > 0 && (
         <div className="rounded-lg border border-border bg-bg p-4">
           <h3 className="mb-3 text-sm font-semibold text-text-muted">Places you have not been to lately</h3>
           <ul className="space-y-1 text-sm">
-            {lapsed
-              .filter((p) => !hiddenKeys.has(p.cluster) && !isGridCluster(p.cluster))
-              .slice(0, 8)
-              .map((p) => (
-                <li key={p.cluster} className="flex justify-between gap-2">
-                  <span className="truncate">
-                    You have not been to {p.cluster} in {p.years} year{p.years === 1 ? '' : 's'}
-                  </span>
-                  <span className="shrink-0 font-mono text-text-muted">{p.lastDate}</span>
-                </li>
-              ))}
+            {visibleLapsed.slice(0, 8).map((p) => (
+              <li key={p.cluster} className="flex justify-between gap-2">
+                <span className="truncate">
+                  You have not been to {p.display} in {p.years} year{p.years === 1 ? '' : 's'}
+                </span>
+                <span className="shrink-0 font-mono text-text-muted">{p.lastDate}</span>
+              </li>
+            ))}
           </ul>
         </div>
       )}
@@ -205,7 +253,9 @@ export function InsightsStory({
 
       {areaData.length > 0 && areaModes.length > 0 && (
         <div className="rounded-lg border border-border bg-bg p-4">
-          <h3 className="mb-4 text-sm font-semibold text-text-muted">Modes by year</h3>
+          <h3 className="mb-4 text-sm font-semibold text-text-muted">
+            Modes by year ({hasModeMiles ? unit : 'journeys'})
+          </h3>
           <ResponsiveContainer width="100%" height={250}>
             <AreaChart data={areaData}>
               <XAxis dataKey="year" tick={{ fill: chart.muted, fontSize: 11 }} />
@@ -217,6 +267,12 @@ export function InsightsStory({
                   borderRadius: '8px',
                   color: chart.text,
                 }}
+                formatter={(value, name) => [
+                  hasModeMiles
+                    ? `${Number(value ?? 0).toLocaleString()} ${unit}`
+                    : `${Number(value ?? 0).toLocaleString()} journeys`,
+                  String(name),
+                ]}
               />
               {areaModes.map((mode) => (
                 <Area
@@ -278,10 +334,25 @@ function YearCompareCard({ row, unit }: { row?: YearlyStats; unit: DistanceUnit 
 }
 
 function HourHeatmap({ grid, accent }: { grid: number[][]; accent: string }) {
-  const max = Math.max(1, ...grid.flat());
+  const max = useMemo(() => {
+    let m = 1;
+    for (const row of grid) {
+      for (const n of row) if (n > m) m = n;
+    }
+    return m;
+  }, [grid]);
+  const [selected, setSelected] = useState<{ d: number; h: number } | null>(null);
+
   return (
     <div className="rounded-lg border border-border bg-bg p-4">
-      <h3 className="mb-3 text-sm font-semibold text-text-muted">Hour of week</h3>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold text-text-muted">Hour of week</h3>
+        {selected && (
+          <span className="font-mono text-xs text-text-muted">
+            {WEEKDAYS[selected.d]} {String(selected.h).padStart(2, '0')}:00 · {grid[selected.d]?.[selected.h] ?? 0} visits
+          </span>
+        )}
+      </div>
       <div className="overflow-x-auto">
         <div className="grid min-w-[36rem] grid-cols-[2.5rem_repeat(24,minmax(0,1fr))] gap-0.5">
           <div />
@@ -290,14 +361,20 @@ function HourHeatmap({ grid, accent }: { grid: number[][]; accent: string }) {
           ))}
           {grid.map((row, d) => (
             <div key={d} className="contents">
-              <div className="text-[11px] text-text-muted">{WEEKDAYS[d]}</div>
+              <div className="flex items-center text-[11px] text-text-muted">{WEEKDAYS[d]}</div>
               {row.map((n, h) => {
                 const t = n / max;
+                const isSelected = selected?.d === d && selected?.h === h;
                 return (
-                  <div
+                  <button
                     key={`${d}-${h}`}
+                    type="button"
                     title={`${WEEKDAYS[d]} ${h}:00 · ${n} visits`}
-                    className="h-4 rounded-sm"
+                    aria-label={`${WEEKDAYS[d]} ${h}:00, ${n} visits`}
+                    onClick={() => setSelected({ d, h })}
+                    className={`h-5 rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
+                      isSelected ? 'ring-1 ring-accent' : ''
+                    }`}
                     style={{ backgroundColor: accent, opacity: n === 0 ? 0.08 : 0.15 + t * 0.85 }}
                   />
                 );
@@ -378,12 +455,16 @@ function WalkGoalCard({
   const [goal, setGoal] = useState<WalkGoal | null>(() =>
     typeof localStorage === 'undefined' ? null : loadWalkGoal(),
   );
-  const [targetInput, setTargetInput] = useState(goal?.target ? String(goal.target) : '20');
+  const [targetInput, setTargetInput] = useState(() =>
+    goal?.target ? String(convertWalkGoalTarget(goal.target, goal.unit, unit)) : '20',
+  );
   const active: WalkGoal =
     goal && goal.month === monthYm
       ? goal
       : { month: monthYm, target: Number(targetInput) || 20, unit };
-  const progress = walkProgress(unit === 'km' ? walkedMiles / 0.621371 : walkedMiles, active.target);
+  const displayTarget = convertWalkGoalTarget(active.target, active.unit, unit);
+  const walkedInUnit = unit === 'km' ? walkedMiles / 0.621371 : walkedMiles;
+  const progress = walkProgress(walkedInUnit, displayTarget);
 
   return (
     <div className="rounded-lg border border-border bg-bg p-4">
@@ -428,7 +509,7 @@ function WalkGoalCard({
         </Button>
       </div>
       <p className="mb-2 text-sm text-text">
-        {formatMilesOrKm(walkedMiles, unit)} of {active.target} {unit}
+        {formatMilesOrKm(walkedMiles, unit)} of {displayTarget} {unit}
       </p>
       <div className="h-3 overflow-hidden rounded-full bg-surface">
         <div className="h-full rounded-full bg-accent" style={{ width: `${Math.round(progress * 100)}%` }} />

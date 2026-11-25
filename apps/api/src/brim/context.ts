@@ -4,16 +4,36 @@ import type { Env } from "../env";
 import { getDb } from "../services";
 import type { BrimDb } from "./db/types";
 
-type Variables = {
+export type BrimVariables = {
   user: { id: string; email: string; name: string; role: string } | null;
   tenant: string;
   /** Neon pools opened by the request, closed after the response (index.ts). */
   pools: { end: () => Promise<void> }[];
+  /** Shared request-scoped Drizzle handle so multiple calls reuse one Pool. */
+  db?: ReturnType<typeof getDb>;
 };
 
-export type BrimContext = Context<{ Bindings: Env; Variables: Variables }>;
+export type BrimContext = Context<{ Bindings: Env; Variables: BrimVariables }>;
 
-export function createDb(env: Env): BrimDb {
+/**
+ * Request-scoped Brim DB handle. Reuses `c.get("db")` when already opened on this
+ * request and registers any new Neon Pool on `c.get("pools")` so `index.ts` closes
+ * it after the response finishes.
+ */
+export function requestBrimDb(c: BrimContext): BrimDb {
+  const existing = c.get("db");
+  if (existing) return { env: c.env, db: existing };
+  const db = getDb(c.env);
+  const client = (db as { $client?: { end?: () => Promise<void> } } | undefined)?.$client;
+  if (client?.end) {
+    c.get("pools")?.push(client as { end: () => Promise<void> });
+  }
+  c.set("db", db);
+  return { env: c.env, db };
+}
+
+export function createDb(env: Env, c?: BrimContext): BrimDb {
+  if (c) return requestBrimDb(c);
   return { env, db: getDb(env) };
 }
 

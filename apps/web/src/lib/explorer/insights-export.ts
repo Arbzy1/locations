@@ -1,10 +1,14 @@
 import type { FunFact, MonthlyStats, Streaks, YearlyStats } from '../../types';
 import { formatMilesOrKm, type DistanceUnit } from '../../utils/format';
+import { formatFunFact } from './trips';
 
-function csvCell(value: string | number | null | undefined): string {
-  const s = value == null ? '' : String(value);
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
+const FORMULA_PREFIX = /^[=+\-@\t\r]/;
+
+export function csvCell(value: string | number | null | undefined): string {
+  const raw = value == null ? '' : String(value);
+  const safe = FORMULA_PREFIX.test(raw) ? `'${raw}` : raw;
+  if (/[",\n\r]/.test(safe)) return `"${safe.replace(/"/g, '""')}"`;
+  return safe;
 }
 
 export function insightsCsv(
@@ -25,7 +29,8 @@ export function insightsCsv(
     rows.push(['monthly', m.month, formatMilesOrKm(m.distance_miles, unit)]);
   }
   for (const f of facts ?? []) {
-    rows.push(['fact', f.label, f.value]);
+    const formatted = formatFunFact(f, unit);
+    rows.push(['fact', f.label, formatted.value]);
   }
   if (streaks) {
     rows.push(['streaks', 'current', String(streaks.current)]);
@@ -56,7 +61,9 @@ export async function downloadElementPng(elementId: string, filename: string): P
   if (!node) return;
   const { toPng } = await import('html-to-image');
   const bg =
-    getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#0d1117';
+    getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() ||
+    getComputedStyle(document.body).backgroundColor ||
+    'transparent';
   const dataUrl = await toPng(node, { cacheBust: true, pixelRatio: 2, backgroundColor: bg });
   const a = document.createElement('a');
   a.href = dataUrl;

@@ -1,6 +1,7 @@
 import { useEffect, useId, type ReactNode } from 'react';
 import { ChevronUp, X } from 'lucide-react';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { Button } from '../ui/button';
 
 export type MobilePanelHeight = 'peek' | 'half' | 'full';
 
@@ -176,14 +177,15 @@ export function MobilePanelOpenButton({
   if (!isTablet || !visible) return null;
 
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
       title={label}
       aria-label={label}
       onClick={onClick}
-      className="absolute left-3 top-3 z-[1050] flex h-11 items-center gap-2 rounded-lg border border-border bg-surface/95 px-3 text-sm font-medium text-text shadow-lg backdrop-blur-sm transition-colors duration-ui-hover ease-ui hover:bg-bg/80"
+      className="absolute left-14 top-3 z-[1050] h-11 bg-surface/95 px-3 text-sm font-medium text-text shadow-lg backdrop-blur-sm"
     >
       {label}
-    </button>
+    </Button>
   );
 }

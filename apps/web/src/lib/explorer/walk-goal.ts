@@ -31,3 +31,15 @@ export function walkProgress(walked: number, target: number): number {
   if (target <= 0) return 0;
   return Math.min(1, walked / target);
 }
+
+export function convertWalkGoalTarget(
+  target: number,
+  fromUnit: DistanceUnit,
+  toUnit: DistanceUnit,
+): number {
+  if (fromUnit === toUnit) return target;
+  if (fromUnit === 'mi' && toUnit === 'km') {
+    return Math.round((target / 0.621371) * 10) / 10;
+  }
+  return Math.round((target * 0.621371) * 10) / 10;
+}

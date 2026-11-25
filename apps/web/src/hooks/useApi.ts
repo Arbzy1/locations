@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useQuery, useQueryClient, useQueries } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, useQueries } from '@tanstack/react-query';
 import type {
   DayData,
   RouteLinesResponse,
@@ -452,30 +452,38 @@ export function useInvalidateLocationQueries() {
   }, [queryClient, tenantKey]);
 }
 
-export function useClusters(q: string, sort: string) {
+export type ClusterItem = {
+  cluster: string;
+  label: string;
+  visits: number;
+  duration_minutes: number;
+  lat: number;
+  lon: number;
+  first: string;
+  last: string;
+};
+
+export function useClusters(q: string, sort: string, cursor?: string | null) {
   const tenantKey = useTenantKey();
+  const params = new URLSearchParams({
+    q,
+    sort,
+    limit: '80',
+  });
+  if (cursor) params.set('cursor', cursor);
   return useQuery<{
-    clusters: {
-      cluster: string;
-      label: string;
-      visits: number;
-      duration_minutes: number;
-      lat: number;
-      lon: number;
-      first: string;
-      last: string;
-    }[];
+    clusters: ClusterItem[];
     cursor: string | null;
   }>({
-    queryKey: ['clusters', tenantKey, q, sort],
-    queryFn: () =>
-      fetchJson(`/api/clusters?q=${encodeURIComponent(q)}&sort=${encodeURIComponent(sort)}&limit=80`),
+    queryKey: ['clusters', tenantKey, q, sort, cursor ?? ''],
+    queryFn: () => fetchJson(`/api/clusters?${params.toString()}`),
     enabled: tenantKey !== 'anon',
   });
 }
 
-export function useCluster(key: string) {
+export function useCluster(key: string, timezone?: string | null) {
   const tenantKey = useTenantKey();
+  const qs = timezone ? `?tz=${encodeURIComponent(timezone)}` : '';
   return useQuery<{
     cluster: string;
     label: string;
@@ -486,30 +494,42 @@ export function useCluster(key: string) {
     lon: number;
     first: string;
     last: string;
+    timezone?: string;
     hour_histogram: number[];
     corridors: { from: string; to: string; count: number }[];
   }>({
-    queryKey: ['cluster', tenantKey, key],
-    queryFn: () => fetchJson(`/api/clusters/${encodeURIComponent(key)}`),
+    queryKey: ['cluster', tenantKey, key, timezone ?? ''],
+    queryFn: () => fetchJson(`/api/clusters/${encodeURIComponent(key)}${qs}`),
     enabled: tenantKey !== 'anon' && !!key,
   });
 }
 
-export function useClusterVisits(key: string) {
+export type ClusterVisitRow = {
+  date: string;
+  start: string;
+  end: string;
+  duration_minutes: number;
+  semantic_type: string;
+  lat: number;
+  lon: number;
+};
+
+export function useClusterVisits(
+  key: string,
+  opts?: { from?: string; to?: string; cursor?: string | null; limit?: number },
+) {
   const tenantKey = useTenantKey();
+  const params = new URLSearchParams({ limit: String(opts?.limit ?? 40) });
+  if (opts?.from) params.set('from', opts.from);
+  if (opts?.to) params.set('to', opts.to);
+  if (opts?.cursor) params.set('cursor', opts.cursor);
+  const qs = params.toString();
   return useQuery<{
-    visits: {
-      date: string;
-      start: string;
-      end: string;
-      duration_minutes: number;
-      semantic_type: string;
-      lat: number;
-      lon: number;
-    }[];
+    visits: ClusterVisitRow[];
+    cursor: string | null;
   }>({
-    queryKey: ['cluster-visits', tenantKey, key],
-    queryFn: () => fetchJson(`/api/clusters/${encodeURIComponent(key)}/visits?limit=40`),
+    queryKey: ['cluster-visits', tenantKey, key, qs],
+    queryFn: () => fetchJson(`/api/clusters/${encodeURIComponent(key)}/visits?${qs}`),
     enabled: tenantKey !== 'anon' && !!key,
   });
 }
@@ -567,21 +587,140 @@ export function useTripRange(start: string, end: string) {
   });
 }
 
+async function mutateJson<T>(url: string, init: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...init.headers },
+    ...init,
+  });
+  const body = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) {
+    throw new Error(body.error || `Request failed: ${res.status}`);
+  }
+  return body;
+}
+
+export type NamedTripRecord = {
+  id: string;
+  name: string;
+  start: string;
+  end: string;
+  dates: string[];
+};
+
 export function useNamedTrips() {
   const tenantKey = useTenantKey();
-  return useQuery<{ id: string; name: string; start: string; end: string; dates: string[] }[]>({
+  return useQuery<NamedTripRecord[]>({
     queryKey: ['named-trips', tenantKey],
     queryFn: () => fetchJson('/api/trips'),
     enabled: tenantKey !== 'anon',
   });
 }
 
+export function useCreateNamedTrip() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; start: string; end: string; dates?: string[] }) =>
+      mutateJson<NamedTripRecord>('/api/trips', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['named-trips'] });
+    },
+  });
+}
+
+export function useUpdateNamedTrip() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; name: string; start: string; end: string; dates?: string[] }) =>
+      mutateJson<NamedTripRecord>(`/api/trips/${encodeURIComponent(input.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: input.name,
+          start: input.start,
+          end: input.end,
+          dates: input.dates,
+        }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['named-trips'] });
+    },
+  });
+}
+
+export function useDeleteNamedTrip() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      mutateJson<{ ok: boolean }>(`/api/trips/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['named-trips'] });
+    },
+  });
+}
+
+export type ChapterRecord = {
+  id: string;
+  name: string;
+  start: string;
+  end: string;
+};
+
 export function useChapters() {
   const tenantKey = useTenantKey();
-  return useQuery<{ id: string; name: string; start: string; end: string }[]>({
+  return useQuery<ChapterRecord[]>({
     queryKey: ['chapters', tenantKey],
     queryFn: () => fetchJson('/api/chapters'),
     enabled: tenantKey !== 'anon',
+  });
+}
+
+export function useCreateChapter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; start: string; end: string }) =>
+      mutateJson<ChapterRecord>('/api/chapters', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['chapters'] });
+    },
+  });
+}
+
+export function useUpdateChapter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; name: string; start: string; end: string }) =>
+      mutateJson<ChapterRecord>(`/api/chapters/${encodeURIComponent(input.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: input.name,
+          start: input.start,
+          end: input.end,
+        }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['chapters'] });
+    },
+  });
+}
+
+export function useDeleteChapter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      mutateJson<{ ok: boolean }>(`/api/chapters/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['chapters'] });
+    },
   });
 }
 
@@ -673,11 +812,11 @@ export function useStreaks() {
 }
 
 export function usePlaceDeltas() {
-  return useCachedAnalytics<PlaceDeltaMonth[] | []>('place-deltas');
+  return useCachedAnalytics<(PlaceDeltaMonth & { labels?: Record<string, string> })[] | []>('place-deltas');
 }
 
 export function useLapsedPlaces() {
-  return useCachedAnalytics<LapsedPlace[] | []>('lapsed-places');
+  return useCachedAnalytics<(LapsedPlace & { label?: string })[] | []>('lapsed-places');
 }
 
 export function useHourOfWeek() {
@@ -790,9 +929,16 @@ export function useOnThisDay(date: string) {
 }
 
 /** Days with a stay at a hotspot, newest first. */
-export function useHotspotDays(point: { lat: number; lon: number } | null) {
+export function useHotspotDays(point: { lat: number; lon: number } | null, radiusM?: number) {
   const tenantKey = useTenantKey();
-  const qs = point ? new URLSearchParams({ lat: String(point.lat), lon: String(point.lon) }).toString() : '';
+  const params = point
+    ? new URLSearchParams({
+        lat: String(point.lat),
+        lon: String(point.lon),
+        ...(radiusM != null ? { radius_m: String(radiusM) } : {}),
+      })
+    : null;
+  const qs = params ? params.toString() : '';
   return useQuery<HotspotDaysResponse>({
     queryKey: ['hotspot-days', tenantKey, qs],
     queryFn: () => fetchJson(`/api/hotspots/days?${qs}`),

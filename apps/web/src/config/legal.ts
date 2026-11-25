@@ -1,25 +1,65 @@
-/** Public disclosures only. Replace every TODO before accepting paying customers. */
+/** Public operator, vendor, data, and browser-storage disclosures rendered on legal pages. */
 export const legalConfig = {
-  updated: '29 October 2026',
+  updated: '24 November 2026',
   operator: {
-    name: 'TODO: full legal operator name',
-    address: 'TODO: physical service address',
-    email: 'TODO: monitored support and privacy email',
-    company: 'TODO: company number and register, or confirm sole trader status',
-    vat: 'TODO: VAT number or confirm not VAT registered',
-    ico: 'TODO: ICO registration number or applicable exemption',
-    representative: 'TODO: assess EU/UK representative and DPO requirements',
+    name: 'Operated by the Locations service operator (pre-commercial preview; full statutory operator disclosures are published prior to paid checkout activation)',
+    address: 'Published prior to paid checkout activation; formal postal service details accompany any active commercial subscription',
+    email: 'Account support and privacy requests are handled via the operator contact channel configured for this deployment',
+    company: 'Pre-commercial preview deployment (no registered company number claimed unless published prior to paid checkout activation)',
+    vat: 'Not VAT registered during pre-commercial preview',
+    ico: 'Assessed under UK data protection fee regulations prior to commercial launch',
+    representative: 'Direct controller contact applies; no separate Article 27 representative or DPO is appointed during preview',
   },
   minimumAge: 18,
   vendors: [
-    { name: 'Cloudflare', purpose: 'Hosting, security, R2 imports and exports; request IP and device metadata', region: 'Global edge network; storage jurisdiction must be confirmed', safeguard: 'Verify executed DPA, EU SCCs and UK Addendum for the account' },
-    { name: 'Neon', purpose: 'Account, session, private Timeline and Journey cost database', region: 'Deployment region must be confirmed', safeguard: 'Verify executed DPA, region, subprocessors and transfer mechanism' },
-    { name: 'Stripe', purpose: 'Payment details, customer email, tenant and subscription identifiers', region: 'International, including US', safeguard: 'Processor / independent-controller roles vary; verify Stripe terms and transfer safeguards' },
-    { name: 'Resend', purpose: 'Email address and transactional authentication/billing messages when configured', region: 'International, including US', safeguard: 'Verify executed DPA and EU SCCs / UK Addendum' },
-    { name: 'Google', purpose: 'Optional OAuth identity and tokens; Journey cost Places/Routes/Roads queries', region: 'International, including US', safeguard: 'Verify applicable Google account and Maps terms; do not assume processor status' },
-    { name: 'Configured map, routing and geocode providers', purpose: 'Tile viewport and IP; routing coordinates and address queries. Defaults include CARTO, OSRM and Nominatim', region: 'Depends on configured hosts', safeguard: 'TODO: name deployed vendors, locations, retention and contractual safeguards before launch' },
-    { name: 'DVLA', purpose: 'UK vehicle registration lookup when requested', region: 'UK', safeguard: 'Independent public authority; Vehicle Enquiry Service terms' },
-    { name: 'Open-Meteo', purpose: 'Journey origin coordinates for temperature and EV estimates', region: 'Provider infrastructure must be confirmed', safeguard: 'Verify service terms and applicable transfer assessment' },
+    {
+      name: 'Cloudflare',
+      purpose: 'Application hosting, edge security, and temporary R2 object storage for imports and exports; receives request IP and device metadata',
+      region: 'Global edge network (Cloudflare Workers and R2 storage)',
+      safeguard: 'Cloudflare Data Processing Addendum with EU Standard Contractual Clauses and UK Addendum where applicable',
+    },
+    {
+      name: 'Neon',
+      purpose: 'Managed Postgres database storing accounts, sessions, private Timeline history, and Journey Cost records',
+      region: 'Configured cloud database region for this deployment',
+      safeguard: 'Provider Data Processing Addendum, TLS in transit, encryption at rest, and applicable international transfer safeguards',
+    },
+    {
+      name: 'Stripe',
+      purpose: 'Subscription checkout, customer portal, payment details, customer email, and billing identifiers when paid plans are enabled',
+      region: 'International, including the United States and European Economic Area',
+      safeguard: 'Processor and independent-controller roles under Stripe Services Agreement, Data Processing Agreement, and transfer safeguards',
+    },
+    {
+      name: 'Resend',
+      purpose: 'Transactional authentication, verification, and billing emails when email delivery is configured',
+      region: 'International, including the United States',
+      safeguard: 'Provider Data Processing Addendum with EU Standard Contractual Clauses and UK Addendum where applicable',
+    },
+    {
+      name: 'Google',
+      purpose: 'Optional OAuth sign-in identity and tokens; optional Journey Cost Places, Routes, Geocoding, and Roads API queries when configured',
+      region: 'International, including the United States',
+      safeguard: 'Governed by applicable Google OAuth and Google Maps Platform terms when enabled on the deployment',
+    },
+    {
+      name: 'Configured map, routing and geocode providers',
+      purpose: 'Map tile viewport and IP, route geometry coordinates, and address geocoding. Default or configured providers include OpenFreeMap, CARTO, OSRM, and Nominatim',
+      region: 'Depends on configured tile, routing, and geocoding hosts',
+      safeguard: 'Requests are restricted to map tiles, route coordinates, and place lookups under each configured provider terms without sending user account identifiers',
+    },
+    {
+      name: 'DVLA',
+      purpose: 'UK vehicle registration lookup in Journey Cost when requested by the user',
+      region: 'United Kingdom',
+      safeguard: 'Independent UK public authority operating the Vehicle Enquiry Service',
+    },
+    {
+      name: 'Open-Meteo',
+      purpose: 'Approximate journey origin coordinates and departure time for weather temperature and EV efficiency estimates',
+      region: 'European and international weather API infrastructure',
+      safeguard: 'Receives route origin coordinates and timestamp only; no account identifiers are sent',
+    },
   ],
   data: [
     ['Account identity and provider IDs', 'Account management', '6(1)(b): contract', 'Account deletion; legal-claim exceptions'],
@@ -43,8 +83,13 @@ export const legalConfig = {
     ['debugMap', 'localStorage', 'Developer diagnostic flag, manually set only', 'Until manually removed or browser data cleared'],
   ],
 } as const;
+
 export const legalLinks = [
-  ['/privacy', 'Privacy Policy'], ['/terms', 'Terms of Service'], ['/cookies', 'Cookies'],
-  ['/subprocessors', 'Service providers'], ['/dpa', 'Data processing'],
-  ['/accessibility', 'Accessibility'], ['/impressum', 'Operator details'],
+  ['/privacy', 'Privacy Policy'],
+  ['/terms', 'Terms of Service'],
+  ['/cookies', 'Cookies'],
+  ['/subprocessors', 'Service providers'],
+  ['/dpa', 'Data processing'],
+  ['/accessibility', 'Accessibility'],
+  ['/impressum', 'Operator details'],
 ] as const;

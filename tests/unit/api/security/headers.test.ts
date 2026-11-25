@@ -7,6 +7,7 @@ describe("applySecurityHeaders", () => {
     applySecurityHeaders(headers, { isProductionHttps: true, noStore: true });
     expect(headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(headers.get("X-Frame-Options")).toBe("DENY");
+    expect(headers.get("Permissions-Policy")).toContain("geolocation=(self)");
     expect(headers.get("Content-Security-Policy-Report-Only")).toContain("frame-ancestors 'none'");
     expect(headers.get("Strict-Transport-Security")).toContain("max-age=");
     expect(headers.get("Cache-Control")).toBe("no-store, private");

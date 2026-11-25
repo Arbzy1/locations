@@ -83,8 +83,8 @@ describe('charges API', () => {
       encodedPolyline: string;
     };
     expect(json.charges.some((c) => c.id.startsWith('london-ulez') && c.pence === 1250)).toBe(true);
-    expect(json.charges.some((c) => c.id.startsWith('london-cc') && c.pence === 1500)).toBe(true);
-    expect(json.cost.chargesPence).toBe(2750);
+    expect(json.charges.some((c) => c.id.startsWith('london-cc') && c.pence === 1800)).toBe(true);
+    expect(json.cost.chargesPence).toBe(3050);
 
     const forRoute = await app.request(
       '/api/brim/charges/for-route',
@@ -131,5 +131,52 @@ describe('charges API', () => {
     };
     expect(json.charges.some((c) => c.kind === 'restriction' && c.pence === 0)).toBe(true);
     expect(json.warnings.some((w) => w.code === 'restriction')).toBe(true);
+  });
+
+  it('returns simplified GeoJSON geometry on GET /api/brim/zones?geometry=1 and compliance per vehicle', async () => {
+    resetBrimMemory();
+    const res = await app.request('/api/brim/zones?geometry=1', {}, env);
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      zones: Array<{ id: string; geometry?: { type: string; coordinates: unknown[] } }>;
+      tolls: Array<{ id: string; geometry?: { type: string; coordinates: unknown[] } }>;
+    };
+    expect(json.zones).toHaveLength(13);
+    expect(json.tolls).toHaveLength(10);
+    expect(json.zones.every((z) => Boolean(z.geometry?.type))).toBe(true);
+    expect(json.tolls.every((t) => Boolean(t.geometry?.type))).toBe(true);
+
+    const created = await app.request(
+      '/api/brim/vehicles',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nickname: 'Euro 5 Diesel',
+          kind: 'car',
+          propulsion: 'diesel',
+          euroStatus: 'Euro 5',
+          euroStatusSource: 'dvla',
+        }),
+      },
+      env,
+    );
+    expect(created.status).toBe(201);
+    const car = (await created.json()) as { id: string };
+
+    const comp = await app.request(`/api/brim/vehicles/${car.id}/compliance`, {}, env);
+    expect(comp.status).toBe(200);
+    const compBody = (await comp.json()) as {
+      vehicleId: string;
+      zones: Array<{ id: string; verdict: string; caveat?: string }>;
+    };
+    expect(compBody.vehicleId).toBe(car.id);
+    expect(compBody.zones).toHaveLength(13);
+    expect(compBody.zones.find((z) => z.id === 'london-ulez')?.verdict).toBe('charged');
+    expect(compBody.zones.find((z) => z.id === 'london-ulez')?.caveat).toBeUndefined();
+
+    getSession.mockImplementation(async () => sessionUser({ id: 'user-b', email: 'b@example.com' }));
+    const other = await app.request(`/api/brim/vehicles/${car.id}/compliance`, {}, env);
+    expect(other.status).toBe(404);
   });
 });

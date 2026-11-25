@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import { isAdminRole, isStaffRole, withTenant } from "@locations/db";
 import type { Env } from "./env";
-import { getDb, staffTenantStats } from "./services";
+import { closeDb, getDb, staffTenantStats } from "./services";
 import { isOpsFlagKey, listToggleFlags, type OpsFlagKey } from "./ops-flags";
 import { sanitizeJobError } from "./admin-guards";
 import {
@@ -91,13 +91,17 @@ export function registerAdminRoutes(app: AdminApp) {
     const gate = requireStaff(c);
     if ("error" in gate) return gate.error;
     const db = getDb(c.env);
-    const tenant = c.get("tenant");
-    const stats = await withTenant(db, tenant, (tx) => staffTenantStats(tx, tenant));
-    return c.json({
-      ...stats,
-      stuckJobs: (stats.stuckJobs ?? []).map((job) => ({ ...job, error: sanitizeJobError(job.error) })),
-      recentJobs: (stats.recentJobs ?? []).map((job) => ({ ...job, error: sanitizeJobError(job.error) })),
-    });
+    try {
+      const tenant = c.get("tenant");
+      const stats = await withTenant(db, tenant, (tx) => staffTenantStats(tx, tenant));
+      return c.json({
+        ...stats,
+        stuckJobs: (stats.stuckJobs ?? []).map((job) => ({ ...job, error: sanitizeJobError(job.error) })),
+        recentJobs: (stats.recentJobs ?? []).map((job) => ({ ...job, error: sanitizeJobError(job.error) })),
+      });
+    } finally {
+      await closeDb(db);
+    }
   });
 
   app.get("/api/admin/overview", async (c) => {

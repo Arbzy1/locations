@@ -120,7 +120,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     durationSeconds: 4200,
     expected: [
       { schemeId: "london-ulez", pence: 1250 },
-      { schemeId: "london-cc", pence: 1500 },
+      { schemeId: "london-cc", pence: 1800 },
     ],
     expectedWarningCodes: ["unknown-euro"],
   },
@@ -131,7 +131,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: petrolEuro4,
     departsAt: WEEKDAY_AM,
     durationSeconds: 4200,
-    expected: [{ schemeId: "london-cc", pence: 1500 }],
+    expected: [{ schemeId: "london-cc", pence: 1800 }],
   },
   {
     id: "crawley-london-diesel-euro5",
@@ -142,7 +142,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     durationSeconds: 4200,
     expected: [
       { schemeId: "london-ulez", pence: 1250 },
-      { schemeId: "london-cc", pence: 1500 },
+      { schemeId: "london-cc", pence: 1800 },
     ],
   },
   {
@@ -152,7 +152,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: dieselEuro6Dvla,
     departsAt: WEEKDAY_AM,
     durationSeconds: 4200,
-    expected: [{ schemeId: "london-cc", pence: 1500 }],
+    expected: [{ schemeId: "london-cc", pence: 1800 }],
   },
   {
     id: "crawley-london-bev",
@@ -161,7 +161,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: bev,
     departsAt: WEEKDAY_AM,
     durationSeconds: 4200,
-    expected: [{ schemeId: "london-cc", pence: 1500 }],
+    expected: [{ schemeId: "london-cc", pence: 1800 }],
   },
   {
     id: "crawley-london-phev-euro4",
@@ -170,7 +170,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: phevEuro4,
     departsAt: WEEKDAY_AM,
     durationSeconds: 4200,
-    expected: [{ schemeId: "london-cc", pence: 1500 }],
+    expected: [{ schemeId: "london-cc", pence: 1800 }],
   },
   {
     id: "crawley-london-saturday-cc",
@@ -179,7 +179,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: petrolEuro4,
     departsAt: SAT_PM,
     durationSeconds: 4200,
-    expected: [{ schemeId: "london-cc", pence: 1500 }],
+    expected: [{ schemeId: "london-cc", pence: 1800 }],
   },
   {
     id: "crawley-london-sunday-morning",
@@ -218,7 +218,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     extraHits: ["london-ulez", "london-cc"],
     expected: [
       { schemeId: "london-ulez", pence: 1250, count: 1 },
-      { schemeId: "london-cc", pence: 1500, count: 1 },
+      { schemeId: "london-cc", pence: 1800, count: 1 },
     ],
   },
   {
@@ -255,7 +255,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: petrolEuro4Year,
     departsAt: WEEKDAY_AM,
     durationSeconds: 4200,
-    expected: [{ schemeId: "london-cc", pence: 1500 }],
+    expected: [{ schemeId: "london-cc", pence: 1800 }],
     expectedWarningCodes: ["derived-euro"],
   },
   {
@@ -347,7 +347,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: dieselEuro5,
     departsAt: SAT_PM,
     durationSeconds: 2400,
-    expected: [],
+    expected: [{ schemeId: "bristol-caz", pence: 900 }],
   },
   {
     id: "bristol-after-hours",
@@ -356,7 +356,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: dieselEuro5,
     departsAt: BRISTOL_LATE,
     durationSeconds: 2400,
-    expected: [],
+    expected: [{ schemeId: "bristol-caz", pence: 900 }],
   },
   {
     id: "glasgow-lez-diesel-euro5",
@@ -408,7 +408,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: petrolEuro4,
     departsAt: WEEKDAY_AM,
     durationSeconds: 900,
-    expected: [{ schemeId: "dart-charge", pence: 250, kind: "toll" }],
+    expected: [{ schemeId: "dart-charge", pence: 350, kind: "toll" }],
   },
   {
     id: "dart-night-free",
@@ -426,7 +426,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: vanDieselEuro5,
     departsAt: WEEKDAY_AM,
     durationSeconds: 900,
-    expected: [{ schemeId: "dart-charge", pence: 300, kind: "toll" }],
+    expected: [{ schemeId: "dart-charge", pence: 420, kind: "toll" }],
   },
   {
     id: "m6-toll-car",
@@ -435,7 +435,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: petrolEuro4,
     departsAt: WEEKDAY_AM,
     durationSeconds: 1500,
-    expected: [{ schemeId: "m6-toll", pence: 880, kind: "toll" }],
+    expected: [{ schemeId: "m6-toll", pence: 1090, kind: "toll" }],
   },
   {
     id: "m6-toll-motorcycle",
@@ -444,7 +444,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: motoEuro3,
     departsAt: WEEKDAY_AM,
     durationSeconds: 1500,
-    expected: [{ schemeId: "m6-toll", pence: 500, kind: "toll" }],
+    expected: [{ schemeId: "m6-toll", pence: 630, kind: "toll" }],
   },
   {
     id: "mersey-gateway-car",
@@ -453,7 +453,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: petrolEuro4,
     departsAt: WEEKDAY_AM,
     durationSeconds: 480,
-    expected: [{ schemeId: "mersey-gateway", pence: 200, kind: "toll" }],
+    expected: [{ schemeId: "mersey-gateway", pence: 240, kind: "toll" }],
   },
   {
     id: "tyne-tunnel-car",
@@ -462,7 +462,7 @@ export const CHARGE_JOURNEY_SET: ChargeJourneyCase[] = [
     vehicle: petrolEuro4,
     departsAt: WEEKDAY_AM,
     durationSeconds: 420,
-    expected: [{ schemeId: "tyne-tunnel", pence: 230, kind: "toll" }],
+    expected: [{ schemeId: "tyne-tunnel", pence: 250, kind: "toll" }],
   },
   {
     id: "manchester-leeds-none",

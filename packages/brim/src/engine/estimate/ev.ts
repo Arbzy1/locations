@@ -86,7 +86,7 @@ export function estimateEv(input: {
     batteryKwh: battery,
     gridKwh: grid,
     costPence,
-    co2Kg: (battery.point * input.gridIntensityGPerKwh) / 1000,
+    co2Kg: (grid.point * input.gridIntensityGPerKwh) / 1000,
     reasons,
   };
 }

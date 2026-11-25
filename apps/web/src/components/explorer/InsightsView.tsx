@@ -8,6 +8,7 @@ import {
   useYearInReview,
   useAreas,
   useMultiDayTrips,
+  useNamedTrips,
   usePlaceLabels,
   useHeatmap,
   useFlights,
@@ -22,13 +23,13 @@ import { Button } from '../ui/button';
 import { MODE_COLORS, MODE_LABELS } from '../../types';
 import { formatMilesOrKm } from '../../utils/format';
 import { useUnits } from '../../lib/units';
-import { formatFunFact, isGridCluster, multiDayTripLabel } from '../../lib/explorer/trips';
+import { enrichMultiDayTripsWithSaved, formatFunFact, isGridCluster, multiDayTripLabel } from '../../lib/explorer/trips';
 import { corridorPath, placePath, tripPath } from '../../lib/nav/paths';
 import { downloadElementPng, downloadTextFile, insightsCsv } from '../../lib/explorer/insights-export';
 import { InsightsStory } from './InsightsStory';
 import RangeInsightsCard from './RangeInsightsCard';
 import OnThisDayCard from './OnThisDayCard';
-import { isStreaks } from '../../lib/explorer/year-review';
+import { isStreaks, localTodayIso } from '../../lib/explorer/year-review';
 import { Link } from 'react-router-dom';
 import type { ActivityGuessCount, BadgeSummary, FlightSummary } from '../../types';
 import { useTheme } from '../../lib/theme';
@@ -66,11 +67,12 @@ function useChartColors() {
     const read = (name: string, fallback: string) =>
       s.getPropertyValue(name).trim() || fallback;
     return {
-      muted: read('--text-muted', '#8b949e'),
-      surface: read('--surface', '#161b22'),
-      border: read('--border', '#30363d'),
-      text: read('--text', '#f0f6fc'),
-      accent: read('--accent', '#58a6ff'),
+      key: `${theme}:${mood}`,
+      muted: read('--text-muted', 'rgb(139, 148, 158)'),
+      surface: read('--surface', 'rgb(22, 27, 34)'),
+      border: read('--border', 'rgb(48, 54, 61)'),
+      text: read('--text', 'rgb(240, 246, 252)'),
+      accent: read('--accent', 'rgb(76, 154, 255)'),
     };
   }, [theme, mood]);
 }
@@ -86,6 +88,7 @@ export default function InsightsView() {
   const { data: streaksRaw } = useStreaks();
   const { data: areas } = useAreas();
   const { data: multiDay } = useMultiDayTrips();
+  const { data: savedNamedTrips } = useNamedTrips();
   const { data: flights } = useFlights();
   const { data: trainHops } = useTrainHops();
   const { data: lowMovement } = useLowMovementDays();
@@ -93,10 +96,12 @@ export default function InsightsView() {
   const { data: heatmapPoints } = useHeatmap();
   const { data: badges } = useCachedAnalytics<BadgeSummary>('badges');
   const { data: guesses } = useCachedAnalytics<ActivityGuessCount[]>('activity-guesses');
-  const { unit } = useUnits();
+  const { unit, timezone } = useUnits();
   const chart = useChartColors();
   const navigate = useNavigate();
   const [mapSize, setMapSize] = useState(0);
+  const [pickedA, setPickedA] = useState<number | null>(null);
+  const [pickedB, setPickedB] = useState<number | null>(null);
 
   const hiddenKeys = useMemo(
     () => new Set((labels ?? []).filter((l) => l.hidden).map((l) => l.placeKey)),
@@ -159,12 +164,30 @@ export default function InsightsView() {
   }, [visibleCorridors, coordByName]);
 
   const namedTrips = useMemo(() => {
-    if (!Array.isArray(multiDay)) return [];
-    return multiDay
+    const combined = enrichMultiDayTripsWithSaved(multiDay, savedNamedTrips);
+    return combined
       .map((t) => ({ trip: t, name: multiDayTripLabel(t, hiddenKeys) }))
-      .filter((row): row is { trip: typeof multiDay[number]; name: string } => Boolean(row.name))
+      .filter((row): row is { trip: (typeof combined)[number]; name: string } => Boolean(row.name))
       .slice(0, 20);
-  }, [multiDay, hiddenKeys]);
+  }, [multiDay, savedNamedTrips, hiddenKeys]);
+
+  const years = useMemo(() => (yearly ?? []).map((y) => y.year), [yearly]);
+  const compareYearA = pickedA ?? years[years.length - 1];
+  const compareYearB = pickedB ?? years[Math.max(0, years.length - 2)] ?? years[0];
+  const compareRowA = yearly?.find((y) => y.year === compareYearA);
+  const compareRowB = yearly?.find((y) => y.year === compareYearB);
+
+  const monthlyChartData = useMemo(
+    () =>
+      (monthly ?? []).map((m) => ({
+        ...m,
+        distance_plot:
+          unit === 'km'
+            ? Math.round((m.distance_miles / 0.621371) * 10) / 10
+            : m.distance_miles,
+      })),
+    [monthly, unit],
+  );
 
   const flightSummary = useMemo((): FlightSummary | null => {
     if (!flights || Array.isArray(flights)) return null;
@@ -243,8 +266,15 @@ export default function InsightsView() {
               title="Download Insights as CSV"
               onClick={() => {
                 const streaks = isStreaks(streaksRaw) ? streaksRaw : null;
-                const csv = insightsCsv(yearly, monthly, facts, streaks, {}, unit);
-                const day = new Date().toISOString().slice(0, 10);
+                const csv = insightsCsv(
+                  yearly,
+                  monthly,
+                  facts,
+                  streaks,
+                  { a: compareRowA, b: compareRowB },
+                  unit,
+                );
+                const day = localTodayIso(timezone);
                 downloadTextFile(`locations-insights-${day}.csv`, csv, 'text/csv');
               }}
             >
@@ -257,7 +287,7 @@ export default function InsightsView() {
               onClick={() =>
                 void downloadElementPng(
                   'insights-export',
-                  `locations-insights-${new Date().toISOString().slice(0, 10)}.png`,
+                  `locations-insights-${localTodayIso(timezone)}.png`,
                 )
               }
             >
@@ -343,10 +373,10 @@ export default function InsightsView() {
         {monthly && monthly.length > 0 && (
           <div className="bg-bg border border-border rounded-lg p-4">
             <h3 className="text-sm font-semibold text-text-muted mb-4">
-              Monthly Distance
+              Monthly Distance ({unit})
             </h3>
             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={monthly}>
+              <BarChart data={monthlyChartData}>
                 <XAxis
                   dataKey="month"
                   tick={{ fill: chart.muted, fontSize: 11 }}
@@ -358,12 +388,12 @@ export default function InsightsView() {
                 <YAxis tick={{ fill: chart.muted, fontSize: 11 }} />
                 <Tooltip
                   contentStyle={tooltipStyle}
-                  formatter={(value) => [
-                    formatMilesOrKm(Number(value ?? 0), unit),
-                    'Distance',
-                  ]}
+                  formatter={(_value, _name, item) => {
+                    const miles = (item?.payload as { distance_miles?: number } | undefined)?.distance_miles ?? 0;
+                    return [formatMilesOrKm(miles, unit), 'Distance'];
+                  }}
                 />
-                <Bar dataKey="distance_miles" fill={chart.accent} radius={[2, 2, 0, 0]} />
+                <Bar dataKey="distance_plot" fill={chart.accent} radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -516,7 +546,16 @@ export default function InsightsView() {
           </div>
         )}
 
-        <InsightsStory yearly={yearly} monthly={monthly} hiddenKeys={hiddenKeys} chart={chart} />
+        <InsightsStory
+          yearly={yearly}
+          monthly={monthly}
+          hiddenKeys={hiddenKeys}
+          chart={chart}
+          pickedA={pickedA}
+          pickedB={pickedB}
+          onPickA={setPickedA}
+          onPickB={setPickedB}
+        />
 
         {yearReview && yearReview.year && (
           <div className="rounded-lg border border-border bg-bg p-4">
@@ -653,7 +692,8 @@ export default function InsightsView() {
                     <span className="flex min-w-0 flex-col gap-1">
                       <span className="font-medium text-text">{name}</span>
                       <span className="text-text-muted">
-                        {t.start} to {t.end} · {formatMilesOrKm(t.total_miles, unit)}
+                        {t.start} to {t.end}
+                        {t.total_miles > 0 ? ` · ${formatMilesOrKm(t.total_miles, unit)}` : ''}
                       </span>
                       {t.modes && t.modes.length > 0 && (
                         <span className="flex flex-wrap gap-1">

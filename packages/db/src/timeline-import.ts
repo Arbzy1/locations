@@ -218,7 +218,7 @@ export async function importSourceData(
   await db
     .update(dataSources)
     .set({ updatedAt: new Date() })
-    .where(eq(dataSources.id, sourceId));
+    .where(and(eq(dataSources.tenant, tenant), eq(dataSources.id, sourceId)));
 
   // Google's own trips become named trips; existing ones (maybe renamed) are kept.
   const trips = namedTripsFromMemories(parsed.memories ?? [], sourceId);

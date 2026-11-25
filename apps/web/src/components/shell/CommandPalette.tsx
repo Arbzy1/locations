@@ -7,7 +7,8 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { EjectField } from '../ui/eject-field';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
-import { useDays, usePlaceLabels, useSearch } from '../../hooks/useApi';
+import { useDays, usePlaceLabels, usePublicConfig, useSearch } from '../../hooks/useApi';
+import { useSession } from '../../lib/auth';
 import { EXPLORE_LINKS, placePath } from '../../lib/nav/paths';
 import {
   chordTarget,
@@ -99,6 +100,10 @@ export default function CommandPalette() {
   const { data } = useSearch(searchQ);
   const { data: days = [] } = useDays({ enabled: open });
   const { data: labels } = usePlaceLabels({ enabled: open });
+  const { data: config } = usePublicConfig();
+  const { data: session } = useSession();
+  const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
+  const globeEnabled = config?.flags?.globe !== false && config?.globe !== false;
   const labelByKey = useMemo(() => {
     const map = new Map<string, string>();
     for (const row of labels ?? []) {
@@ -209,11 +214,23 @@ export default function CommandPalette() {
       }
     }
     const pageNeedle = parsed.kind === 'text' ? parsed.q : '';
-    const pages = [...TAB_PAGES, ...EXPLORE_LINKS.map((l) => ({ to: l.to, label: l.label, title: l.title }))];
+    const tabPages = isDemo
+      ? TAB_PAGES.map((t) =>
+          t.to === '/settings'
+            ? { ...t, label: 'Display & Colour Moods', title: 'Open colour moods and display settings' }
+            : t,
+        )
+      : TAB_PAGES;
+    const explorePages = EXPLORE_LINKS.filter((l) => {
+      if (isDemo && (l.to === '/trips/new' || l.to === '/chapters')) return false;
+      if (!globeEnabled && l.to === '/globe') return false;
+      return true;
+    }).map((l) => ({ to: l.to, label: l.label, title: l.title }));
+    const pages = [...tabPages, ...explorePages];
     for (const page of pages) {
       if (pageNeedle && !matchPage(pageNeedle, page.label, page.title)) continue;
       if (!pageNeedle && parsed.kind !== 'empty') continue;
-      if (parsed.kind === 'empty' && TAB_PAGES.some((t) => t.to === page.to) === false && pageNeedle === '') {
+      if (parsed.kind === 'empty' && tabPages.some((t) => t.to === page.to) === false && pageNeedle === '') {
         continue;
       }
       out.push({
@@ -247,7 +264,7 @@ export default function CommandPalette() {
       if (r.to) seen.add(r.to);
       return true;
     });
-  }, [parsed, recents, presets, data, location.pathname, location.search, labelByKey]);
+  }, [parsed, recents, presets, data, location.pathname, location.search, labelByKey, isDemo, globeEnabled]);
 
   useEffect(() => {
     setActive(0);
@@ -335,6 +352,7 @@ export default function CommandPalette() {
       <EjectField
         label={saving ? 'Preset name' : 'Search places, dates, pages'}
         htmlFor="command-palette-q"
+        className="pr-12"
       >
         <Input
           id="command-palette-q"

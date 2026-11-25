@@ -1,0 +1,52 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "tamar-bridge",
+    "name": "Tamar Bridge",
+    "authority": "Tamar Crossings",
+    "kind": "toll",
+    "charge_pence_by_class": {
+      "car": 260,
+      "van": 630,
+      "motorcycle": 0
+    },
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true
+    },
+    "source_url": "https://www.tamarcrossings.org.uk/fees/",
+    "verified_on": "2026-11-24",
+    "operator_url": "https://www.tamarcrossings.org.uk/",
+    "dataset_version": "2026-11-24"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -4.208,
+            50.405
+          ],
+          [
+            -4.198,
+            50.405
+          ],
+          [
+            -4.198,
+            50.411
+          ],
+          [
+            -4.208,
+            50.411
+          ],
+          [
+            -4.208,
+            50.405
+          ]
+        ]
+      ]
+    ]
+  }
+}

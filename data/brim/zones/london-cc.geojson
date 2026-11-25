@@ -5,7 +5,7 @@
     "name": "London Congestion Charge",
     "authority": "Transport for London",
     "kind": "congestion",
-    "charge_pence": 1500,
+    "charge_pence": 1800,
     "is_restriction": false,
     "applies_hours_json": {
       "timezone": "Europe/London",
@@ -45,9 +45,9 @@
       ]
     },
     "source_url": "https://tfl.gov.uk/modes/driving/congestion-charge",
-    "verified_on": "2026-08-16",
+    "verified_on": "2026-11-24",
     "operator_url": "https://tfl.gov.uk/modes/driving/congestion-charge",
-    "dataset_version": "2026-08-16"
+    "dataset_version": "2026-11-24"
   },
   "geometry": {
     "type": "MultiPolygon",
@@ -55,23 +55,39 @@
       [
         [
           [
-            -0.2,
+            -0.145,
             51.486
           ],
           [
-            -0.07,
-            51.486
+            -0.095,
+            51.492
           ],
           [
-            -0.07,
-            51.535
+            -0.073,
+            51.505
           ],
           [
-            -0.2,
-            51.535
+            -0.075,
+            51.522
           ],
           [
-            -0.2,
+            -0.105,
+            51.531
+          ],
+          [
+            -0.155,
+            51.525
+          ],
+          [
+            -0.172,
+            51.514
+          ],
+          [
+            -0.155,
+            51.496
+          ],
+          [
+            -0.145,
             51.486
           ]
         ]

@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useSession } from "../../lib/auth";
 import { adminJson } from "../../lib/admin/admin-api";
 import { Button } from "../ui/button";
+import { EjectField } from "../ui/eject-field";
 import { AdminCard, AdminError, AdminSection } from "./AdminSection";
 import { AdminEmpty, AdminSkeletonList, AdminStat, AdminStatus, boolStatus } from "./AdminUi";
 
@@ -19,11 +21,15 @@ export function AdminEmailPage() {
     queryKey: ["admin-email"],
     queryFn: () => adminJson<Email>("/api/admin/email"),
   });
+  const [selectedKind, setSelectedKind] = useState("password_changed");
+  const kinds = data?.kinds?.length ? data.kinds : ["password_changed"];
+  const activeKind = kinds.includes(selectedKind) ? selectedKind : kinds[0]!;
+
   const testMut = useMutation({
-    mutationFn: () =>
+    mutationFn: (kind: string) =>
       adminJson<{ result: "sent" | "skipped" | "failed" }>("/api/admin/email/test", {
         method: "POST",
-        body: JSON.stringify({ kind: "password_changed" }),
+        body: JSON.stringify({ kind }),
       }),
     onSuccess: (body) => {
       if (body.result === "sent") toast.success("Test email sent to your account.");
@@ -46,16 +52,32 @@ export function AdminEmailPage() {
           </div>
         )}
         {isAdmin && (
-          <Button
-            type="button"
-            className="mt-3"
-            variant="outline"
-            title="Send a password-changed test to your session email"
-            disabled={testMut.isPending}
-            onClick={() => testMut.mutate()}
-          >
-            Send test to me
-          </Button>
+          <div className="mt-3 flex flex-wrap items-end gap-2">
+            <EjectField label="Email kind" htmlFor="admin-email-kind">
+              <select
+                id="admin-email-kind"
+                value={activeKind}
+                title="Choose transactional email kind to self-test"
+                onChange={(e) => setSelectedKind(e.target.value)}
+                className="h-11 rounded-lg border border-border bg-bg px-3 text-sm text-text"
+              >
+                {kinds.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {kind}
+                  </option>
+                ))}
+              </select>
+            </EjectField>
+            <Button
+              type="button"
+              variant="outline"
+              title={`Send a ${activeKind} test email to your session email`}
+              disabled={testMut.isPending}
+              onClick={() => testMut.mutate(activeKind)}
+            >
+              Send test to me
+            </Button>
+          </div>
         )}
       </AdminCard>
       <AdminCard title="Last monthly recap cron">

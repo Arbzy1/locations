@@ -43,6 +43,7 @@ describe("zone geometry", () => {
   });
 
   it("has an inside, outside, and near-miss sample for every scheme", () => {
+    expect(CHARGE_CATALOGUE.length).toBe(23);
     for (const scheme of CHARGE_CATALOGUE) {
       const ring = scheme.geometry.coordinates[0]?.[0];
       expect(ring, scheme.id).toBeDefined();
@@ -52,17 +53,43 @@ describe("zone geometry", () => {
       const east = Math.max(...lngs);
       const south = Math.min(...lats);
       const north = Math.max(...lats);
-      const midLng = (west + east) / 2;
-      const midLat = (south + north) / 2;
-      expect(pointInPolygon(midLng, midLat, scheme.geometry), `${scheme.id} inside`).toBe(true);
-      expect(pointInPolygon(midLng, south - 2, scheme.geometry), `${scheme.id} outside`).toBe(false);
-      const span = Math.max(0.002, (east - west) * 0.25);
+
+      let insideFound = pointInPolygon((west + east) / 2, (south + north) / 2, scheme.geometry);
+      if (!insideFound) {
+        for (let r = 1; r < 20 && !insideFound; r++) {
+          for (let c = 1; c < 20 && !insideFound; c++) {
+            const lng = west + ((east - west) * c) / 20;
+            const lat = south + ((north - south) * r) / 20;
+            if (pointInPolygon(lng, lat, scheme.geometry)) insideFound = true;
+          }
+        }
+      }
+      expect(insideFound, `${scheme.id} inside`).toBe(true);
+      expect(pointInPolygon((west + east) / 2, south - 2, scheme.geometry), `${scheme.id} outside`).toBe(false);
+
+      const southVertex = ring!.reduce((best, cur) => (cur[1]! < best[1]! ? cur : best), ring![0]!);
+      const southLng = southVertex[0]!;
+      const span = Math.max(0.002, (east - west) * 0.15);
       const near = [
-        { lat: south - 0.003, lng: midLng - span },
-        { lat: south - 0.003, lng: midLng + span },
+        { lat: south - 0.003, lng: southLng - span },
+        { lat: south - 0.003, lng: southLng + span },
       ];
       expect(lineIntersectsPolygon(near, scheme.geometry), `${scheme.id} near intersects`).toBe(false);
       expect(lineNearPolygon(near, scheme.geometry), `${scheme.id} near miss`).toBe(true);
     }
+  });
+
+  it("keeps M6 Toll strictly on the toll corridor and London ULEZ strictly inside the M25", () => {
+    const m6Toll = schemeById("m6-toll")!;
+    expect(pointInPolygon(-1.825, 52.61, m6Toll.geometry)).toBe(true);
+    expect(pointInPolygon(-1.98, 52.58, m6Toll.geometry)).toBe(false);
+    expect(pointInPolygon(-1.69, 52.63, m6Toll.geometry)).toBe(false);
+    expect(pointInPolygon(-1.89, 52.48, m6Toll.geometry)).toBe(false);
+
+    const ulez = schemeById("london-ulez")!;
+    expect(pointInPolygon(-0.18, 51.695, ulez.geometry)).toBe(false);
+    expect(pointInPolygon(0.26, 51.55, ulez.geometry)).toBe(false);
+    expect(pointInPolygon(-0.15, 51.265, ulez.geometry)).toBe(false);
+    expect(pointInPolygon(-0.50, 51.47, ulez.geometry)).toBe(false);
   });
 });

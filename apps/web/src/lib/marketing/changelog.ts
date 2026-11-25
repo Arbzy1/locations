@@ -3,34 +3,36 @@ export type ChangelogEntry = {
   summary: string;
 };
 
-/** Curated product notes. Do not fetch docs/ from the Worker. */
+/** Curated product notes, ordered newest-first. Do not fetch docs/ from the Worker. */
 export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
   {
-    version: "Unreleased",
+    version: '1.4.0 (November 2026)',
     summary:
-      "A simpler layout: five tabs (Map, Days, Trips, Places, Insights), with Heat and Lines on the Map tab. Places are now real places you can rename. Days open faster and say so when something goes wrong. Imports handle nested stays, raw GPS, older Takeout files and your timezone more accurately.",
+      'Journey Cost (/journey-cost) joins the explorer as the sixth primary tab alongside Map, Days, Trips, Places, and Insights: price UK trips for petrol, diesel, hybrid, or EV charging, compare live forecourts, check Clean Air Zones, ULEZ, and road tolls, and track HMRC business mileage.',
   },
   {
-    version: "Routes and GPS",
+    version: '1.3.0 (October 2026)',
     summary:
-      "See every journey for a day, month or year on one map, coloured by how you travelled. Journeys follow your recorded GPS where Google kept it, and you can compare them with the predicted road route.",
+      'Unified six-tab navigation with Heat and Lines modes on the Map tab. Places are real named locations you can rename, favourite, or hide. Day View opens faster with clear error states, and imports handle nested stays, raw GPS, older Takeout archives, and timezones accurately.',
   },
   {
-    version: "0.0.1",
-    summary: "Colour moods in Settings: 30 named palettes, each with a light and dark version.",
-  },
-  {
-    version: "Import quality",
+    version: '1.2.5 (September 2026)',
     summary:
-      "Drag and drop your export, see a preview before importing, skip days you already have, colour each export, delete a date range, and get a warning when the times look shifted by a timezone.",
+      'Routes view and GPS comparison: see every journey for a day, month, or year on one map coloured by transport mode, following recorded GPS traces where available and comparing them against predicted road routes.',
   },
   {
-    version: "1.2.0",
-    summary: "A separate test site, so changes are tried out before they reach you.",
-  },
-  {
-    version: "1.1.0",
+    version: '1.2.0 (August 2026)',
     summary:
-      "Open sign-up, paid plans, strict separation of every account's data, zip uploads, a fresh look, and full account export and delete.",
+      'Import preview and staging verification: drag and drop Timeline exports, preview overlapping days before committing, skip days already stored, colour-code multiple accounts, delete date ranges, and spot timezone shifts.',
+  },
+  {
+    version: '1.1.0 (July 2026)',
+    summary:
+      'Self-serve sign-up, paid plans via Stripe, strict Postgres Row Level Security per account, Takeout zip uploads, GDPR archive downloads, and full account deletion.',
+  },
+  {
+    version: '1.0.0 (June 2026)',
+    summary:
+      'Colour moods in Settings: 30 named palettes, each crafted with matching light and dark themes.',
   },
 ];

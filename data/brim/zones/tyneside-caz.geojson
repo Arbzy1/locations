@@ -1,0 +1,57 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "tyneside-caz",
+    "name": "Tyneside Clean Air Zone (Newcastle and Gateshead)",
+    "authority": "Newcastle City Council and Gateshead Council",
+    "kind": "caz",
+    "caz_class": "C",
+    "charge_pence": 1250,
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true
+    },
+    "source_url": "https://www.breathe-cleanair.com/",
+    "verified_on": "2026-11-24",
+    "operator_url": "https://www.gov.uk/clean-air-zones",
+    "dataset_version": "2026-11-24"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -1.626,
+            54.966
+          ],
+          [
+            -1.598,
+            54.966
+          ],
+          [
+            -1.596,
+            54.978
+          ],
+          [
+            -1.608,
+            54.983
+          ],
+          [
+            -1.626,
+            54.982
+          ],
+          [
+            -1.629,
+            54.972
+          ],
+          [
+            -1.626,
+            54.966
+          ]
+        ]
+      ]
+    ]
+  }
+}

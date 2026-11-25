@@ -7,25 +7,25 @@ All other `/api/*` require a session.
 | Method | Path | Notes |
 |--------|------|--------|
 | GET | `/api/health` | `{ ok, worker, db, version }` Worker liveness plus a database ping. `db` is `ok` or `error`. `version` is the root `package.json` semver. No connection strings. |
-| GET | `/api/me` | user, tenant, entitlements, settings |
-| GET | `/api/config` | map tile/style templates, `customTiles`, `signupDisabled`, `googleAuth`, `globe`, `billingConfigured`, `version`, `flags` (`globe`, `demoTour`, `landing`) |
-| GET | `/api/overview` | tenant summary; query `sourceId`, `from`, `to` |
+| GET | `/api/me` | user, tenant, entitlements (`entitled`, `status`, `graceUntil`, `readOnlyGrace`), `uploadLimitBytes`, settings |
+| GET | `/api/config` | map tile/style templates, `customTiles`, `signupDisabled`, `googleAuth`, `globe`, `billingConfigured`, `pricing`, `version`, `flags` (`globe`, `demoTour`, `landing`) |
+| GET | `/api/overview` | tenant summary (`total_visits`, `total_activities`, `days_with_data`, `unique_places`, `date_range`) |
 | GET | `/api/days` | |
-| DELETE | `/api/days` | `from`, `to`, optional `sourceId`; not demo; rebuilds aggregates |
-| GET | `/api/day/:date` | optional `?stream=1`, optional `?sources=` |
-| GET | `/api/heatmap` | optional `?sources=` |
+| DELETE | `/api/days` | `from`, `to`, optional `sourceId`; not demo; marks aggregates stale |
+| GET | `/api/day/:date` | optional `?stream=1`, optional `?compare=1`, optional `?sources=` |
+| GET | `/api/heatmap` | optional `?sources=`, optional `?from=`, `?to=` |
 | GET | `/api/route-progress` | tenant-scoped cache hits |
-| POST | `/api/routes/rewarm` | not demo; cap 100 uncached journeys |
+| POST | `/api/routes/rewarm` | not demo; rate-limited; cap 8 uncached journeys per call |
 | GET | `/api/routes` | `from`, `to` (`YYYY-MM-DD`, at most 366 days; `truncated` when capped), optional `sources=`; every journey line in the period as recorded (rail line for trains, else GPS trace, else straight), thinned by span; no OSRM calls |
 | GET | `/api/hotspots/days` | `lat`, `lon`, optional `radius_m` (default 150, max 2000); days with a stay near the point, newest first, with time spent |
 | GET | `/api/insights/range` | `from`, `to`; totals, transport mix, top places, first visits, and the same dates a year earlier; any span up to 100 years ("All time") |
 | GET | `/api/on-this-day` | optional `date=` (the client's local date); the same day in earlier years with distance and top places; in-app only |
 | GET | `/api/export/:format` | `gpx`, `geojson` (journeys, up to a year) or `csv` (stays, any span); `from`, `to`, `blur_home=1` blurs home to about 1 km; download |
 | GET | `/api/place/:placeId` | `lat`, `lon`; place name from `place_cache` or Nominatim; rate-limited 30/min |
-| GET | `/api/analytics/*` | monthly, yearly, day-trips, corridors, facts, multi-day, home-work, areas, year-in-review (`?year=`), flights, train-hops, low-movement, away-nights, commute, firsts, data-health, moving, anomaly, activity-guesses, badges |
+| GET | `/api/analytics/*` | monthly, yearly, day-trips, corridors, facts, multi-day, home-work, areas, year-in-review (`?year=`), flights, train-hops, low-movement, away-nights, commute, firsts, data-health, moving, anomaly, activity-guesses, badges, streaks, place-deltas, lapsed-places, hour-of-week, personality |
 | GET | `/api/clusters` | directory; `q`, `sort`, `limit`, `cursor`; hidden omitted |
-| GET | `/api/clusters/:key` | summary, hour histogram, related corridors |
-| GET | `/api/clusters/:key/visits` | paginated visits |
+| GET | `/api/clusters/:key` | summary, hour histogram (optional `?tz=` IANA timezone), related corridors |
+| GET | `/api/clusters/:key/visits` | paginated visits (`from`, `to`, `cursor`, `limit`) |
 | GET | `/api/corridors/:a/:b` | transitions; 404 if none |
 | GET | `/api/trip-range/:start/:end` | up to 14 days of visits/activities |
 | GET/POST | `/api/trips` | named trips; POST not demo |
@@ -74,12 +74,12 @@ All other `/api/*` require a session.
 | POST | `/api/journeys/modes` | not demo; at most 250 `{ id, mode, googleMode, modeDetail, railGeometry }` (validated, rail line at most 300 points), optional `doneVersion`; returns `{ changed }` |
 | POST | `/api/billing/checkout` | `{ interval: monthly\|yearly }`; rate-limited |
 | POST | `/api/billing/portal` | rate-limited |
-| POST | `/api/account/delete` | GDPR wipe inside `withTenant`; R2 prefixes paged |
-| GET | `/api/account/export` | JSON summary (overview, sources, settings, labels) |
-| POST | `/api/account/export-pack` | Start GDPR ZIP job; 409 if one is already running |
+| POST | `/api/account/delete` | GDPR wipe inside `withTenant`; rate-limited; R2 prefixes paged |
+| GET | `/api/account/export` | JSON summary across all tenant tables (overview, sources, settings, labels, trips, chapters, overrides, billing summary, Journey cost) |
+| POST | `/api/account/export-pack` | Start GDPR ZIP job (queued via `IMPORT_QUEUE` when bound, `waitUntil` fallback); 409 if one is already running |
 | GET | `/api/account/export-pack/:jobId` | Job status (no R2 key) |
-| GET | `/api/account/export-pack/:jobId/file` | Download ZIP then delete the R2 object |
-| PATCH | `/api/account/settings` | units, timezone, recap, map bookmarks, allowlisted custom tiles |
+| GET | `/api/account/export-pack/:jobId/file` | Download ZIP then delete the R2 object (24h expiry sweep on cron) |
+| PATCH | `/api/account/settings` | units, validated IANA timezone, recap, retentionYears, map bookmarks, allowlisted custom tiles |
 | GET | `/api/places/labels` | user place names, hidden, favourite, colour, tags |
 | PATCH | `/api/places/labels` | `{ placeKey, label?, hidden?, favourite?, color?, tags? }`; `color` is an allowlisted token; demo 403 |
 | DELETE | `/api/places/:key/data` | not demo; deletes every stay at the place, journeys to or from it, and GPS points within 200 m; marks aggregates stale |
@@ -103,7 +103,7 @@ Session required. Registered by `registerBrimRoutes` in `apps/api/src/brim/route
 | GET/POST | `/api/brim/stations/near-route` | forecourts along a polyline |
 | GET | `/api/brim/meta/prices` | national median pump prices |
 | GET | `/api/brim/meta/ev-tariffs` | public network tariffs |
-| GET | `/api/brim/zones` | clean-air zones and tolls with `verifiedOn` |
+| GET | `/api/brim/zones` | clean-air zones and tolls with `verifiedOn` (optional `?geometry=1`) |
 | GET/POST | `/api/brim/charges/for-route` | zone and toll hits for a route and vehicle |
 | GET | `/api/brim/vehicles/catalogue` | VCA search; also `/makes`, `/models`, `/:id` |
 | POST | `/api/brim/vehicles/resolve` | `{ vrm }` DVLA lookup joined to VCA; plate never echoed or cached |
@@ -111,13 +111,14 @@ Session required. Registered by `registerBrimRoutes` in `apps/api/src/brim/route
 | PATCH/DELETE | `/api/brim/vehicles/:id` | not demo; missing 404 |
 | GET | `/api/brim/vehicles/:id/compliance` | per-zone compliance |
 | GET/POST | `/api/brim/vehicles/:id/tariffs` | EV tariffs; POST not demo; missing car 404 |
+| PATCH/DELETE | `/api/brim/vehicles/:id/tariffs/:tariffId` | update or remove EV tariff; not demo |
 | GET | `/api/brim/vehicles/:id/fill-ups` | fill-up log |
 | GET | `/api/brim/vehicles/:id/calibration` | brim-to-brim calibration |
 | GET/PATCH | `/api/brim/settings` | default car; PATCH not demo |
 | GET/POST | `/api/brim/saved-places` | home, work, favourites; POST not demo |
 | PATCH/DELETE | `/api/brim/saved-places/:id` | not demo |
-| POST | `/api/brim/fill-ups` | not demo; rejects odometer rollback and unit mismatch |
-| DELETE | `/api/brim/fill-ups/:id` | not demo |
+| POST | `/api/brim/fill-ups` | not demo; chronological odometer validation and unit check |
+| PATCH/DELETE | `/api/brim/fill-ups/:id` | not demo |
 | GET/POST | `/api/brim/journeys` | snapshots; POST not demo |
 | GET | `/api/brim/journeys/export` | CSV |
 | GET | `/api/brim/journeys/summary` | tax-year miles and HMRC allowance |

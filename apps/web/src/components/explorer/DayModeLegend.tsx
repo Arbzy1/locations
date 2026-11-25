@@ -45,8 +45,8 @@ export default function DayModeLegend({
   if (!modes.length) return null;
   return (
     <div
-      // Phones: one row that scrolls sideways, so the chips do not cover the map.
-      className="absolute left-3 top-3 z-[400] flex max-w-[calc(100%-5.5rem)] gap-1.5 overflow-x-auto [scrollbar-width:none] lg:pointer-events-none lg:flex-wrap lg:overflow-visible"
+      // Phones and tablets: sit clear of top-left MapLibre zoom and drawer controls.
+      className="absolute left-14 top-3 z-[400] flex max-w-[calc(100%-8.5rem)] gap-1.5 overflow-x-auto [scrollbar-width:none] md:top-16 md:left-3 md:max-w-[calc(100%-5.5rem)] lg:left-3 lg:top-3 lg:pointer-events-none lg:flex-wrap lg:overflow-visible"
       role="group"
       aria-label="Transport modes on this day"
     >
@@ -65,7 +65,7 @@ export default function DayModeLegend({
             title={off ? `Show ${label.toLowerCase()} journeys` : `Hide ${label.toLowerCase()} journeys`}
             onClick={() => onToggle(mode)}
             className={cn(
-              'pointer-events-auto h-11 shrink-0 gap-1.5 bg-surface/95 px-2.5 text-xs shadow-sm lg:h-8',
+              'pointer-events-auto h-11 shrink-0 gap-1.5 bg-surface/95 px-2.5 text-xs shadow-sm',
               off && 'opacity-45 line-through',
             )}
           >
@@ -94,7 +94,7 @@ export default function DayModeLegend({
               size="sm"
               title="Show all journeys again"
               onClick={onClearFocus}
-              className="h-11 gap-1.5 px-2.5 text-xs shadow-sm lg:h-8"
+              className="h-11 gap-1.5 px-2.5 text-xs shadow-sm"
             >
               Journey {focused.n} ({(MODE_LABELS[focused.mode] || focused.mode).toLowerCase()})
               <span className="opacity-80">· Show all</span>

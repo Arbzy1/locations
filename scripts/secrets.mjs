@@ -14,7 +14,10 @@ import { expandEnvNames, takeEnvFlag } from "./env-paths.mjs";
 import { isBlankSecret, loadMergedEnv, writeKeyToEnvPair } from "./env-file.mjs";
 import { pushWorkerSecrets } from "./cf-sync.mjs";
 
-const SECRET_KEY = "BETTER_AUTH_SECRET";
+const SECRET_KEYS = [
+  { key: "BETTER_AUTH_SECRET", generate: () => randomBytes(32).toString("hex"), label: "32-byte hex" },
+  { key: "VRM_ENCRYPTION_KEY", generate: () => randomBytes(32).toString("base64url"), label: "32-byte base64url" },
+];
 
 /** @param {string[]} argv */
 function parseArgs(argv) {
@@ -33,18 +36,15 @@ function parseArgs(argv) {
 }
 
 function usage() {
+  const names = SECRET_KEYS.map((s) => s.key).join(" and ");
   console.log(`Usage:
-  npm run secrets:generate                         Fill blank/placeholder ${SECRET_KEY} in all .env / .dev.vars pairs
+  npm run secrets:generate                         Fill blank/placeholder ${names} in all .env / .dev.vars pairs
   npm run secrets:generate -- --env staging        Staging files only, then cf:sync
   npm run secrets:generate -- --env local          Local .env / .dev.vars only
   npm run secrets:generate -- --force              Replace even if a real secret exists
   npm run secrets:rotate                           Replace every env pair; cf:sync staging + production
   npm run secrets:rotate -- --env staging|production|local
 `);
-}
-
-function generateSecret() {
-  return randomBytes(32).toString("hex");
 }
 
 function main() {
@@ -59,16 +59,18 @@ function main() {
   for (const name of selected) {
     console.log(`\n[${name}]`);
     const merged = loadMergedEnv(name);
-    const current = merged[SECRET_KEY];
-    const hasReal = !isBlankSecret(current);
+    for (const { key, generate, label } of SECRET_KEYS) {
+      const current = merged[key];
+      const hasReal = !isBlankSecret(current);
 
-    if (!opts.rotate && !opts.force && hasReal) {
-      writeKeyToEnvPair(name, SECRET_KEY, current);
-      console.log(`  ${SECRET_KEY} already set (use --force or secrets:rotate to replace).`);
-    } else {
-      const secret = generateSecret();
-      writeKeyToEnvPair(name, SECRET_KEY, secret);
-      console.log(`  wrote ${SECRET_KEY} (32-byte hex).`);
+      if (!opts.rotate && !opts.force && hasReal) {
+        writeKeyToEnvPair(name, key, current);
+        console.log(`  ${key} already set (use --force or secrets:rotate to replace).`);
+      } else {
+        const secret = generate();
+        writeKeyToEnvPair(name, key, secret);
+        console.log(`  wrote ${key} (${label}).`);
+      }
     }
 
     if (name === "staging" || name === "production") {

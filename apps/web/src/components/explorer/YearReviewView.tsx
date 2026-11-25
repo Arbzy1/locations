@@ -4,19 +4,21 @@ import { useMemo } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import StatCard from '../shell/StatCard';
 import { Button } from '../ui/button';
-import { usePlaceLabels, useYearReview, useYearlyStats } from '../../hooks/useApi';
+import { useNamedTrips, usePlaceLabels, useYearReview, useYearlyStats } from '../../hooks/useApi';
 import { formatMilesOrKm } from '../../utils/format';
 import { useUnits } from '../../lib/units';
 import { MODE_COLORS, MODE_LABELS } from '../../types';
 import type { MultiDayTrip } from '../../types';
 import { enterMotion } from '../../lib/motion';
 import { downloadElementPng } from '../../lib/explorer/insights-export';
-import { isGridCluster, multiDayTripLabel } from '../../lib/explorer/trips';
+import { enrichMultiDayTripsWithSaved, isGridCluster, multiDayTripLabel } from '../../lib/explorer/trips';
+import { tripPath } from '../../lib/nav/paths';
 
 export default function YearReviewView() {
   const { year: yearParam } = useParams();
   const { data: yearly = [] } = useYearlyStats();
   const { data: labels } = usePlaceLabels();
+  const { data: savedNamedTrips } = useNamedTrips();
   const { unit } = useUnits();
   const navigate = useNavigate();
   const reduce = useReducedMotion();
@@ -48,7 +50,10 @@ export default function YearReviewView() {
 
   const places = (chapter?.top_places ?? []).filter(([name]) => !hiddenKeys.has(name) && !isGridCluster(name));
   const firsts = (chapter?.firsts ?? []).filter((f) => !hiddenKeys.has(f.cluster) && !isGridCluster(f.cluster));
-  const trips = (chapter?.trips ?? [])
+  const yearSavedTrips = (savedNamedTrips ?? []).filter(
+    (s) => year != null && (s.start.startsWith(String(year)) || s.end.startsWith(String(year))),
+  );
+  const trips = enrichMultiDayTripsWithSaved(chapter?.trips, yearSavedTrips)
     .map((t) => ({ trip: t, name: multiDayTripLabel(t, hiddenKeys) }))
     .filter((row): row is { trip: MultiDayTrip; name: string } => Boolean(row.name));
 
@@ -161,11 +166,12 @@ export default function YearReviewView() {
                         <Button
                           type="button"
                           variant="ghost"
-                          title={`Open Day View for ${trip.start}`}
+                          title={`Open trip ${name}`}
                           className="h-auto min-h-11 w-full justify-start whitespace-normal px-2 py-2 text-left font-normal"
-                          onClick={() => void navigate(`/day/${trip.start}`)}
+                          onClick={() => void navigate(tripPath(trip.start, trip.end))}
                         >
-                          {name} · {trip.start} to {trip.end} · {formatMilesOrKm(trip.total_miles, unit)}
+                          {name} · {trip.start} to {trip.end}
+                          {trip.total_miles > 0 ? ` · ${formatMilesOrKm(trip.total_miles, unit)}` : ''}
                         </Button>
                       </li>
                     ))}
