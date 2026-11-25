@@ -11,7 +11,7 @@
  *   npm run cf:sync -- --no-prune
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +25,18 @@ import {
 } from "./env-file.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const wranglerBin = resolve(root, "node_modules", "wrangler", "bin", "wrangler.js");
+
+/**
+ * @param {string[]} args
+ * @param {import("node:child_process").SpawnSyncOptions} [opts]
+ */
+function runWrangler(args, opts = {}) {
+  if (existsSync(wranglerBin)) {
+    return spawnSync(process.execPath, [wranglerBin, ...args], { cwd: root, ...opts });
+  }
+  return spawnSync("npx", ["wrangler", ...args], { cwd: root, shell: true, ...opts });
+}
 
 /**
  * @param {import("./env-paths.mjs").EnvName} name
@@ -52,11 +64,9 @@ export function collectWorkerSecrets(name) {
  * @returns {string[]}
  */
 function listRemoteSecretNames(name) {
-  const result = spawnSync(
-    "npx",
-    ["wrangler", "secret", "list", "--env", name, "--format", "json"],
-    { cwd: root, encoding: "utf8", shell: true },
-  );
+  const result = runWrangler(["secret", "list", "--env", name, "--format", "json"], {
+    encoding: "utf8",
+  });
   if (result.status !== 0) {
     const err = String(result.stderr || result.stdout || "").trim();
     throw new Error(err || `wrangler secret list failed for --env ${name}`);
@@ -113,10 +123,8 @@ export function pushWorkerSecrets(name, opts = {}) {
   writeFileSync(tmpPath, JSON.stringify(payload), "utf8");
   try {
     console.log(`  wrangler secret bulk --env ${name}: ${upsert}`);
-    const result = spawnSync("npx", ["wrangler", "secret", "bulk", tmpPath, "--env", name], {
-      cwd: root,
+    const result = runWrangler(["secret", "bulk", tmpPath, "--env", name], {
       stdio: "inherit",
-      shell: true,
     });
     if (result.status !== 0) {
       throw new Error(`wrangler secret bulk failed for --env ${name}`);

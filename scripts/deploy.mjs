@@ -10,7 +10,7 @@
  * does not treat as configured. `--secrets-file` attaches them to this deploy.
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +18,7 @@ import { parseEnvName } from "./env-paths.mjs";
 import { collectWorkerSecrets } from "./cf-sync.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const wranglerBin = resolve(root, "node_modules", "wrangler", "bin", "wrangler.js");
 const REQUIRED = ["DATABASE_URL", "BETTER_AUTH_SECRET"];
 
 function usage() {
@@ -29,11 +30,16 @@ function usage() {
 }
 
 function wrangler(args) {
-  const result = spawnSync("npx", ["wrangler", ...args], {
-    cwd: root,
-    stdio: "inherit",
-    shell: true,
-  });
+  const result = existsSync(wranglerBin)
+    ? spawnSync(process.execPath, [wranglerBin, ...args], {
+        cwd: root,
+        stdio: "inherit",
+      })
+    : spawnSync("npx", ["wrangler", ...args], {
+        cwd: root,
+        stdio: "inherit",
+        shell: true,
+      });
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
