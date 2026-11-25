@@ -42,7 +42,16 @@ export * from './constants/emissions.2025.js';
 export * from './constants/corrections.js';
 export * from './types.js';
 export { parseMapsUrl, isMapsShortUrl, type MapsParseResult } from './maps-url.js';
-export { hmrcAmapPence, ukTaxYearStartUtc, HMRC_AMAP_THRESHOLD_MILES } from './hmrc.js';
+export {
+  hmrcAmapPence,
+  ukTaxYearStartUtc,
+  HMRC_AMAP_MOTORCYCLE_PENCE,
+  HMRC_AMAP_PASSENGER_PENCE,
+  HMRC_AMAP_PENCE_AFTER,
+  HMRC_AMAP_PENCE_FIRST,
+  HMRC_AMAP_THRESHOLD_MILES,
+  type HmrcAmapOptions,
+} from './hmrc.js';
 export {
   searchPlaces,
   findPlaceByLabel,

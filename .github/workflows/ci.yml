@@ -15,24 +15,25 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - run: npm run rules:check
       - run: npm run test:placement
+      - run: node scripts/brim/verify-zones.mjs
+      - run: npm run lint:web
+      - run: npm run typecheck:all
       - run: npm run test:unit
       - run: npm run test:integration
       - run: npm run test:admin
       - run: npm run test:security
-      - run: npm run test:rls
-      - run: npm run typecheck:all
+      - run: npm run build:all
 
   rls:
     runs-on: ubuntu-latest
-    # The secrets context is not allowed in a job-level `if` (GitHub rejects the whole
-    # file), so read it into env and gate the steps instead.
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
-      - name: Skip without a test database
+      - name: Skip without a Neon test database
         if: ${{ env.DATABASE_URL == '' }}
-        run: echo "DATABASE_URL secret is not set; skipping live RLS tests."
+        run: echo "DATABASE_URL secret is not set; skipping Neon HTTP RLS suite."
       - uses: actions/checkout@v4
         if: ${{ env.DATABASE_URL != '' }}
       - uses: actions/setup-node@v4
@@ -42,5 +43,44 @@ jobs:
           cache: npm
       - run: npm ci
         if: ${{ env.DATABASE_URL != '' }}
+      - run: npm run db:migrate -w @locations/db
+        if: ${{ env.DATABASE_URL != '' }}
       - run: npm run test:rls
         if: ${{ env.DATABASE_URL != '' }}
+
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - name: Skip e2e without a test database
+        if: ${{ env.DATABASE_URL == '' }}
+        run: echo "DATABASE_URL secret is not set; skipping live Wrangler e2e suite."
+      - uses: actions/checkout@v4
+        if: ${{ env.DATABASE_URL != '' }}
+      - uses: actions/setup-node@v4
+        if: ${{ env.DATABASE_URL != '' }}
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+        if: ${{ env.DATABASE_URL != '' }}
+      - run: npx playwright install --with-deps chromium
+        if: ${{ env.DATABASE_URL != '' }}
+      - run: npm run build:all
+        if: ${{ env.DATABASE_URL != '' }}
+      - name: Run Playwright e2e
+        if: ${{ env.DATABASE_URL != '' }}
+        env:
+          BETTER_AUTH_SECRET: ci-playwright-test-secret-0123456789abcdef0123456789abcdef
+          BETTER_AUTH_URL: http://127.0.0.1:8787
+        run: |
+          printf "DATABASE_URL=%s\nBETTER_AUTH_SECRET=%s\nBETTER_AUTH_URL=%s\n" "$DATABASE_URL" "$BETTER_AUTH_SECRET" "$BETTER_AUTH_URL" > .dev.vars
+          npx wrangler dev --port 8787 &
+          WRANGLER_PID=$!
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8787/api/health && break
+            sleep 1
+          done
+          PLAYWRIGHT_BASE_URL=http://127.0.0.1:8787 npm run test:e2e
+          kill $WRANGLER_PID || true

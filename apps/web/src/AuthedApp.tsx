@@ -21,6 +21,7 @@ import ThemeToggle from './components/shell/ThemeToggle';
 import CommandPalette from './components/shell/CommandPalette';
 import { AppVersion } from './components/shell/AppVersion';
 import { Button } from './components/ui/button';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Sheet, SheetContent } from './components/ui/sheet';
 import ExploreMenu from './components/shell/ExploreMenu';
 import MapModeSwitch from './components/shell/MapModeSwitch';
@@ -181,7 +182,7 @@ function NavTabButton({
   );
 }
 
-function AppContent() {
+function AppContent({ onReplayTour }: { onReplayTour?: () => void }) {
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
@@ -414,19 +415,29 @@ function AppContent() {
             You&apos;re viewing the <strong className="font-semibold">public demo</strong> with
             sample places - not real personal history.
           </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            title="Exit demo and return to the sign-in screen"
-            onClick={() => {
-              queryClient.clear();
-              void signOut();
-            }}
-            className="shrink-0 self-start sm:self-auto"
-          >
-            Exit demo
-          </Button>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 self-start sm:self-auto">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              title="Replay the guided demo tour"
+              onClick={() => onReplayTour?.()}
+            >
+              Tour
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              title="Exit demo and return to the sign-in screen"
+              onClick={() => {
+                queryClient.clear();
+                void signOut();
+              }}
+            >
+              Exit demo
+            </Button>
+          </div>
         </div>
       )}
       <div
@@ -548,56 +559,58 @@ function AppContent() {
             <CommandPalette />
           </div>
           <div className="min-h-0 flex-1 overflow-hidden mobile-nav-pad lg:pb-0">
-            <Suspense fallback={<ViewFallback />}>
-            {exploring ? (
-              <div key={location.pathname} className="ui-enter h-full overflow-hidden">
-                <CatalogRouter />
-              </div>
-            ) : activeTab === 'journey-cost' ? (
-              <div key="journey-cost" className="ui-enter h-full overflow-hidden">
-                <JourneyCostView />
-              </div>
-            ) : activeTab === 'settings' && !isDemo ? (
-              <div key="settings" className="ui-enter h-full">
-                <SettingsView />
-              </div>
-            ) : overviewLoading && !isDemo ? (
-              <div className="flex h-full items-center justify-center text-text-muted">
-                <Loader2 className="animate-spin text-accent" size={24} />
-              </div>
-            ) : !hasData ? (
-              importing ? (
-                <div className="ui-enter flex h-full flex-col items-center justify-center gap-3 bg-bg text-text-muted">
-                  <Loader2 className="animate-spin text-accent" size={24} />
-                  <p className="text-sm">
-                    Importing Timeline data…
-                    {importStatus?.latestJob?.parsedCount
-                      ? ` ${importStatus.latestJob.parsedCount} records`
-                      : ''}
-                  </p>
-                </div>
-              ) : (
-                <div key="empty" className="ui-enter h-full">
-                  <GetStarted isDemo={isDemo} />
-                </div>
-              )
-            ) : (
-              <div key={activeTab} className="ui-enter relative h-full overflow-hidden">
-                {onMapTab && (
-                  <MapModeSwitch
-                    mode={mapMode}
-                    onChange={(m) => void navigate(mapModePath(m))}
-                    className="absolute top-3 left-1/2 z-[1100] -translate-x-1/2 lg:left-[calc(50%+12rem)]"
-                  />
+            <ErrorBoundary resetKey={location.pathname} title="This view encountered an error.">
+              <Suspense fallback={<ViewFallback />}>
+                {exploring ? (
+                  <div key={location.pathname} className="ui-enter h-full overflow-hidden">
+                    <CatalogRouter />
+                  </div>
+                ) : activeTab === 'journey-cost' ? (
+                  <div key="journey-cost" className="ui-enter h-full overflow-hidden">
+                    <JourneyCostView />
+                  </div>
+                ) : activeTab === 'settings' ? (
+                  <div key="settings" className="ui-enter h-full">
+                    <SettingsView />
+                  </div>
+                ) : overviewLoading && !isDemo ? (
+                  <div className="flex h-full items-center justify-center text-text-muted">
+                    <Loader2 className="animate-spin text-accent" size={24} />
+                  </div>
+                ) : !hasData ? (
+                  importing ? (
+                    <div className="ui-enter flex h-full flex-col items-center justify-center gap-3 bg-bg text-text-muted">
+                      <Loader2 className="animate-spin text-accent" size={24} />
+                      <p className="text-sm">
+                        Importing Timeline data…
+                        {importStatus?.latestJob?.parsedCount
+                          ? ` ${importStatus.latestJob.parsedCount} records`
+                          : ''}
+                      </p>
+                    </div>
+                  ) : (
+                    <div key="empty" className="ui-enter h-full">
+                      <GetStarted isDemo={isDemo} />
+                    </div>
+                  )
+                ) : (
+                  <div key={activeTab} className="ui-enter relative h-full overflow-hidden">
+                    {onMapTab && (
+                      <MapModeSwitch
+                        mode={mapMode}
+                        onChange={(m) => void navigate(mapModePath(m))}
+                        className="absolute top-3 left-1/2 z-[1100] -translate-x-1/2 lg:left-[calc(50%+12rem)]"
+                      />
+                    )}
+                    {activeTab === 'hotspots' && <HotspotsView />}
+                    {activeTab === 'day' && <DayView initialDate={dayViewDate} />}
+                    {activeTab === 'routes' && <RoutesView />}
+                    {activeTab === 'trips' && <DayTripsView onSelectDate={handleSelectDate} />}
+                    {activeTab === 'insights' && <InsightsView />}
+                  </div>
                 )}
-                {activeTab === 'hotspots' && <HotspotsView />}
-                {activeTab === 'day' && <DayView initialDate={dayViewDate} />}
-                {activeTab === 'routes' && <RoutesView />}
-                {activeTab === 'trips' && <DayTripsView onSelectDate={handleSelectDate} />}
-                {activeTab === 'insights' && <InsightsView />}
-              </div>
-            )}
-            </Suspense>
+              </Suspense>
+            </ErrorBoundary>
           </div>
 
           <nav
@@ -644,7 +657,9 @@ function AppContent() {
                     className="h-11 justify-start"
                     title="Open colour moods in Settings"
                   >
-                    <Link to="/settings?section=display">{moodName}</Link>
+                    <Link to="/settings?section=display" onClick={() => setMoreOpen(false)}>
+                      {moodName}
+                    </Link>
                   </Button>
                   <div className="max-h-48 overflow-y-auto">
                     <ExploreMenu compact />
@@ -698,63 +713,67 @@ function AppContent() {
   );
 }
 
-function DemoTourGate() {
+function DemoTourGate({ replaySignal }: { replaySignal: number }) {
   const { data: session } = useSession();
   const isDemo = (session?.user as { role?: string } | undefined)?.role === 'demo';
   if (!isDemo) return null;
   return (
     <Suspense fallback={null}>
-      <DemoTour />
+      <DemoTour replaySignal={replaySignal} />
     </Suspense>
   );
 }
 
 export default function AuthedApp() {
+  const [tourReplay, setTourReplay] = useState(0);
+  const replayTour = () => setTourReplay((c) => c + 1);
+  const content = <AppContent onReplayTour={replayTour} />;
+
   return (
     <UnitsProvider>
-      <DemoTourGate />
+      <DemoTourGate replaySignal={tourReplay} />
       <Routes>
         <Route path="/" element={<Navigate to="/hotspots" replace />} />
-        <Route path="/hotspots" element={<AppContent />} />
-        <Route path="/day/:date?" element={<AppContent />} />
-        <Route path="/routes" element={<AppContent />} />
-        <Route path="/trips" element={<AppContent />} />
-        <Route path="/trips/new" element={<AppContent />} />
-        <Route path="/trips/:start/:end" element={<AppContent />} />
-        <Route path="/insights" element={<AppContent />} />
-        <Route path="/journey-cost" element={<AppContent />} />
-        <Route path="/journey-cost/:section" element={<AppContent />} />
-        <Route path="/settings" element={<AppContent />} />
-        <Route path="/places" element={<AppContent />} />
-        <Route path="/places/:key" element={<AppContent />} />
-        <Route path="/corridors/:a/:b" element={<AppContent />} />
-        <Route path="/areas" element={<AppContent />} />
-        <Route path="/areas/:settlement" element={<AppContent />} />
-        <Route path="/coverage" element={<AppContent />} />
-        <Route path="/compare" element={<AppContent />} />
-        <Route path="/replay" element={<AppContent />} />
-        <Route path="/month/:ym" element={<AppContent />} />
-        <Route path="/week/:date" element={<AppContent />} />
-        <Route path="/on-this-day" element={<AppContent />} />
-        <Route path="/gaps" element={<AppContent />} />
-        <Route path="/review" element={<AppContent />} />
-        <Route path="/review/:year" element={<AppContent />} />
-        <Route path="/holidays" element={<AppContent />} />
-        <Route path="/commute" element={<AppContent />} />
-        <Route path="/weekday" element={<AppContent />} />
-        <Route path="/firsts" element={<AppContent />} />
-        <Route path="/chapters" element={<AppContent />} />
-        <Route path="/moving" element={<AppContent />} />
-        <Route path="/anomaly" element={<AppContent />} />
-        <Route path="/onboarding" element={<AppContent />} />
-        <Route path="/imports" element={<AppContent />} />
-        <Route path="/health" element={<AppContent />} />
-        <Route path="/admin" element={<AppContent />} />
-        <Route path="/admin/*" element={<AppContent />} />
-        <Route path="/globe" element={<AppContent />} />
-        <Route path="/updates" element={<AppContent />} />
-        <Route path="/badges" element={<AppContent />} />
-        <Route path="/guesses" element={<AppContent />} />
+        <Route path="/hotspots" element={content} />
+        <Route path="/day/:date?" element={content} />
+        <Route path="/routes" element={content} />
+        <Route path="/trips" element={content} />
+        <Route path="/trips/new" element={content} />
+        <Route path="/trips/:start/:end" element={content} />
+        <Route path="/insights" element={content} />
+        <Route path="/journey-cost" element={content} />
+        <Route path="/journey-cost/:section" element={content} />
+        <Route path="/settings" element={content} />
+        <Route path="/places" element={content} />
+        <Route path="/places/:key" element={content} />
+        <Route path="/corridors/:a/:b" element={content} />
+        <Route path="/areas" element={content} />
+        <Route path="/areas/:settlement" element={content} />
+        <Route path="/coverage" element={content} />
+        <Route path="/compare" element={content} />
+        <Route path="/replay" element={content} />
+        <Route path="/month/:ym" element={content} />
+        <Route path="/week/:date" element={content} />
+        <Route path="/on-this-day" element={content} />
+        <Route path="/gaps" element={content} />
+        <Route path="/review" element={content} />
+        <Route path="/review/:year" element={content} />
+        <Route path="/holidays" element={content} />
+        <Route path="/commute" element={content} />
+        <Route path="/weekday" element={content} />
+        <Route path="/firsts" element={content} />
+        <Route path="/chapters" element={content} />
+        <Route path="/moving" element={content} />
+        <Route path="/anomaly" element={content} />
+        <Route path="/onboarding" element={content} />
+        <Route path="/imports" element={content} />
+        <Route path="/health" element={content} />
+        <Route path="/admin" element={content} />
+        <Route path="/admin/*" element={content} />
+        <Route path="/globe" element={content} />
+        <Route path="/updates" element={content} />
+        <Route path="/badges" element={content} />
+        <Route path="/guesses" element={content} />
         <Route path="*" element={<Navigate to="/hotspots" replace />} />
       </Routes>
     </UnitsProvider>

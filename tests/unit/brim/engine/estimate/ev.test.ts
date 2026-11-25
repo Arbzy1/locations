@@ -17,7 +17,7 @@ describe("EV energy", () => {
     expect(ev.batteryKwh.point).toBeCloseTo(50, 6);
     expect(ev.gridKwh.point).toBeCloseTo(50 / 0.88, 6);
     expect(ev.gridKwh.point).toBeCloseTo(56.8181818, 5);
-    expect(ev.co2Kg).toBeCloseTo(5, 6);
+    expect(ev.co2Kg).toBeCloseTo((50 / 0.88) * 0.1, 6);
   });
 
   it("bills DC on grid kWh at 0.94 efficiency", () => {

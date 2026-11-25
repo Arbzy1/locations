@@ -2,6 +2,7 @@ import { withTenant } from "@locations/db";
 import type { Env } from "./env";
 import { buildGdprPackZip, type ExportAccountPayload } from "./export-pack";
 import {
+  closeDb,
   getAccountExportPayload,
   getDb,
   getExportJob,
@@ -11,6 +12,7 @@ import {
 } from "./services";
 
 export type ExportPackMessage = {
+  kind?: "export_pack";
   jobId: string;
   tenant: string;
   userId: string;
@@ -42,7 +44,9 @@ export async function runExportPackJob(env: Env, message: ExportPackMessage): Pr
     const existing = await withTenant(db, tenant, (tx) => getExportJob(tx, jobId, tenant));
     if (!existing) throw new Error("Export job missing");
 
-    const payloadCore = await withTenant(db, tenant, (tx) => getAccountExportPayload(tx, tenant));
+    const payloadCore = await withTenant(db, tenant, (tx) =>
+      getAccountExportPayload(tx, tenant, { vrmEncryptionKey: env.VRM_ENCRYPTION_KEY }),
+    );
     const visits = await withTenant(db, tenant, (tx) =>
       loadAllPages((afterId) => listVisitExportPage(tx, tenant, afterId)),
     );
@@ -67,15 +71,16 @@ export async function runExportPackJob(env: Env, message: ExportPackMessage): Pr
         activityCount: activities.length,
       }),
     );
-  } catch (err) {
-    const messageText = err instanceof Error ? err.message : "Export failed";
+  } catch {
     await withTenant(db, tenant, (tx) =>
-      updateExportJob(tx, jobId, tenant, { status: "error", error: messageText }),
+      updateExportJob(tx, jobId, tenant, { status: "error", error: "Export failed" }),
     ).catch(() => undefined);
     try {
       await env.UPLOADS.delete(r2Key);
     } catch {
       /* ignore missing object */
     }
+  } finally {
+    await closeDb(db);
   }
 }

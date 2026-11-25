@@ -122,4 +122,38 @@ describe("account settings PATCH", () => {
     expect(res.status).toBe(400);
     expect(upsertUserSettings).not.toHaveBeenCalled();
   });
+
+  it("rejects invalid IANA timezones with 400 and allows clearing with null or empty string", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
+    const bad = await requestApp(
+      app,
+      "/api/account/settings",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timezone: "Mars/Olympus_Mons" }),
+      },
+      env,
+    );
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toEqual({ error: "Invalid IANA timezone" });
+    expect(upsertUserSettings).not.toHaveBeenCalled();
+
+    const cleared = await requestApp(
+      app,
+      "/api/account/settings",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timezone: "" }),
+      },
+      env,
+    );
+    expect(cleared.status).toBe(200);
+    expect(upsertUserSettings).toHaveBeenCalledWith(
+      expect.anything(),
+      "user-a",
+      expect.objectContaining({ timezone: null }),
+    );
+  });
 });

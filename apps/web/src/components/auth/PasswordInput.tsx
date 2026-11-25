@@ -32,7 +32,6 @@ export default function PasswordInput({
         className="absolute right-1 top-1/2 -translate-y-1/2 text-text-muted"
         aria-label={toggleLabel}
         title={toggleLabel}
-        tabIndex={-1}
       >
         {visible ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
       </Button>

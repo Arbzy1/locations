@@ -171,3 +171,50 @@ describe("recorded fixture corpus", () => {
     expect(JSON.stringify(result)).not.toMatch(/client_secret|access_token/i);
   });
 });
+
+describe("persistFuelFinder incremental sync and batching", () => {
+  it("batches UNNEST upserts, guards unknown station_id FK, and refreshes last_seen_at", async () => {
+    const { persistFuelFinder } = await import("@locations/brim/shared/fuel-finder/ingest.js");
+    const { PRICE_BATCH_UPSERT_SQL } = await import("@locations/brim/shared/fuel-finder/sql.js");
+    expect(PRICE_BATCH_UPSERT_SQL).toContain("WHERE EXISTS (SELECT 1 FROM brim_stations s WHERE s.id = i.station_id)");
+    expect(PRICE_BATCH_UPSERT_SQL).toContain("last_seen_at = GREATEST");
+    expect(PRICE_BATCH_UPSERT_SQL).toContain("is_stale = false");
+
+    // Incremental tick: pfs is empty (no metadata changes), price arrives for an aliased/unknown loser node_id
+    const incremental = normaliseFuelFinder({
+      pfs: [],
+      prices: [
+        {
+          node_id: "loser_node_not_in_stations",
+          fuel_prices: [{ price: 132.9, fuel_type: "E10", price_last_updated: "2026-08-30T10:00:00Z" }],
+        },
+        {
+          node_id: "ff_shell_crawley",
+          fuel_prices: [
+            { price: 131.9, fuel_type: "E10", price_last_updated: "2026-08-30T09:00:00Z" },
+            { price: 130.9, fuel_type: "E10", price_last_updated: "2026-08-30T11:00:00Z" },
+          ],
+        },
+      ],
+      nowIso: "2026-08-31T12:00:00Z",
+    });
+    // Duplicate (stationId, grade) in the same batch is collapsed to the newest observation
+    const shellPrices = incremental.prices.filter((p) => p.stationId === "ff_shell_crawley" && p.grade === "E10");
+    expect(shellPrices).toHaveLength(1);
+    expect(shellPrices[0]?.priceTenthsPence).toBe(1309);
+
+    const queries: Array<{ text: string; values: readonly unknown[] }> = [];
+    const summary = await persistFuelFinder(
+      async (text, values) => {
+        queries.push({ text, values });
+        return { rowCount: 1 };
+      },
+      incremental,
+      "2026-08-31T12:00:00Z",
+      "2026-08-31T12:00:00Z",
+    );
+    // 0 station queries + 1 batched price query + 1 stale sweep + 1 watermark upsert = 3 queries total
+    expect(queries).toHaveLength(3);
+    expect(summary.prices).toBe(2);
+  });
+});

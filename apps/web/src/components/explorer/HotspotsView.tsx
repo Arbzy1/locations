@@ -13,7 +13,18 @@ import { useSession } from '../../lib/auth';
 import MapView from './Map';
 import MobilePanel, { MobilePanelOpenButton, type MobilePanelHeight } from '../shell/MobilePanel';
 import HotspotDays from './HotspotDays';
-import { Flame, EyeOff, Eye, Star, SlidersHorizontal } from 'lucide-react';
+import { Flame, EyeOff, Eye, Star, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../ui/alert-dialog';
 import { cn } from '../../lib/utils';
 import { Link, useSearchParams } from 'react-router-dom';
 import { placePath } from '../../lib/nav/paths';
@@ -98,8 +109,10 @@ function AreaDetails({
   const [label, setLabel] = useState(area.label);
   const [tagDraft, setTagDraft] = useState('');
   const [saving, setSaving] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   // The hotspot's own place, not its 0.5 degree grid square (which covers a whole town).
   const placeKey = area.placeKey || `${area.lat.toFixed(5)},${area.lon.toFixed(5)}`;
+  const canDeleteAll = placeKey.startsWith('g:') || placeKey.startsWith('c:');
   const favourite = Boolean(meta?.favourite);
   const tags = meta?.tags ?? [];
   const color = meta?.color ?? null;
@@ -108,6 +121,23 @@ function AreaDetails({
     setSaving(true);
     await patchPlace({ placeKey, ...body });
     setSaving(false);
+    onPatched();
+  };
+
+  const deleteAllHere = async () => {
+    setSaving(true);
+    const res = await fetch(`/api/places/${encodeURIComponent(placeKey)}/data`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    setSaving(false);
+    setConfirmDeleteOpen(false);
+    if (!res.ok) {
+      toast.error('Could not delete this place.');
+      return;
+    }
+    const body = (await res.json()) as { visitCount: number; activityCount: number };
+    toast.success(`Deleted ${body.visitCount} stays and ${body.activityCount} journeys.`);
     onPatched();
   };
 
@@ -263,24 +293,62 @@ function AreaDetails({
               </Button>
             </div>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-2"
-            title="Hide this place from Hotspots, search, and Insights"
-            disabled={saving}
-            onClick={() => void run({ hidden: true, label: label.trim() || area.label })}
-          >
-            <EyeOff size={14} />
-            Hide this place
-          </Button>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              title="Hide this place from Hotspots, search, and Insights"
+              disabled={saving}
+              onClick={() => void run({ hidden: true, label: label.trim() || area.label })}
+            >
+              <EyeOff size={14} />
+              Hide this place
+            </Button>
+            {canDeleteAll && (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                title="Delete every stay here, journeys to and from it, and nearby GPS points"
+                disabled={saving}
+                onClick={() => setConfirmDeleteOpen(true)}
+              >
+                <Trash2 size={14} />
+                Delete everything here
+              </Button>
+            )}
+          </div>
+          <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+            <AlertDialogContent title="Delete everything at this place">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete everything at {area.label}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This removes every stay here, journeys that start or end here, and GPS points
+                  within 200 m of it. Re-importing your Google export brings it back.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel title="Keep this place">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  variant="destructive"
+                  disabled={saving}
+                  title="Delete everything at this place"
+                  onClick={() => void deleteAllHere()}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </>
       )}
       <p className="mt-2 text-[11px] text-text-muted">Selected: map zooms to this spot</p>
     </div>
   );
 }
+
+const EMPTY_LABELS: PlaceLabelMeta[] = [];
 
 export default function HotspotsView() {
   const { data: session } = useSession();
@@ -349,7 +417,7 @@ export default function HotspotsView() {
   }, [filters.lat, filters.lon]);
 
   const bumpSize = useCallback(() => setSizeSignal((n) => n + 1), []);
-  const labelRows: PlaceLabelMeta[] = labels ?? [];
+  const labelRows: PlaceLabelMeta[] = labels ?? EMPTY_LABELS;
 
   const allAreas = useMemo(
     () => (heatmapPoints ?? []).map((p) => toArea(p)),

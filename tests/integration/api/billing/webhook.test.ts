@@ -4,12 +4,14 @@ import { parseResendCall, stripeSubscription, stubResendFetch } from "@tests/hel
 
 const {
   constructEventAsync,
+  hasStripeEvent,
   recordStripeEvent,
   syncSubscriptionFromStripe,
   tenantForStripeCustomer,
   retrieveSubscription,
 } = vi.hoisted(() => ({
   constructEventAsync: vi.fn(),
+  hasStripeEvent: vi.fn(),
   recordStripeEvent: vi.fn(),
   syncSubscriptionFromStripe: vi.fn(),
   tenantForStripeCustomer: vi.fn(),
@@ -45,6 +47,7 @@ vi.mock("@locations/api/billing", () => ({
         }
       : null,
   priceIdForInterval: () => "price_x",
+  hasStripeEvent,
   recordStripeEvent,
   syncSubscriptionFromStripe,
   tenantForStripeCustomer,
@@ -77,10 +80,12 @@ async function postWebhook(
 describe("stripe webhook", () => {
   beforeEach(() => {
     constructEventAsync.mockReset();
+    hasStripeEvent.mockReset();
     recordStripeEvent.mockReset();
     syncSubscriptionFromStripe.mockReset();
     retrieveSubscription.mockReset();
     retrieveSubscription.mockResolvedValue(stripeSubscription({ tenant: "u1" }));
+    hasStripeEvent.mockResolvedValue(false);
     recordStripeEvent.mockResolvedValue(true);
     vi.mocked(emailForTenant).mockResolvedValue({ email: "a@example.com", role: "user" });
   });
@@ -111,8 +116,8 @@ describe("stripe webhook", () => {
     expect(res.status).toBe(400);
   });
 
-  it("is idempotent on duplicate event ids", async () => {
-    recordStripeEvent.mockResolvedValue(false);
+  it("is idempotent on duplicate event ids before calling Stripe", async () => {
+    hasStripeEvent.mockResolvedValue(true);
     const res = await postWebhook({
       id: "evt_1",
       type: "customer.subscription.updated",
@@ -120,7 +125,29 @@ describe("stripe webhook", () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ duplicate: true });
+    expect(retrieveSubscription).not.toHaveBeenCalled();
     expect(syncSubscriptionFromStripe).not.toHaveBeenCalled();
+    expect(recordStripeEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not record stripe_events when sync fails, so Stripe retries succeed", async () => {
+    syncSubscriptionFromStripe.mockRejectedValueOnce(new Error("neon transient error"));
+    const failed = await postWebhook({
+      id: "evt_retry",
+      type: "customer.subscription.updated",
+      data: { object: { id: "sub_1", metadata: { tenant: "u1" } } },
+    });
+    expect(failed.status).toBe(500);
+    expect(recordStripeEvent).not.toHaveBeenCalled();
+
+    syncSubscriptionFromStripe.mockResolvedValueOnce(undefined);
+    const retried = await postWebhook({
+      id: "evt_retry",
+      type: "customer.subscription.updated",
+      data: { object: { id: "sub_1", metadata: { tenant: "u1" } } },
+    });
+    expect(retried.status).toBe(200);
+    expect(recordStripeEvent).toHaveBeenCalledWith(expect.anything(), "evt_retry", "customer.subscription.updated");
   });
 
   it("grants access after checkout.session.completed", async () => {

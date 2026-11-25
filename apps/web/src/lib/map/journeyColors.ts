@@ -18,7 +18,7 @@ export function modeColorVar(mode: string): string {
 }
 
 /** A literal colour for canvas, MapLibre paint or SVG attributes, resolving `var(--token)`. */
-export function resolveCssColor(value: string, fallback = '#58a6ff'): string {
+export function resolveCssColor(value: string, fallback = 'rgb(76, 154, 255)'): string {
   const token = /^var\((--[\w-]+)\)$/.exec(value.trim());
   if (!token || typeof document === 'undefined') return value;
   return getComputedStyle(document.documentElement).getPropertyValue(token[1]).trim() || fallback;

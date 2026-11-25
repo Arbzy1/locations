@@ -102,7 +102,12 @@ export class GoogleRoutesProvider implements RoutingProvider {
     if (advanced) {
       body.routingPreference = "TRAFFIC_AWARE_OPTIMAL";
       body.extraComputations = ["FUEL_CONSUMPTION", "TOLLS"];
-      if (req.departureTime) body.departureTime = req.departureTime;
+      if (req.departureTime) {
+        const departMs = Date.parse(req.departureTime);
+        if (Number.isFinite(departMs) && departMs > Date.now() + 60_000) {
+          body.departureTime = new Date(departMs).toISOString();
+        }
+      }
       if (req.emissionType) {
         body.routeModifiers = { vehicleInfo: { emissionType: req.emissionType } };
       }
@@ -115,6 +120,7 @@ export class GoogleRoutesProvider implements RoutingProvider {
         "X-Goog-FieldMask": advanced ? ADVANCED_MASK : BASIC_MASK,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8_000),
     });
     if (res.status === 401 || res.status === 403) throw new RoutingError("auth", "Google auth failed");
     if (res.status === 429) throw new RoutingError("quota", "Google quota exceeded");

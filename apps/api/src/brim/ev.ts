@@ -141,7 +141,9 @@ export async function resolveForecastTemp(input: {
   if (input.fixtureMode) return FIXTURE_FORECAST_TEMP_C;
   const fetchImpl = input.fetchImpl ?? fetch;
   try {
-    const res = await fetchImpl(openMeteoForecastUrl(input.origin.lat, input.origin.lng, input.atIso));
+    const res = await fetchImpl(openMeteoForecastUrl(input.origin.lat, input.origin.lng, input.atIso), {
+      signal: AbortSignal.timeout(8_000),
+    });
     if (!res.ok) return undefined;
     const json: unknown = await res.json();
     return pickHourlyTemperature(json, input.atIso);

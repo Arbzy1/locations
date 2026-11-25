@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "../../lib/map/maplibreWorker";
@@ -11,7 +11,7 @@ export type MapPin = { lat: number; lng: number; label?: string };
 export type RouteMapOverlays = {
   stations?: Array<{ id: string; lat: number; lng: number; label?: string }>;
   selectedStationId?: string;
-  zones?: Array<{ id: string; name: string; geojson: unknown }>;
+  zones?: Array<{ id: string; name: string; kind?: string; geojson: unknown }>;
 };
 
 export type RouteLine = { id: string; encodedPolyline: string };
@@ -44,31 +44,51 @@ type LineCollection = {
   }>;
 };
 
+type GeoJsonData = Parameters<maplibregl.GeoJSONSource["setData"]>[0];
+
+type ZoneCollection = {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    properties: { id: string; name: string; isToll: number };
+    geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
+  }>;
+};
+
 const emptyCollection: LineCollection = { type: "FeatureCollection", features: [] };
+const emptyZoneCollection: ZoneCollection = { type: "FeatureCollection", features: [] };
 
 function stationEl(selected: boolean, label: string): HTMLDivElement {
   const el = document.createElement("div");
-  el.className = selected
-    ? "h-2.5 w-2.5 cursor-pointer rounded-lg border border-bg bg-walk"
-    : "h-2 w-2 cursor-pointer rounded-lg border border-bg bg-background";
+  el.className = "flex h-11 w-11 cursor-pointer items-center justify-center bg-transparent";
   el.setAttribute("role", "button");
   el.setAttribute("aria-label", label);
+  el.title = label;
+  const dot = document.createElement("span");
+  dot.className = selected
+    ? "h-3.5 w-3.5 rounded-lg border border-bg bg-walk shadow-sm"
+    : "h-2.5 w-2.5 rounded-lg border border-bg bg-surface shadow-sm";
+  el.appendChild(dot);
   return el;
 }
 
-function markerEl(kind: "origin" | "destination" | "via"): HTMLDivElement {
+function markerEl(kind: "origin" | "destination" | "via", labelText?: string): HTMLDivElement {
+  const roleLabel =
+    kind === "origin" ? "Origin" : kind === "destination" ? "Destination" : "Stop";
+  const fullLabel = labelText ? `${roleLabel}: ${labelText}` : roleLabel;
   const el = document.createElement("div");
-  el.className =
-    kind === "origin"
-      ? "h-3 w-3 rounded-lg border border-bg bg-text"
-      : kind === "destination"
-        ? "h-3 w-3 rounded-lg border border-bg bg-walk"
-        : "h-3 w-3 rounded-lg border-2 border-walk bg-transparent";
+  el.className = "flex h-11 w-11 cursor-grab items-center justify-center bg-transparent";
   el.setAttribute("role", "img");
-  el.setAttribute(
-    "aria-label",
-    kind === "origin" ? "Origin" : kind === "destination" ? "Destination" : "Stop",
-  );
+  el.setAttribute("aria-label", fullLabel);
+  el.title = fullLabel;
+  const dot = document.createElement("span");
+  dot.className =
+    kind === "origin"
+      ? "h-3.5 w-3.5 rounded-lg border border-bg bg-text shadow-sm"
+      : kind === "destination"
+        ? "h-3.5 w-3.5 rounded-lg border border-bg bg-walk shadow-sm"
+        : "h-3.5 w-3.5 rounded-lg border-2 border-walk bg-surface shadow-sm";
+  el.appendChild(dot);
   return el;
 }
 
@@ -77,24 +97,51 @@ function whenStyleReady(map: maplibregl.Map, fn: () => void): void {
   else map.once("style.load", fn);
 }
 
-/** Route colours follow the live theme tokens (Leaflet/MapLibre paint cannot read var()). */
+/** Route and zone colours follow live CSS theme tokens (MapLibre paint cannot evaluate var()). */
 function routeColours() {
   const css = getComputedStyle(document.documentElement);
-  const read = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
-  return { alt: read("--text-muted", "#8b949e"), selected: read("--accent", "#58a6ff") };
+  const read = (name: string) => css.getPropertyValue(name).trim() || "rgba(128, 128, 128, 0.8)";
+  return {
+    alt: read("--text-muted"),
+    selected: read("--accent"),
+    zone: read("--visit"),
+    toll: read("--train"),
+  };
 }
 
 function ensureRouteLayers(map: maplibregl.Map): void {
-  if (map.getSource("routes")) return;
   const colours = routeColours();
+  if (!map.getSource("zones")) {
+    map.addSource("zones", { type: "geojson", data: emptyZoneCollection as unknown as GeoJsonData });
+    map.addLayer({
+      id: "zones-fill",
+      type: "fill",
+      source: "zones",
+      paint: {
+        "fill-color": ["case", ["==", ["get", "isToll"], 1], colours.toll, colours.zone],
+        "fill-opacity": 0.12,
+      },
+    });
+    map.addLayer({
+      id: "zones-line",
+      type: "line",
+      source: "zones",
+      paint: {
+        "line-color": ["case", ["==", ["get", "isToll"], 1], colours.toll, colours.zone],
+        "line-width": 1.5,
+        "line-opacity": 0.6,
+      },
+    });
+  }
+  if (map.getSource("routes")) return;
   map.addSource("routes", { type: "geojson", data: emptyCollection });
   map.addLayer({
     id: "routes-hit",
     type: "line",
     source: "routes",
     paint: {
-      "line-color": "#000000",
-      "line-width": 12,
+      "line-color": "rgba(0, 0, 0, 0)",
+      "line-width": 16,
       "line-opacity": 0,
     },
   });
@@ -119,6 +166,31 @@ function ensureRouteLayers(map: maplibregl.Map): void {
       "line-width": 4,
     },
   });
+}
+
+function toZoneFeatureCollection(
+  zones: Array<{ id: string; name: string; kind?: string; geojson: unknown }> | undefined,
+): ZoneCollection {
+  if (!zones || zones.length === 0) return emptyZoneCollection;
+  const features: ZoneCollection["features"] = [];
+  for (const z of zones) {
+    if (!z.geojson || typeof z.geojson !== "object") continue;
+    const g = z.geojson as { type?: string; coordinates?: unknown };
+    if (g.type !== "Polygon" && g.type !== "MultiPolygon") continue;
+    features.push({
+      type: "Feature",
+      properties: {
+        id: z.id,
+        name: z.name,
+        isToll: z.kind === "toll" ? 1 : 0,
+      },
+      geometry: {
+        type: g.type,
+        coordinates: g.coordinates,
+      },
+    });
+  }
+  return { type: "FeatureCollection", features };
 }
 
 export default function RouteMap(props: RouteMapProps) {
@@ -147,6 +219,7 @@ export default function RouteMap(props: RouteMapProps) {
   const styleRef = useRef(style);
   const styleKeyRef = useRef(styleKey);
   const routeDataRef = useRef<LineCollection>(emptyCollection);
+  const zoneDataRef = useRef<ZoneCollection>(emptyZoneCollection);
   const rootRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const originMarker = useRef<maplibregl.Marker | null>(null);
@@ -161,13 +234,15 @@ export default function RouteMap(props: RouteMapProps) {
   const selectRef = useRef(onSelectAlternative);
   const stationClickRef = useRef(onSelectStation);
   const viewRef = useRef(onViewChange);
-  clickRef.current = onMapClick;
-  originDragRef.current = onOriginDrag;
-  destDragRef.current = onDestinationDrag;
-  viaDragRef.current = onWaypointDrag;
-  selectRef.current = onSelectAlternative;
-  stationClickRef.current = onSelectStation;
-  viewRef.current = onViewChange;
+  useLayoutEffect(() => {
+    clickRef.current = onMapClick;
+    originDragRef.current = onOriginDrag;
+    destDragRef.current = onDestinationDrag;
+    viaDragRef.current = onWaypointDrag;
+    selectRef.current = onSelectAlternative;
+    stationClickRef.current = onSelectStation;
+    viewRef.current = onViewChange;
+  });
 
   useEffect(() => {
     const node = rootRef.current;
@@ -192,6 +267,10 @@ export default function RouteMap(props: RouteMapProps) {
     map.on("load", () => {
       resize();
       ensureRouteLayers(map);
+      (map.getSource("zones") as maplibregl.GeoJSONSource | undefined)?.setData(
+        zoneDataRef.current as unknown as GeoJsonData,
+      );
+      (map.getSource("routes") as maplibregl.GeoJSONSource | undefined)?.setData(routeDataRef.current);
       const c = map.getCenter();
       viewRef.current?.({ lat: c.lat, lng: c.lng });
     });
@@ -246,9 +325,15 @@ export default function RouteMap(props: RouteMapProps) {
       }
       if (current) {
         current.setLngLat([pin.lng, pin.lat]);
+        const el = current.getElement();
+        const roleLabel =
+          slot === "origin" ? "Origin" : slot === "destination" ? "Destination" : "Stop";
+        const fullLabel = pin.label ? `${roleLabel}: ${pin.label}` : roleLabel;
+        el.title = fullLabel;
+        el.setAttribute("aria-label", fullLabel);
         return current;
       }
-      const marker = new maplibregl.Marker({ element: markerEl(slot), draggable: true })
+      const marker = new maplibregl.Marker({ element: markerEl(slot, pin.label), draggable: true })
         .setLngLat([pin.lng, pin.lat])
         .addTo(map);
       marker.on("dragstart", () => {
@@ -332,7 +417,13 @@ export default function RouteMap(props: RouteMapProps) {
     if (!map) return;
     const stations = overlays?.stations ?? [];
     const selected = overlays?.selectedStationId;
+    const zoneCollection = toZoneFeatureCollection(overlays?.zones);
+    zoneDataRef.current = zoneCollection;
     const apply = () => {
+      ensureRouteLayers(map);
+      const zoneSource = map.getSource("zones") as maplibregl.GeoJSONSource | undefined;
+      zoneSource?.setData(zoneCollection as unknown as GeoJsonData);
+
       for (const marker of stationMarkers.current) marker.remove();
       stationMarkers.current = stations.map((station) => {
         const el = stationEl(station.id === selected, station.label ?? "Forecourt");
@@ -354,6 +445,9 @@ export default function RouteMap(props: RouteMapProps) {
     map.setStyle(style);
     map.once("style.load", () => {
       ensureRouteLayers(map);
+      (map.getSource("zones") as maplibregl.GeoJSONSource | undefined)?.setData(
+        zoneDataRef.current as unknown as GeoJsonData,
+      );
       (map.getSource("routes") as maplibregl.GeoJSONSource | undefined)?.setData(routeDataRef.current);
     });
   }, [style, styleKey]);
@@ -362,10 +456,25 @@ export default function RouteMap(props: RouteMapProps) {
     const map = mapRef.current;
     if (!map) return;
     const apply = () => {
-      if (!map.getLayer("routes-sel")) return;
       const colours = routeColours();
-      map.setPaintProperty("routes-alt", "line-color", colours.alt);
-      map.setPaintProperty("routes-sel", "line-color", colours.selected);
+      if (map.getLayer("routes-sel")) {
+        map.setPaintProperty("routes-alt", "line-color", colours.alt);
+        map.setPaintProperty("routes-sel", "line-color", colours.selected);
+      }
+      if (map.getLayer("zones-fill")) {
+        map.setPaintProperty("zones-fill", "fill-color", [
+          "case",
+          ["==", ["get", "isToll"], 1],
+          colours.toll,
+          colours.zone,
+        ]);
+        map.setPaintProperty("zones-line", "line-color", [
+          "case",
+          ["==", ["get", "isToll"], 1],
+          colours.toll,
+          colours.zone,
+        ]);
+      }
     };
     whenStyleReady(map, apply);
   }, [theme]);

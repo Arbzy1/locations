@@ -33,6 +33,7 @@ export default function ModeDetectionChip({ activity: a, editable }: { activity:
       return;
     }
     void queryClient.invalidateQueries({ queryKey: ['day'] });
+    void queryClient.invalidateQueries({ queryKey: ['routes'] });
     void queryClient.invalidateQueries({ queryKey: ['aggregates-status'] });
     toast.success(done);
   };

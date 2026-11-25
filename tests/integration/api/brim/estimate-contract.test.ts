@@ -136,4 +136,108 @@ describe('estimate contracts', () => {
     expect(json.reasons.some((r) => r.includes('150 g/kWh'))).toBe(true);
     expect(json.cost.totalPence.point).toBeGreaterThan(0);
   });
+
+  it('supports roundTrip, passengers, fuelGrade, and full alternatives breakdown', async () => {
+    const oneWay = await estimate({
+      origin: 'Crawley',
+      destination: 'London',
+      propulsion: 'petrol',
+      departsAt: '2026-08-14T08:00:00Z',
+    });
+    const roundTrip = await estimate({
+      origin: 'Crawley',
+      destination: 'London',
+      propulsion: 'petrol',
+      fuelGrade: 'E5',
+      roundTrip: true,
+      passengers: 2,
+      departsAt: '2026-08-14T08:00:00Z',
+    });
+    expect(oneWay.status).toBe(200);
+    expect(roundTrip.status).toBe(200);
+    const a = (await oneWay.json()) as {
+      distanceMeters: number;
+      durationSeconds: number;
+    };
+    const b = (await roundTrip.json()) as {
+      distanceMeters: number;
+      durationSeconds: number;
+      roundTrip?: boolean;
+      hmrc: { passengerPence?: number; approvedPence: number };
+      alternatives: Array<{
+        id: string;
+        totalPence: { point: number };
+        energyPence: { point: number };
+        chargesPence: number;
+        charges: unknown[];
+        co2Kg?: number;
+      }>;
+    };
+    expect(b.roundTrip).toBe(true);
+    expect(b.distanceMeters).toBe(a.distanceMeters * 2);
+    expect(b.durationSeconds).toBe(a.durationSeconds * 2);
+    expect(b.hmrc.passengerPence).toBeGreaterThan(0);
+    expect(b.alternatives.length).toBeGreaterThan(0);
+    expect(b.alternatives[0]?.totalPence.point).toBe(
+      (b.alternatives[0]?.energyPence.point ?? 0) + (b.alternatives[0]?.chargesPence ?? 0),
+    );
+  });
+
+  it('forwards vehicle options on from-maps-url, warns on walking links, and blocks SSRF short-URL redirects', async () => {
+    const { expandMapsShortUrl } = await import('@locations/api/brim/estimate');
+    const blocked = await expandMapsShortUrl(
+      testEnv({ BRIM_FIXTURES: '0' }),
+      'https://evil.example.com/short',
+      async () => new Response(null, { status: 302, headers: { Location: 'http://169.254.169.254/latest' } }),
+    );
+    expect(blocked).toBeNull();
+
+    const blockedHop = await expandMapsShortUrl(
+      testEnv({ BRIM_FIXTURES: '0' }),
+      'https://maps.app.goo.gl/abc123',
+      async () => new Response(null, { status: 302, headers: { Location: 'https://169.254.169.254/latest' } }),
+    );
+    expect(blockedHop).toBeNull();
+
+    const allowedHop = await expandMapsShortUrl(
+      testEnv({ BRIM_FIXTURES: '0' }),
+      'https://maps.app.goo.gl/abc123',
+      async () =>
+        new Response(null, {
+          status: 302,
+          headers: { Location: 'https://www.google.com/maps/dir/Crawley/London' },
+        }),
+    );
+    expect(allowedHop).toBe('https://www.google.com/maps/dir/Crawley/London');
+
+    const mapsRes = await app.request(
+      '/api/brim/estimate/from-maps-url',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: 'https://www.google.com/maps/dir/?api=1&origin=Crawley&destination=London&travelmode=walking',
+          propulsion: 'bev',
+          vehicleInline: {
+            kind: 'car',
+            propulsion: 'bev',
+            userEnteredConsumption: 4,
+            userEnteredUnit: 'mi/kWh',
+            batteryKwhUsable: 60,
+            startChargePercent: 80,
+          },
+        }),
+      },
+      fixtures,
+    );
+    expect(mapsRes.status).toBe(200);
+    const mapsBody = (await mapsRes.json()) as {
+      consumption: { tier: number };
+      warnings: Array<{ code: string; severity: string }>;
+    };
+    expect(mapsBody.consumption.tier).toBe(1);
+    expect(
+      mapsBody.warnings.some((w) => w.code === 'non-driving-maps-url' && w.severity === 'info'),
+    ).toBe(true);
+  });
 });

@@ -18,7 +18,7 @@ const STEPS = [
   {
     path: '/day',
     title: 'Day View',
-    body: 'One imported day: stays, journeys, and playback along cached routes.',
+    body: 'One imported day: stays, journeys, and playback along cached road and rail routes.',
   },
   {
     path: '/routes',
@@ -26,36 +26,71 @@ const STEPS = [
     body: 'Every journey line for a month, a year, or any range, coloured by how you travelled.',
   },
   {
+    path: '/trips',
+    title: 'Trips',
+    body: 'Day trips away from your home area and multi-day journeys grouped automatically.',
+  },
+  {
+    path: '/places',
+    title: 'Places',
+    body: 'Browse every visited place, inspect visit history and arrival hours, or filter by settlement.',
+  },
+  {
     path: '/insights',
     title: 'Insights',
-    body: 'Totals and charts for the import. With your own account you import Takeout from Settings.',
+    body: 'Totals, mode splits, streaks, and year-in-review summaries. With your own account you import Takeout from Settings.',
+  },
+  {
+    path: '/journey-cost',
+    title: 'Journey Cost',
+    body: 'Price any UK trip for petrol, diesel, hybrid, or EV charging, including clean-air zones and road tolls.',
   },
 ] as const;
 
-export default function DemoTour() {
+function shouldAutoOpenTour(): boolean {
+  try {
+    return preferenceStorage.getItem(STORAGE_KEY) !== 'done';
+  } catch {
+    return true;
+  }
+}
+
+export default function DemoTour({ replaySignal = 0 }: { replaySignal?: number }) {
   const { data: session } = useSession();
   const { data: config } = usePublicConfig();
   const navigate = useNavigate();
   const reduce = useReducedMotion();
   const role = (session?.user as { role?: string } | undefined)?.role;
-  const enabled = config?.flags?.demoTour !== false && role === 'demo';
+  const autoEnabled = config?.flags?.demoTour !== false && role === 'demo';
+  const canShow = role === 'demo';
+
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
+  const [autoChecked, setAutoChecked] = useState(false);
+  const [seenReplay, setSeenReplay] = useState(replaySignal);
+
+  if (autoEnabled && !autoChecked) {
+    setAutoChecked(true);
+    if (shouldAutoOpenTour()) {
+      setStep(0);
+      setOpen(true);
+    }
+  }
+
+  if (canShow && replaySignal > 0 && replaySignal !== seenReplay) {
+    setSeenReplay(replaySignal);
+    setStep(0);
+    setOpen(true);
+  }
 
   useEffect(() => {
-    if (!enabled) return;
-    try {
-      if (preferenceStorage.getItem(STORAGE_KEY) === 'done') return;
-    } catch {
-      /* ignore quota */
-    }
-    setOpen(true);
-    setStep(0);
-  }, [enabled]);
+    if (!canShow || replaySignal <= 0) return;
+    void navigate(STEPS[0].path);
+  }, [canShow, replaySignal, navigate]);
 
-  if (!enabled || !open) return null;
+  if (!canShow || !open) return null;
 
-  const current = STEPS[step];
+  const current = STEPS[step] ?? STEPS[0];
   const last = step === STEPS.length - 1;
 
   const finish = () => {
@@ -74,14 +109,14 @@ export default function DemoTour() {
       return;
     }
     setStep(next);
-    navigate(target.path);
+    void navigate(target.path);
   };
 
   return (
     <AnimatePresence>
       <motion.div
         className="fixed inset-0 z-[2400] flex items-end justify-center bg-bg/60 p-4 safe-pb lg:items-center"
-        initial={reduce ? { opacity: 0 } : { opacity: 0 }}
+        initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={reduce ? { duration: 0.08 } : { duration: 0.4 }}

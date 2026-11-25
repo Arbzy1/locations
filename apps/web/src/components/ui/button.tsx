@@ -37,22 +37,33 @@ export type ButtonProps = Omit<
   VariantProps<typeof buttonVariants> & { asChild?: boolean };
 
 const MotionButton = motion.create("button");
+const MotionSlot = motion.create(Slot);
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild, title, ...props }, ref) => {
     const reduce = useReducedMotion();
     const motionProps = reduce ? reducedInteractiveMotion : interactiveMotion;
+    const classes = cn(buttonVariants({ variant, size }), className);
     if (asChild) {
+      if (props.disabled) {
+        return <Slot ref={ref} className={classes} title={title} {...props} />;
+      }
       return (
-        <Slot className={cn(buttonVariants({ variant, size }), className)} title={title} {...props} />
+        <MotionSlot
+          ref={ref}
+          className={classes}
+          title={title}
+          {...motionProps}
+          {...(props as React.ComponentPropsWithoutRef<typeof MotionSlot>)}
+        />
       );
     }
     return (
       <MotionButton
         ref={ref}
         title={title}
-        className={cn(buttonVariants({ variant, size }), className)}
-        {...motionProps}
+        className={classes}
+        {...(props.disabled ? {} : motionProps)}
         {...props}
       />
     );

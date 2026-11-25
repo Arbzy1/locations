@@ -52,6 +52,10 @@ export function complianceForZone(input: {
     return { verdict: "not_charged", euro, needsEuro: false };
   }
 
+  if (zone.id === "oxford-zez") {
+    return { verdict: "charged", euro, needsEuro: false };
+  }
+
   if (zone.schemeKind === "caz" && zone.cazClass === "C" && kind !== "van") {
     return { verdict: "not_charged", euro, needsEuro: false };
   }

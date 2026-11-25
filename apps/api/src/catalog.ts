@@ -8,6 +8,7 @@ import {
   namedTrips,
   placeLabels,
   placeCache,
+  userSettings,
   visits,
   dataSources,
   and,
@@ -193,9 +194,102 @@ function labelChapter(chapter: unknown, names: Map<string, string>): unknown {
   };
 }
 
+function settlementFromCacheData(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
+  const rec = data as Record<string, unknown>;
+  const raw = (rec.raw && typeof rec.raw === "object" ? rec.raw : rec) as Record<string, unknown>;
+  const addr = (raw.address ?? rec.address) as Record<string, unknown> | undefined;
+  if (!addr || typeof addr !== "object") return "";
+  for (const field of ["city", "town", "village", "suburb", "borough", "municipality", "county", "state"]) {
+    const val = addr[field];
+    if (typeof val === "string" && val.trim()) return val.trim();
+  }
+  return "";
+}
+
+/**
+ * Resolve human place/settlement names for both real place keys (`g:`/`c:`) and
+ * region cluster strings (such as `51.5°N 0.0°W`) used in moving/delta/lapsed caches.
+ */
+async function labelsForClusterRefs(
+  db: Db,
+  tenant: TenantId,
+  refs: string[],
+): Promise<{ names: Map<string, string>; placeKeys: Map<string, string> }> {
+  const unique = [...new Set(refs.filter((r) => typeof r === "string" && r.trim().length > 0))];
+  const names = new Map<string, string>();
+  const placeKeys = new Map<string, string>();
+  if (!unique.length) return { names, placeKeys };
+
+  const realKeys = unique.filter((k) => isRealPlaceKey(k));
+  const regionRefs = unique.filter((k) => !isRealPlaceKey(k));
+
+  if (realKeys.length) {
+    const realNames = await labelsForPlaceKeys(db, tenant, realKeys);
+    for (const [k, v] of realNames) names.set(k, v);
+  }
+
+  if (regionRefs.length) {
+    const directLabels = await db
+      .select({ placeKey: placeLabels.placeKey, label: placeLabels.label })
+      .from(placeLabels)
+      .where(and(eq(placeLabels.tenant, tenant), inArray(placeLabels.placeKey, regionRefs)));
+    for (const l of directLabels) {
+      if (l.label.trim()) names.set(l.placeKey, l.label.trim());
+    }
+
+    const regionRows = await db
+      .select({
+        cluster: visits.cluster,
+        topPlaceKey: sql<string | null>`mode() within group (order by ${visits.placeKey}) filter (where ${visits.placeKey} is not null)`,
+        repLat: sql<number>`(array_agg(${visits.lat} order by ${visits.start} desc))[1]`,
+        repLon: sql<number>`(array_agg(${visits.lon} order by ${visits.start} desc))[1]`,
+        googleName: sql<string | null>`(array_agg(${visits.googleName} order by ${visits.start} desc) filter (where ${visits.googleName} is not null))[1]`,
+      })
+      .from(visits)
+      .where(and(eq(visits.tenant, tenant), inArray(visits.cluster, regionRefs)))
+      .groupBy(visits.cluster);
+
+    const topKeys = regionRows
+      .map((r) => r.topPlaceKey)
+      .filter((k): k is string => Boolean(k && isRealPlaceKey(k)));
+    const topNames = topKeys.length ? await labelsForPlaceKeys(db, tenant, topKeys) : new Map<string, string>();
+
+    const coordIds = [
+      ...new Set(regionRows.map((r) => makeCoordPlaceKey(Number(r.repLat), Number(r.repLon)))),
+    ];
+    const cached = new Map<string, unknown>();
+    for (let i = 0; i < coordIds.length; i += 500) {
+      const rows = await db
+        .select({ placeId: placeCache.placeId, data: placeCache.data })
+        .from(placeCache)
+        .where(inArray(placeCache.placeId, coordIds.slice(i, i + 500)));
+      for (const row of rows) cached.set(row.placeId, row.data);
+    }
+
+    for (const r of regionRows) {
+      if (r.topPlaceKey && isRealPlaceKey(r.topPlaceKey)) {
+        placeKeys.set(r.cluster, r.topPlaceKey);
+      }
+      if (names.has(r.cluster)) continue;
+      const lat = Number(r.repLat);
+      const lon = Number(r.repLon);
+      const cacheHit = cached.get(makeCoordPlaceKey(lat, lon));
+      const settlement = cacheHit ? settlementFromCacheData(cacheHit) : "";
+      const titled = cacheHit ? titleFromPlaceCache(lat, lon, cacheHit).name : "";
+      const topLabel = r.topPlaceKey ? topNames.get(r.topPlaceKey) : undefined;
+      const cleanTop = topLabel && !topLabel.startsWith("Near ") ? topLabel : "";
+      const resolved = settlement || cleanTop || r.googleName || titled;
+      if (resolved) names.set(r.cluster, resolved);
+    }
+  }
+
+  return { names, placeKeys };
+}
+
 /**
  * Add a display name beside each place key in the Insights payloads that name a
- * place. The key stays, so hiding and links still use it. Region grids are unchanged.
+ * place. The key stays, so hiding and links still use it.
  */
 export async function attachPlaceLabels(
   db: Db,
@@ -203,6 +297,56 @@ export async function attachPlaceLabels(
   key: string,
   data: unknown,
 ): Promise<unknown> {
+  if (key === "moving" && Array.isArray(data)) {
+    const refs = data
+      .map((row) => (row && typeof row === "object" ? (row as { cluster?: string }).cluster : undefined))
+      .filter((c): c is string => typeof c === "string" && c.length > 0);
+    const { names, placeKeys } = await labelsForClusterRefs(db, tenant, refs);
+    return data.map((row) => {
+      if (!row || typeof row !== "object") return row;
+      const item = row as { cluster?: string };
+      const cluster = item.cluster ?? "";
+      const pk = placeKeys.get(cluster);
+      return {
+        ...item,
+        label: names.get(cluster) ?? cluster,
+        ...(pk ? { placeKey: pk } : {}),
+      };
+    });
+  }
+  if (key === "place-deltas" && Array.isArray(data)) {
+    const refs: string[] = [];
+    for (const row of data) {
+      if (!row || typeof row !== "object") continue;
+      const item = row as { newClusters?: string[]; returnedClusters?: string[] };
+      for (const c of item.newClusters ?? []) if (typeof c === "string") refs.push(c);
+      for (const c of item.returnedClusters ?? []) if (typeof c === "string") refs.push(c);
+    }
+    const { names } = await labelsForClusterRefs(db, tenant, refs);
+    return data.map((row) => {
+      if (!row || typeof row !== "object") return row;
+      const item = row as { newClusters?: string[]; returnedClusters?: string[] };
+      const labels: Record<string, string> = {};
+      for (const c of [...(item.newClusters ?? []), ...(item.returnedClusters ?? [])]) {
+        const resolved = names.get(c);
+        if (resolved) labels[c] = resolved;
+      }
+      return { ...item, labels };
+    });
+  }
+  if (key === "lapsed-places" && Array.isArray(data)) {
+    const refs = data
+      .map((row) => (row && typeof row === "object" ? (row as { cluster?: string }).cluster : undefined))
+      .filter((c): c is string => typeof c === "string" && c.length > 0);
+    const { names } = await labelsForClusterRefs(db, tenant, refs);
+    return data.map((row) => {
+      if (!row || typeof row !== "object") return row;
+      const item = row as { cluster?: string };
+      const cluster = item.cluster ?? "";
+      return { ...item, label: names.get(cluster) ?? cluster };
+    });
+  }
+
   const keys: string[] = [];
   if (key === "areas" && Array.isArray(data)) {
     for (const row of data) {
@@ -376,12 +520,53 @@ function placeFilter(key: string) {
   return isRealPlaceKey(key) ? eq(visits.placeKey, key) : eq(visits.cluster, key);
 }
 
-export async function getCluster(db: Db, tenant: TenantId, key: string) {
+function validTimeZoneOrNull(tz?: string | null): string | null {
+  const trimmed = tz?.trim();
+  if (!trimmed) return null;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: trimmed });
+    return trimmed;
+  } catch {
+    return null;
+  }
+}
+
+function localHourInZone(iso: string, timeZone: string | null): number {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return NaN;
+  if (!timeZone) return d.getUTCHours();
+  try {
+    const raw = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "numeric",
+      hourCycle: "h23",
+    })
+      .formatToParts(d)
+      .find((p) => p.type === "hour")?.value;
+    const h = Number(raw);
+    if (Number.isFinite(h)) return h === 24 ? 0 : h;
+  } catch {
+    // Fall back to UTC if formatting fails.
+  }
+  return d.getUTCHours();
+}
+
+export async function getCluster(db: Db, tenant: TenantId, key: string, tz?: string | null) {
   const placeKey = key.slice(0, 200);
   const hidden = await hiddenPlaceKeySet(db, tenant);
   const group = (await placeGroups(db, tenant, placeKey))[0];
   if (!group) return null;
   const names = await placeDisplayNames(db, tenant, [group]);
+
+  let resolvedTz = validTimeZoneOrNull(tz);
+  if (!resolvedTz && tz === undefined) {
+    const [settings] = await db
+      .select({ timezone: userSettings.timezone })
+      .from(userSettings)
+      .where(eq(userSettings.tenant, tenant))
+      .limit(1);
+    resolvedTz = validTimeZoneOrNull(settings?.timezone);
+  }
 
   const sample = await db
     .select({ start: visits.start, date: visits.date })
@@ -390,8 +575,8 @@ export async function getCluster(db: Db, tenant: TenantId, key: string) {
     .limit(400);
   const hours = Array.from({ length: 24 }, () => 0);
   for (const v of sample) {
-    const h = new Date(v.start).getUTCHours();
-    if (!Number.isNaN(h)) hours[h] += 1;
+    const h = localHourInZone(v.start, resolvedTz);
+    if (!Number.isNaN(h) && h >= 0 && h < 24) hours[h] += 1;
   }
 
   // Corridors run region to region, so a place shows its region's routes.
@@ -417,6 +602,7 @@ export async function getCluster(db: Db, tenant: TenantId, key: string) {
     lon: group.lon,
     first: group.first,
     last: group.last,
+    timezone: resolvedTz ?? "UTC",
     hour_histogram: hours,
     corridors: related,
   };
@@ -807,7 +993,7 @@ export async function getTripRange(db: Db, tenant: TenantId, start: string, end:
   const dates: string[] = [];
   const cursor = new Date(`${start}T00:00:00Z`);
   const last = new Date(`${end}T00:00:00Z`);
-  while (cursor <= last && dates.length < 14) {
+  while (cursor <= last && dates.length < 366) {
     dates.push(cursor.toISOString().slice(0, 10));
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }

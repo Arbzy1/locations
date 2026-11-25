@@ -52,9 +52,9 @@ export async function syncSubscriptionFromStripe(
   const periodEnd = periodEndUnix ? new Date(periodEndUnix * 1000) : null;
   const status = asStatus(stripeSub.status);
   const graceUntil =
-    status === "active" || status === "trialing"
-      ? null
-      : graceUntilFromPeriodEnd(periodEnd, graceDays);
+    status === "past_due" || status === "unpaid"
+      ? graceUntilFromPeriodEnd(periodEnd, graceDays)
+      : null;
 
   await db
     .insert(subscriptions)
@@ -80,6 +80,15 @@ export async function syncSubscriptionFromStripe(
         updatedAt: new Date(),
       },
     });
+}
+
+export async function hasStripeEvent(db: Db, id: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: stripeEvents.id })
+    .from(stripeEvents)
+    .where(eq(stripeEvents.id, id))
+    .limit(1);
+  return rows.length > 0;
 }
 
 export async function recordStripeEvent(db: Db, id: string, type: string): Promise<boolean> {

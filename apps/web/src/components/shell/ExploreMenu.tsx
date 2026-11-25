@@ -9,14 +9,17 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
 import { EXPLORE_LINKS, isCatalogPath, type ExploreLink } from '../../lib/nav/paths';
+import { usePublicConfig } from '../../hooks/useApi';
 import { useSession } from '../../lib/auth';
 
 export default function ExploreMenu({ compact, expanded }: { compact?: boolean; expanded?: boolean }) {
   const location = useLocation();
   const active = isCatalogPath(location.pathname) && !location.pathname.startsWith('/places');
   const { data: session } = useSession();
+  const { data: config } = usePublicConfig();
   const role = (session?.user as { role?: string } | undefined)?.role;
   const isDemo = role === 'demo';
+  const globeEnabled = config?.flags?.globe !== false && config?.globe !== false;
   const today = format(new Date(), 'yyyy-MM-dd');
   const month = today.slice(0, 7);
 
@@ -28,6 +31,7 @@ export default function ExploreMenu({ compact, expanded }: { compact?: boolean; 
 
   const links = [...EXPLORE_LINKS, ...extra].filter((l) => {
     if (isDemo && (l.to === '/trips/new' || l.to === '/chapters')) return false;
+    if (!globeEnabled && l.to === '/globe') return false;
     return true;
   });
 

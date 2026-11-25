@@ -21,7 +21,7 @@ export type ImportJobStatus = "pending" | "processing" | "ready" | "error";
 /** Recorded GPS fix along a journey: `[lat, lon, unixSeconds]` from Timeline `timelinePath`. */
 export type PathPoint = [number, number, number];
 
-export type ExportJobStatus = ImportJobStatus;
+export type ExportJobStatus = ImportJobStatus | "expired";
 
 export type SubscriptionStatus =
   | "none"

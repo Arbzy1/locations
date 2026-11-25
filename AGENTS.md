@@ -30,7 +30,7 @@ Tenants are isolated by `tenant` column **and** Postgres FORCE RLS. Demo users m
 
 - TypeScript throughout; workspace packages are `@locations/web`, `@locations/api`, `@locations/db`.
 - Prefer existing patterns: Hono routes in `apps/api/src/index.ts`, data access in `services.ts`, schema in `packages/db`.
-- Generate Drizzle migrations with `npm run db:generate`. Custom SQL is allowed only for `FORCE ROW LEVEL SECURITY` and role GRANTs (see `packages/db/drizzle/0003_rls.sql`).
+- Generate Drizzle migrations with `npm run db:generate`. Custom SQL is allowed only for `FORCE ROW LEVEL SECURITY` and role GRANTs (see `packages/db/drizzle/0004_rls.sql`, `0012_rls_grants.sql`, `0021_brim_rls.sql`, and `0024_sequence_grants.sql`).
 - Use **npm** only (`npm install`, `npm run …`, `npm run … -w @locations/<pkg>`).
 - Keep Takeout JSON and secrets out of git (`.env`, `.env.staging`, `.env.production`, `.dev.vars`, `.dev.vars.staging`, `.dev.vars.production`, real data files).
 - App chrome uses shadcn primitives + Motion. Do not add a second theme or CSS-in-JS system.
@@ -480,7 +480,7 @@ Public scripts live on the **root** `package.json`. Name every new script `domai
 | `auth:promote-admin` / `auth:promote-developer` | Set `user.role` to staff |
 | `setup:project` | Interactive first-time setup |
 | `typecheck:all` / `lint:web` | Quality gates |
-| `rules:sync` | Regenerate tool-specific rule files from `AGENTS.md` |
+| `rules:sync` / `rules:check` | Regenerate or verify tool-specific rule files from `AGENTS.md` |
 | `test:placement` / `test:unit` / `test:integration` / `test:admin` / `test:rls` / `test:security` / `test:watch` / `test:e2e` / `test:all` / `test:report` | Placement lint, Vitest (including operator admin matrix), security catalog, Playwright, markdown report |
 | `loc` / `loc:report` | Lines-of-code summary / write `reports/loc.md` |
 | `deps:audit` | `npm audit` (high/critical) |

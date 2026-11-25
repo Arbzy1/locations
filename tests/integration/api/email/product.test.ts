@@ -24,8 +24,9 @@ vi.mock("@locations/api/import-session", async () => {
 });
 
 import { app } from "@locations/api/index";
+import { resetRateLimits } from "@locations/api/rate-limit";
 import { emailForTenant, getImportJob, updateImportJob, wipeTenantData } from "@locations/api/services";
-import { openImportJob } from "@locations/api/import-session";
+import { cancelImportJob, openImportJob } from "@locations/api/import-session";
 
 /** Finish a browser import and wait for the notification the route sends afterwards. */
 async function finishImport(env: Env, jobId: string) {
@@ -44,12 +45,14 @@ async function finishImport(env: Env, jobId: string) {
 
 describe("product emails", () => {
   beforeEach(() => {
+    resetRateLimits();
     getSession.mockReset();
     vi.mocked(wipeTenantData).mockReset();
     vi.mocked(emailForTenant).mockReset();
     vi.mocked(getImportJob).mockReset();
     vi.mocked(updateImportJob).mockReset();
     vi.mocked(openImportJob).mockReset();
+    vi.mocked(cancelImportJob).mockReset();
     vi.mocked(emailForTenant).mockResolvedValue({ email: "a@example.com", role: "user" });
   });
 
@@ -148,5 +151,25 @@ describe("product emails", () => {
     } as never);
     await finishImport(env, "job-demo");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends import_failed after a cancelled browser import records an error", async () => {
+    const fetchMock = stubResendFetch();
+    getSession.mockResolvedValue(sessionUser({ id: "user-a", email: "a@example.com" }));
+    const env = testEnv({ RESEND_API_KEY: "re_test" });
+    vi.mocked(cancelImportJob).mockResolvedValue(true);
+    vi.mocked(getImportJob).mockResolvedValue({
+      status: "error",
+      notifiedAt: null,
+      visitCount: 0,
+      activityCount: 0,
+    } as never);
+    const ctx = testExecutionCtx();
+    const res = await requestApp(app, "/api/import/job-cancel-1/cancel", { method: "POST" }, env, ctx);
+    expect(res.status).toBe(200);
+    await flushWaitUntil(ctx);
+    const { body, headers } = parseResendCall(fetchMock);
+    expect(body.tags[0].value).toBe("import_failed");
+    expect(headers["Idempotency-Key"]).toBe("import:job-cancel-1");
   });
 });

@@ -8,7 +8,7 @@ import { Label } from '../ui/label';
 import { MODE_LABELS } from '../../types';
 
 /** Modes a journey can be corrected to; matches the API's OVERRIDE_MODES. */
-const MODES = ['walking', 'cycling', 'car', 'bus', 'train', 'subway', 'flying'] as const;
+const MODES = ['walking', 'cycling', 'car', 'bus', 'train', 'subway', 'flying', 'unknown'] as const;
 
 /**
  * Pencil button on a timeline row: add a note, or for a journey fix the transport mode.
@@ -62,6 +62,7 @@ export default function TimelineItemEditor({
     }
     setOpen(false);
     void queryClient.invalidateQueries({ queryKey: ['day'] });
+    void queryClient.invalidateQueries({ queryKey: ['routes'] });
     // A mode change rewrites mileage by mode and Routes: rebuild statistics.
     void queryClient.invalidateQueries({ queryKey: ['aggregates-status'] });
     toast.success('Saved.');

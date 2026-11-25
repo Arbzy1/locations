@@ -11,11 +11,11 @@ export default function StorageChoices() {
   const reduce = useReducedMotion();
   const choose = (allow: boolean) => { setStorageChoice(allow); setOpen(false); };
   return <>
-    <div className="flex gap-2 fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-3 z-40 lg:bottom-3">
+    <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-3 z-[1210] flex gap-2 lg:bottom-3 lg:left-auto lg:right-14">
       <Button asChild size="sm" variant="outline" title="Read legal policies and operator details"><Link to="/impressum">Legal</Link></Button>
       <Button size="sm" variant="outline" title="Change optional browser storage choices" onClick={() => setOpen(v => !v)} aria-expanded={open} aria-controls="storage-choices">Storage choices</Button>
     </div>
-    <AnimatePresence>{open && <motion.section id="storage-choices" aria-label="Browser storage choices" className="fixed inset-x-3 bottom-[calc(9rem+env(safe-area-inset-bottom))] z-50 mx-auto max-h-[60dvh] max-w-xl overflow-auto rounded-xl border border-border bg-surface p-4 text-text shadow-lg lg:bottom-16" {...(reduce ? reducedEnterMotion : enterMotion)}>
+    <AnimatePresence>{open && <motion.section id="storage-choices" aria-label="Browser storage choices" className="fixed inset-x-3 bottom-[calc(8.5rem+env(safe-area-inset-bottom))] z-[1220] mx-auto max-h-[60dvh] max-w-xl overflow-auto rounded-xl border border-border bg-surface p-4 text-text shadow-lg lg:bottom-16" {...(reduce ? reducedEnterMotion : enterMotion)}>
       <h2 className="font-semibold">Remember preferences on this device?</h2>
       <p className="my-3 text-sm text-text-muted">Essential sign-in storage is always used. With your permission we also save appearance, recent places, filters, goals and the last journey estimate. Refusing keeps preferences in memory for this page. No advertising or analytics trackers. Change or withdraw here at any time. See the Cookies link in the legal footer for the full inventory.</p>
       <LegalFooter />

@@ -22,6 +22,7 @@ type MemoryShape = {
   settings: Map<string, OwnerSettingsRow>;
   places: Map<string, SavedPlaceRow>;
   routeCache: Map<string, { value: string; expiresAt: number }>;
+  routingSpend: Map<string, number>;
 };
 
 function empty(): MemoryShape {
@@ -34,6 +35,7 @@ function empty(): MemoryShape {
     settings: new Map(),
     places: new Map(),
     routeCache: new Map(),
+    routingSpend: new Map(),
   };
 }
 
@@ -93,6 +95,17 @@ export async function listTariffs(
   return [...memory.tariffs.values()].filter((t) => t.vehicle_id === vehicleId);
 }
 
+export async function getTariff(
+  _db: unknown,
+  ownerId: string,
+  vehicleId: string,
+  tariffId: string,
+): Promise<TariffRow | undefined> {
+  if (!(await getVehicle(_db, ownerId, vehicleId))) return undefined;
+  const row = memory.tariffs.get(tariffId);
+  return row?.vehicle_id === vehicleId ? row : undefined;
+}
+
 export async function saveTariff(
   _db: unknown,
   ownerId: string,
@@ -101,11 +114,23 @@ export async function saveTariff(
   if (!(await getVehicle(_db, ownerId, row.vehicle_id))) return undefined;
   if (row.is_default) {
     for (const t of memory.tariffs.values()) {
-      if (t.vehicle_id === row.vehicle_id) t.is_default = false;
+      if (t.vehicle_id === row.vehicle_id && t.kind === row.kind) t.is_default = false;
     }
   }
   memory.tariffs.set(row.id, row);
   return row;
+}
+
+export async function deleteTariff(
+  _db: unknown,
+  ownerId: string,
+  vehicleId: string,
+  tariffId: string,
+): Promise<boolean> {
+  const existing = await getTariff(_db, ownerId, vehicleId, tariffId);
+  if (!existing) return false;
+  memory.tariffs.delete(tariffId);
+  return true;
 }
 
 export async function getDefaultTariff(
@@ -114,7 +139,12 @@ export async function getDefaultTariff(
   vehicleId: string,
 ): Promise<TariffRow | undefined> {
   const all = await listTariffs(_db, ownerId, vehicleId);
-  return all.find((t) => t.is_default) ?? all[0];
+  return (
+    all.find((t) => t.is_default && t.kind === "home") ??
+    all.find((t) => t.is_default) ??
+    all.find((t) => t.kind === "home") ??
+    all[0]
+  );
 }
 
 export async function listJourneys(_db: unknown, ownerId: string): Promise<JourneyRow[]> {
@@ -149,9 +179,19 @@ export async function ytdMiles(
   ownerId: string,
   taxYearStartIso: string,
   nowIso: string,
+  kind?: VehicleRow["kind"],
 ): Promise<number> {
+  const startMs = Date.parse(taxYearStartIso);
+  const endMs = Date.parse(nowIso);
   return (await listJourneys(_db, ownerId))
-    .filter((j) => j.created_at >= taxYearStartIso && j.created_at <= nowIso)
+    .filter((j) => {
+      const atMs = Date.parse(j.departs_at ?? j.created_at);
+      if (!Number.isFinite(atMs) || atMs < startMs || atMs > endMs) return false;
+      if (!kind) return true;
+      const vKind = j.vehicle_id ? memory.vehicles.get(j.vehicle_id)?.kind : undefined;
+      if (kind === "motorcycle") return vKind === "motorcycle";
+      return vKind !== "motorcycle";
+    })
     .reduce((sum, j) => sum + j.distance_meters / 1609.344, 0);
 }
 
@@ -268,4 +308,15 @@ export async function routeCacheGet(_db: unknown, key: string): Promise<string |
 
 export async function routeCachePut(_db: unknown, key: string, value: string, ttlSeconds: number): Promise<void> {
   memory.routeCache.set(key, { value, expiresAt: Date.now() + Math.max(60, ttlSeconds) * 1000 });
+}
+
+export async function getRoutingSpendUsd(_db: unknown, now: Date = new Date()): Promise<number> {
+  const ym = now.toISOString().slice(0, 7);
+  return memory.routingSpend.get(`routing_spend:${ym}`) ?? 0;
+}
+
+export async function addRoutingSpendUsd(_db: unknown, usd: number, now: Date = new Date()): Promise<void> {
+  if (!(usd > 0)) return;
+  const key = `routing_spend:${now.toISOString().slice(0, 7)}`;
+  memory.routingSpend.set(key, (memory.routingSpend.get(key) ?? 0) + usd);
 }

@@ -8,15 +8,12 @@
     "is_restriction": true,
     "applies_hours_json": {
       "timezone": "Europe/London",
-      "always": true,
-      "exemptDates": [
-        "12-25"
-      ]
+      "always": true
     },
     "source_url": "https://www.edinburgh.gov.uk/lez",
-    "verified_on": "2026-08-16",
+    "verified_on": "2026-11-24",
     "operator_url": "https://www.lowemissionzones.scot/",
-    "dataset_version": "2026-08-16"
+    "dataset_version": "2026-11-24"
   },
   "geometry": {
     "type": "MultiPolygon",
@@ -24,23 +21,27 @@
       [
         [
           [
-            -3.215,
+            -3.212,
             55.946
           ],
           [
-            -3.175,
+            -3.178,
             55.946
           ],
           [
-            -3.175,
-            55.958
+            -3.176,
+            55.956
+          ],
+          [
+            -3.208,
+            55.957
           ],
           [
             -3.215,
-            55.958
+            55.951
           ],
           [
-            -3.215,
+            -3.212,
             55.946
           ]
         ]

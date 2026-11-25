@@ -8,15 +8,12 @@
     "is_restriction": true,
     "applies_hours_json": {
       "timezone": "Europe/London",
-      "always": true,
-      "exemptDates": [
-        "12-25"
-      ]
+      "always": true
     },
     "source_url": "https://www.glasgow.gov.uk/lez",
-    "verified_on": "2026-08-16",
+    "verified_on": "2026-11-24",
     "operator_url": "https://www.lowemissionzones.scot/",
-    "dataset_version": "2026-08-16"
+    "dataset_version": "2026-11-24"
   },
   "geometry": {
     "type": "MultiPolygon",
@@ -24,23 +21,27 @@
       [
         [
           [
-            -4.275,
+            -4.273,
+            55.854
+          ],
+          [
+            -4.237,
             55.854
           ],
           [
             -4.235,
-            55.854
+            55.868
           ],
           [
-            -4.235,
+            -4.268,
             55.87
           ],
           [
             -4.275,
-            55.87
+            55.862
           ],
           [
-            -4.275,
+            -4.273,
             55.854
           ]
         ]

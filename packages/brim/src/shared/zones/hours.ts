@@ -11,6 +11,11 @@ export const UK_BANK_HOLIDAYS_2026_2027: string[] = [
   "2027-01-01",
 ];
 
+export const HOURS_ALWAYS_OPEN: ChargeHoursJson = {
+  timezone: "Europe/London",
+  always: true,
+};
+
 export const HOURS_ALWAYS_EXCEPT_CHRISTMAS: ChargeHoursJson = {
   timezone: "Europe/London",
   always: true,
@@ -32,11 +37,27 @@ export const HOURS_DART: ChargeHoursJson = {
   windows: [{ days: [1, 2, 3, 4, 5, 6, 7], start: "06:00", end: "22:00" }],
 };
 
-export const HOURS_BRISTOL_CAZ: ChargeHoursJson = {
+/** Bristol CAZ operates 24 hours a day, 7 days a week, 365 days a year. */
+export const HOURS_BRISTOL_CAZ: ChargeHoursJson = HOURS_ALWAYS_OPEN;
+
+export const HOURS_OXFORD_ZEZ: ChargeHoursJson = {
   timezone: "Europe/London",
-  windows: [{ days: [1, 2, 3, 4, 5], start: "07:00", end: "15:00" }],
+  windows: [{ days: [1, 2, 3, 4, 5, 6, 7], start: "07:00", end: "19:00" }],
+};
+
+export const HOURS_BLACKWALL_SILVERTOWN: ChargeHoursJson = {
+  timezone: "Europe/London",
+  windows: [{ days: [1, 2, 3, 4, 5, 6, 7], start: "06:00", end: "22:00" }],
+  exemptDates: ["12-25"],
+};
+
+export const HOURS_BLACKWALL_PEAK: ChargeHoursJson = {
+  timezone: "Europe/London",
+  windows: [
+    { days: [1, 2, 3, 4, 5], start: "06:00", end: "10:00" },
+    { days: [1, 2, 3, 4, 5], start: "16:00", end: "19:00" },
+  ],
   exemptDates: ["12-25", ...UK_BANK_HOLIDAYS_2026_2027],
-  exemptRanges: [{ start: "12-24", end: "01-01" }],
 };
 
 export const WEEKDAYS: IsoWeekday[] = [1, 2, 3, 4, 5, 6, 7];

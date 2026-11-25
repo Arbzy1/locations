@@ -10,7 +10,7 @@ import {
   radiusMetersFromQuery,
 } from './prices';
 import { handleStationsNearRoute } from './fill';
-import { createDb, persistLive, type BrimContext } from "./context";
+import { persistLive, requestBrimDb, type BrimContext } from "./context";
 
 function parseFuelGrade(raw: string | undefined) {
   if (raw === 'E10' || raw === 'E5' || raw === 'B7' || raw === 'SDV' || raw === 'LPG') return raw;
@@ -35,7 +35,7 @@ export async function handleStationsNear(c: BrimContext) {
     });
     return c.json({ stations: decorateNearby(hits, corpus.stations) });
   }
-  const db = createDb(c.env);
+  const db = requestBrimDb(c);
   if (!persistLive(db)) return c.json({ stations: [] });
   const stations = await liveNearby(db, {
     lat,
@@ -51,7 +51,7 @@ export async function handleMetaPrices(c: BrimContext) {
     const corpus = await fixtureCorpus(c.env.BRIM_FIXTURES);
     return c.json({ grades: nationalMediansFromObservations(corpus.observations) });
   }
-  const db = createDb(c.env);
+  const db = requestBrimDb(c);
   if (!persistLive(db)) return c.json({ grades: {} });
   return c.json({ grades: await liveNationalMedians(db) });
 }

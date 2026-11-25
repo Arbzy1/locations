@@ -6,22 +6,19 @@
     "authority": "TT2",
     "kind": "toll",
     "charge_pence_by_class": {
-      "car": 230,
-      "van": 460,
-      "motorcycle": 110
+      "car": 250,
+      "van": 500,
+      "motorcycle": 0
     },
     "is_restriction": false,
     "applies_hours_json": {
       "timezone": "Europe/London",
-      "always": true,
-      "exemptDates": [
-        "12-25"
-      ]
+      "always": true
     },
     "source_url": "https://www.tt2.co.uk/tolls/",
-    "verified_on": "2026-08-16",
+    "verified_on": "2026-11-24",
     "operator_url": "https://www.tt2.co.uk/tolls/",
-    "dataset_version": "2026-08-16"
+    "dataset_version": "2026-11-24"
   },
   "geometry": {
     "type": "MultiPolygon",
@@ -29,24 +26,24 @@
       [
         [
           [
-            -1.49,
-            54.988
+            -1.482,
+            54.985
           ],
           [
-            -1.45,
-            54.988
+            -1.462,
+            54.985
           ],
           [
-            -1.45,
-            55.01
+            -1.462,
+            54.996
           ],
           [
-            -1.49,
-            55.01
+            -1.482,
+            54.996
           ],
           [
-            -1.49,
-            54.988
+            -1.482,
+            54.985
           ]
         ]
       ]

@@ -11,10 +11,15 @@ import { RegLookup, type VesSummary } from "../RegLookup";
 import { VehicleCatalogue, type CatalogueVehicle } from "../VehicleCatalogue";
 import type { EvNetworkRow, Propulsion, Vehicle, VehicleKind } from "../../../lib/brim/estimate/types";
 
+function savedCarOptionLabel(v: Vehicle): string {
+  return v.nickname?.trim() || [v.make, v.model].filter(Boolean).join(" ").trim() || v.propulsion;
+}
+
 export function VehicleSheet({
   open,
   onOpenChange,
   wide,
+  tablet = false,
   garage,
   vehicleId,
   setVehicleId,
@@ -26,6 +31,8 @@ export function VehicleSheet({
   evNetworks,
   homePence,
   setHomePence,
+  publicPence,
+  setPublicPence,
   offpeakPence,
   setOffpeakPence,
   offpeakWindow,
@@ -66,6 +73,7 @@ export function VehicleSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   wide: boolean;
+  tablet?: boolean;
   garage: Vehicle[];
   vehicleId: string;
   setVehicleId: (id: string) => void;
@@ -77,6 +85,8 @@ export function VehicleSheet({
   evNetworks: EvNetworkRow[];
   homePence: string;
   setHomePence: (value: string) => void;
+  publicPence: string;
+  setPublicPence: (value: string) => void;
   offpeakPence: string;
   setOffpeakPence: (value: string) => void;
   offpeakWindow: string;
@@ -114,6 +124,9 @@ export function VehicleSheet({
   setStart: (value: string) => void;
   onUseCar: () => void;
 }) {
+  const activePence = chargingLocation === "public" ? publicPence : homePence;
+  const setActivePence = chargingLocation === "public" ? setPublicPence : setHomePence;
+
   const fields = (
     <>
       <h2 className="font-display mb-4 pr-10 text-xl">The car on this trip</h2>
@@ -128,7 +141,7 @@ export function VehicleSheet({
               <SelectItem value="inline">Type details this time</SelectItem>
               {garage.map((v) => (
                 <SelectItem key={v.id} value={v.id}>
-                  {v.nickname ?? [v.make, v.model].filter(Boolean).join(" ") ?? v.propulsion}
+                  {savedCarOptionLabel(v)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -138,8 +151,8 @@ export function VehicleSheet({
       {electricTrip ? (
         <>
           <p className="mb-3 text-sm text-text-muted">
-            Petrol prices are live from the government feed. EV charging prices are estimates you can
-            correct.
+            Petrol and diesel prices come from the government feed. EV charging prices use your tariff
+            or the public network table, and you can adjust them for this trip.
           </p>
           <FormItem>
             <Label>Charge where</Label>
@@ -160,20 +173,25 @@ export function VehicleSheet({
             <FormItem>
               <Label>Network</Label>
               <Select
-                value={networkId}
+                value={networkId || "custom"}
                 onValueChange={(id) => {
+                  if (id === "custom") {
+                    setNetworkId("");
+                    return;
+                  }
                   setNetworkId(id);
                   const row = evNetworks.find((n) => n.id === id);
-                  if (row) setHomePence(String(row.pencePerKwh));
+                  if (row) setPublicPence(String(row.pencePerKwh));
                 }}
               >
                 <SelectTrigger title="Public charging network">
-                  <SelectValue placeholder="Pick a network" />
+                  <SelectValue placeholder="Pick a network or custom rate" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="custom">Custom price (any charger)</SelectItem>
                   {evNetworks.map((n) => (
                     <SelectItem key={n.id} value={n.id}>
-                      {n.network} ({n.speed.toUpperCase()})
+                      {n.network} ({n.speed.toUpperCase()} · {n.pencePerKwh}p)
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -181,13 +199,14 @@ export function VehicleSheet({
             </FormItem>
           ) : null}
           <FormItem>
-            <Label htmlFor="home-pence">
-              {chargingLocation === "public" ? "p/kWh (editable)" : "Home p/kWh"}
+            <Label htmlFor="ev-pence">
+              {chargingLocation === "public" ? "Public charger p/kWh" : "Home p/kWh"}
             </Label>
-            <Input title="Electricity price in pence per kWh"
-              id="home-pence"
-              value={homePence}
-              onChange={(ev) => setHomePence(ev.target.value)}
+            <Input
+              title="Electricity price in pence per kWh"
+              id="ev-pence"
+              value={activePence}
+              onChange={(ev) => setActivePence(ev.target.value)}
               className="tabular-nums font-mono"
               inputMode="decimal"
               enterKeyHint="next"
@@ -197,7 +216,8 @@ export function VehicleSheet({
             <>
               <FormItem>
                 <Label htmlFor="offpeak-pence">Off-peak p/kWh (optional)</Label>
-                <Input title="Off-peak p/kWh (optional)"
+                <Input
+                  title="Off-peak p/kWh (optional)"
                   id="offpeak-pence"
                   value={offpeakPence}
                   onChange={(ev) => setOffpeakPence(ev.target.value)}
@@ -208,7 +228,8 @@ export function VehicleSheet({
               </FormItem>
               <FormItem>
                 <Label htmlFor="offpeak-window">Off-peak window</Label>
-                <Input title="Off-peak window"
+                <Input
+                  title="Off-peak window"
                   id="offpeak-window"
                   value={offpeakWindow}
                   onChange={(ev) => setOffpeakWindow(ev.target.value)}
@@ -217,9 +238,27 @@ export function VehicleSheet({
               </FormItem>
             </>
           ) : null}
+          {vehicleId !== "inline" ? (
+            <FormItem>
+              <Label htmlFor="saved-start">Starting charge % (0 to 100)</Label>
+              <Input
+                title="Starting battery charge percentage"
+                id="saved-start"
+                value={start}
+                onChange={(ev) => setStart(ev.target.value)}
+                className="tabular-nums font-mono"
+                inputMode="decimal"
+                enterKeyHint="next"
+              />
+            </FormItem>
+          ) : null}
           <FormItem>
             <label className="flex min-h-11 items-center gap-2 text-sm">
-              <Switch title="Car has a heat pump" checked={hasHeatPump} onCheckedChange={setHasHeatPump} />
+              <Switch
+                title="Car has a heat pump"
+                checked={hasHeatPump}
+                onCheckedChange={setHasHeatPump}
+              />
               Heat pump
             </label>
           </FormItem>
@@ -286,7 +325,8 @@ export function VehicleSheet({
           </FormItem>
           <FormItem>
             <Label htmlFor="year">Year of first registration</Label>
-            <Input title="Year of first registration"
+            <Input
+              title="Year of first registration"
               id="year"
               className="tabular-nums font-mono"
               inputMode="numeric"
@@ -321,7 +361,8 @@ export function VehicleSheet({
             <>
               <FormItem>
                 <Label htmlFor="mikwh">{catalogue ? "Your mi/kWh (optional)" : "mi/kWh"}</Label>
-                <Input title="Efficiency in miles per kWh"
+                <Input
+                  title="Efficiency in miles per kWh"
                   id="mikwh"
                   value={catalogue ? overrideMiKwh : miKwh}
                   onChange={(ev) =>
@@ -335,7 +376,8 @@ export function VehicleSheet({
               </FormItem>
               <FormItem>
                 <Label htmlFor="battery">Usable battery kWh</Label>
-                <Input title="Usable battery kWh"
+                <Input
+                  title="Usable battery kWh"
                   id="battery"
                   value={battery}
                   onChange={(ev) => setBattery(ev.target.value)}
@@ -345,8 +387,9 @@ export function VehicleSheet({
                 />
               </FormItem>
               <FormItem>
-                <Label htmlFor="start">Starting charge %</Label>
-                <Input title="Starting charge %"
+                <Label htmlFor="start">Starting charge % (0 to 100)</Label>
+                <Input
+                  title="Starting battery charge percentage"
                   id="start"
                   value={start}
                   onChange={(ev) => setStart(ev.target.value)}
@@ -361,7 +404,8 @@ export function VehicleSheet({
             <>
               <FormItem>
                 <Label htmlFor="battery">Usable battery kWh</Label>
-                <Input title="Usable battery kWh"
+                <Input
+                  title="Usable battery kWh"
                   id="battery"
                   value={battery}
                   onChange={(ev) => setBattery(ev.target.value)}
@@ -371,8 +415,9 @@ export function VehicleSheet({
                 />
               </FormItem>
               <FormItem>
-                <Label htmlFor="start">Starting charge %</Label>
-                <Input title="Starting charge %"
+                <Label htmlFor="start">Starting charge % (0 to 100)</Label>
+                <Input
+                  title="Starting battery charge percentage"
                   id="start"
                   value={start}
                   onChange={(ev) => setStart(ev.target.value)}
@@ -388,7 +433,8 @@ export function VehicleSheet({
               {propulsion !== "phev" || catalogue ? (
                 <FormItem>
                   <Label htmlFor="mpg">{catalogue ? "Your mpg (optional)" : "mpg"}</Label>
-                  <Input title="Fuel economy in mpg"
+                  <Input
+                    title="Fuel economy in mpg"
                     id="mpg"
                     value={catalogue ? overrideMpg : mpg}
                     onChange={(ev) =>
@@ -403,7 +449,8 @@ export function VehicleSheet({
               ) : null}
               <FormItem>
                 <Label htmlFor="tank">Tank size (litres)</Label>
-                <Input title="Tank size (litres)"
+                <Input
+                  title="Tank size (litres)"
                   id="tank"
                   value={tank}
                   onChange={(ev) => setTank(ev.target.value)}
@@ -422,7 +469,7 @@ export function VehicleSheet({
     </>
   );
 
-  if (wide) {
+  if (wide || tablet) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent side="left" title="The car on this trip" className="overflow-y-auto">

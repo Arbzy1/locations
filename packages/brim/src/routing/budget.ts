@@ -20,6 +20,9 @@ export function budgetStatus(state: BudgetState): {
  */
 export const ROUTE_COST_USD = { basic: 0.005, advanced: 0.015 } as const;
 
+/** Estimated list price of one Google Places / Geocode / Roads request, in USD. */
+export const GEOCODE_COST_USD = 0.003;
+
 /** Key for the month's running total, e.g. `routing_spend:2026-11` (UTC). */
 export function routingSpendKey(now: Date = new Date()): string {
   return `routing_spend:${now.toISOString().slice(0, 7)}`;

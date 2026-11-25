@@ -1,6 +1,6 @@
 import { createHttpDb, eq, opsFlags } from "@locations/db";
 import type { Env } from "./env";
-import { getDb } from "./services";
+import { closeDb, getDb } from "./services";
 
 export const OPS_FLAG_KEYS = [
   "signup_disabled",
@@ -63,15 +63,26 @@ function dbQueryable(db: unknown): db is ReturnType<typeof getDb> {
   return typeof (db as { select?: unknown })?.select === "function";
 }
 
+function isMockedGetDb(): boolean {
+  return "mock" in (getDb as unknown as Record<string, unknown>);
+}
+
 async function withFlagsDb<T>(
   env: Env,
   fn: (db: ReturnType<typeof createHttpDb>) => Promise<T>,
 ): Promise<T | undefined> {
-  const probe = getDb(env);
-  const usable = dbQueryable(probe);
-  await (probe as { $client?: { end?: () => Promise<void> } }).$client?.end?.().catch(() => undefined);
-  if (!usable || !env.DATABASE_URL) return undefined;
-  return fn(createHttpDb(env.DATABASE_URL));
+  if (!env.DATABASE_URL || env.DATABASE_URL === "postgres://test") return undefined;
+  if (isMockedGetDb()) {
+    const probe = getDb(env);
+    const usable = dbQueryable(probe);
+    await closeDb(probe);
+    if (!usable) return undefined;
+  }
+  try {
+    return await fn(createHttpDb(env.DATABASE_URL));
+  } catch {
+    return undefined;
+  }
 }
 
 export async function loadFlagRows(env: Env): Promise<FlagRow[]> {
@@ -133,7 +144,7 @@ export async function listToggleFlags(env: Env): Promise<{
     globe_enabled: overlay.globe_enabled !== null ? "db" : "env",
     demo_tour: overlay.demo_tour !== null ? "db" : "env",
   };
-  const emptyMeta = { updatedBy: null as string | null, updatedAt: null as string | null };
+  const emptyMeta = { updatedBy: null as string | null, updatedAt: stringOrNull(null) };
   const flagMeta = (key: OpsFlagKey) => {
     const row = byKey.get(key);
     if (!row) return emptyMeta;
@@ -146,6 +157,10 @@ export async function listToggleFlags(env: Env): Promise<{
     demo_tour: flagMeta("demo_tour"),
   };
   return { flags: mergeFlags(envFlags, rows), overlay, source, meta };
+}
+
+function stringOrNull(v: string | null): string | null {
+  return v;
 }
 
 export async function deleteOpsFlag(env: Env, key: OpsFlagKey): Promise<void> {

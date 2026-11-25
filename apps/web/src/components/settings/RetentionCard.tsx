@@ -3,7 +3,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "../ui/button";
 import { Card, CardTitle } from "../ui/card";
 import { EjectField } from "../ui/eject-field";
-import { Dialog, DialogContent } from "../ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import { useUnits } from "../../lib/units";
 import { useInvalidateLocationQueries } from "../../hooks/useApi";
 
@@ -86,20 +95,21 @@ export default function RetentionCard({
           Save
         </Button>
       </div>
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent title="Delete older history">
-          <h2 className="text-lg font-semibold">
-            Delete history older than {selected} year{selected === "1" ? "" : "s"}?
-          </h2>
-          <p className="mt-2 text-sm text-text-muted">
-            Every stay and journey before then is removed now. This cannot be undone here.
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" title="Keep everything as it is" onClick={() => setConfirmOpen(false)}>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent title="Delete older history">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete history older than {selected} year{selected === "1" ? "" : "s"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Every stay and journey before then is removed now. This cannot be undone here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel title="Keep everything as it is" onClick={() => setConfirmOpen(false)}>
               Cancel
-            </Button>
-            <Button
-              type="button"
+            </AlertDialogCancel>
+            <AlertDialogAction
               variant="destructive"
               title="Delete older history"
               onClick={() => {
@@ -108,10 +118,10 @@ export default function RetentionCard({
               }}
             >
               Delete older history
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

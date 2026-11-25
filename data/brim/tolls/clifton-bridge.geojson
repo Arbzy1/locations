@@ -1,0 +1,52 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "clifton-bridge",
+    "name": "Clifton Suspension Bridge",
+    "authority": "Clifton Suspension Bridge Trust",
+    "kind": "toll",
+    "charge_pence_by_class": {
+      "car": 100,
+      "van": 100,
+      "motorcycle": 0
+    },
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true
+    },
+    "source_url": "https://cliftonbridge.org.uk/visit/crossing-the-bridge/",
+    "verified_on": "2026-11-24",
+    "operator_url": "https://cliftonbridge.org.uk/",
+    "dataset_version": "2026-11-24"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -2.631,
+            51.453
+          ],
+          [
+            -2.624,
+            51.453
+          ],
+          [
+            -2.624,
+            51.457
+          ],
+          [
+            -2.631,
+            51.457
+          ],
+          [
+            -2.631,
+            51.453
+          ]
+        ]
+      ]
+    ]
+  }
+}

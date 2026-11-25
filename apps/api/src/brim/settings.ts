@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Context } from 'hono';
 import { getSettings, getVehicle, saveSettings } from './db/repo';
-import { createDb, brimTenant, type BrimContext } from "./context";
+import { brimTenant, requestBrimDb, type BrimContext } from "./context";
 
 const patchBody = z.object({
   defaultVehicleId: z.string().nullable().optional(),
@@ -9,7 +9,7 @@ const patchBody = z.object({
 
 export async function getSettingsHandler(c: BrimContext) {
   const tenant = brimTenant(c);
-  const row = await getSettings(createDb(c.env), tenant);
+  const row = await getSettings(requestBrimDb(c), tenant);
   return c.json({
     defaultVehicleId: row?.default_vehicle_id ?? null,
   });
@@ -19,7 +19,7 @@ export async function patchSettingsHandler(c: BrimContext) {
   const tenant = brimTenant(c);
   const parsed = patchBody.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: 'invalid_request' }, 400);
-  const db = createDb(c.env);
+  const db = requestBrimDb(c);
   const defaultVehicleId = parsed.data.defaultVehicleId;
   if (defaultVehicleId) {
     if (!(await getVehicle(db, tenant, defaultVehicleId))) {

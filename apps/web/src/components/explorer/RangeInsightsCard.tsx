@@ -9,19 +9,20 @@ import { useOverview, useRangeInsights } from '../../hooks/useApi';
 import { useUnits } from '../../lib/units';
 import { formatDuration, formatMilesOrKm } from '../../utils/format';
 import { placePath } from '../../lib/nav/paths';
+import { localTodayIso } from '../../lib/explorer/year-review';
 import { MODE_LABELS } from '../../types';
 
 type Preset = 'year' | 'last-year' | '12m' | '90d' | 'all' | 'custom';
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
-
-function presetRange(preset: Preset, firstDay?: string, today = new Date()): { from: string; to: string } {
-  const y = today.getUTCFullYear();
-  if (preset === 'all') return { from: firstDay ?? `${y}-01-01`, to: iso(today) };
-  if (preset === 'year') return { from: `${y}-01-01`, to: iso(today) };
+function presetRange(preset: Preset, firstDay?: string, todayIso = localTodayIso(null)): { from: string; to: string } {
+  const y = Number(todayIso.slice(0, 4));
+  if (preset === 'all') return { from: firstDay ?? `${y}-01-01`, to: todayIso };
+  if (preset === 'year') return { from: `${y}-01-01`, to: todayIso };
   if (preset === 'last-year') return { from: `${y - 1}-01-01`, to: `${y - 1}-12-31` };
   const days = preset === '90d' ? 90 : 365;
-  return { from: iso(new Date(today.getTime() - (days - 1) * 86_400_000)), to: iso(today) };
+  const anchorMs = Date.parse(`${todayIso}T00:00:00Z`);
+  const fromIso = new Date(anchorMs - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+  return { from: fromIso, to: todayIso };
 }
 
 const PRESETS: { id: Preset; label: string; title: string }[] = [
@@ -60,11 +61,15 @@ function Stat({ label, value, now, before }: { label: string; value: string; now
 
 /** Insights for any period, compared with the same dates a year earlier. */
 export default function RangeInsightsCard() {
-  const { unit } = useUnits();
+  const { unit, timezone } = useUnits();
+  const todayIso = localTodayIso(timezone);
   const [preset, setPreset] = useState<Preset>('year');
-  const [custom, setCustom] = useState(() => presetRange('12m'));
+  const [custom, setCustom] = useState(() => presetRange('12m', undefined, todayIso));
   const firstDay = useOverview().data?.date_range?.[0];
-  const range = useMemo(() => (preset === 'custom' ? custom : presetRange(preset, firstDay)), [preset, custom, firstDay]);
+  const range = useMemo(
+    () => (preset === 'custom' ? custom : presetRange(preset, firstDay, todayIso)),
+    [preset, custom, firstDay, todayIso],
+  );
   const { data, isLoading, isError, error, refetch } = useRangeInsights(range);
 
   return (

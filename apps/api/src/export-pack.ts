@@ -1,5 +1,22 @@
 import { zipSync, strToU8 } from "fflate";
 
+export type ExportSubscriptionSummary = {
+  status: string;
+  currentPeriodEnd: string | null;
+  graceUntil: string | null;
+  updatedAt: string | null;
+};
+
+export type ExportJourneyCostPayload = {
+  vehicles: unknown[];
+  tariffs: unknown[];
+  calibrations: unknown[];
+  fillUps: unknown[];
+  journeys: unknown[];
+  savedPlaces: unknown[];
+  settings: unknown | null;
+};
+
 export type ExportAccountPayload = {
   tenant: string;
   exportedAt: string;
@@ -13,6 +30,15 @@ export type ExportAccountPayload = {
   sources: Array<{ id: string; label: string; visitCount?: number; activityCount?: number }>;
   settings: unknown;
   labels: unknown;
+  namedTrips?: unknown[];
+  lifeChapters?: unknown[];
+  timelineOverrides?: unknown[];
+  subscription?: ExportSubscriptionSummary | null;
+  dayStats?: unknown[];
+  analytics?: unknown[];
+  importJobs?: unknown[];
+  exportJobs?: unknown[];
+  journeyCost?: ExportJourneyCostPayload;
 };
 
 const HTML_ESCAPES: Record<string, string> = {
@@ -42,6 +68,11 @@ export function buildExportReadmeHtml(payload: ExportAccountPayload): string {
         `<li>${escapeHtml(s.label)} (${s.visitCount ?? 0} visits, ${s.activityCount ?? 0} activities)</li>`,
     )
     .join("");
+  const tripCount = payload.namedTrips?.length ?? 0;
+  const chapterCount = payload.lifeChapters?.length ?? 0;
+  const overrideCount = payload.timelineOverrides?.length ?? 0;
+  const vehicleCount = payload.journeyCost?.vehicles.length ?? 0;
+  const brimJourneyCount = payload.journeyCost?.journeys.length ?? 0;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -50,13 +81,15 @@ export function buildExportReadmeHtml(payload: ExportAccountPayload): string {
 </head>
 <body>
   <h1>Locations data pack</h1>
-  <p>This ZIP is your copy of Timeline data stored in Locations. It has no map tiles and no third-party map keys.</p>
+  <p>This ZIP is your copy of Timeline and Journey Cost data stored in Locations. It has no map tiles and no third-party map keys.</p>
   <p>Exported at ${escapeHtml(payload.exportedAt)} for tenant ${escapeHtml(payload.tenant)}.</p>
   <h2>Contents</h2>
   <ul>
-    <li><code>account.json</code>: overview, sources, settings, and place labels</li>
+    <li><code>account.json</code>: overview, sources, settings, place labels, named trips, life chapters, subscription summary, and job history</li>
     <li><code>visits.jsonl</code>: one visit per line</li>
     <li><code>activities.jsonl</code>: one activity per line</li>
+    <li><code>overrides.jsonl</code>: timeline notes and transport-mode fixes</li>
+    <li><code>journey-cost.json</code>: saved vehicles, tariffs, calibrations, fill-ups, journeys, saved places, and Journey Cost settings</li>
   </ul>
   <h2>Counts</h2>
   <ul>
@@ -64,6 +97,11 @@ export function buildExportReadmeHtml(payload: ExportAccountPayload): string {
     <li>Activities: ${payload.overview.total_activities ?? 0}</li>
     <li>Days with data: ${payload.overview.days_with_data ?? 0}</li>
     <li>Unique places: ${payload.overview.unique_places ?? 0}</li>
+    <li>Named trips: ${tripCount}</li>
+    <li>Life chapters: ${chapterCount}</li>
+    <li>Timeline overrides: ${overrideCount}</li>
+    <li>Journey Cost vehicles: ${vehicleCount}</li>
+    <li>Journey Cost saved journeys: ${brimJourneyCount}</li>
     <li>Date range: ${from} to ${to}</li>
   </ul>
   <h2>Sources</h2>
@@ -81,10 +119,22 @@ export function buildGdprPackZip(opts: {
   activities: unknown[];
 }): Uint8Array {
   const readme = buildExportReadmeHtml(opts.account);
+  const overrides = opts.account.timelineOverrides ?? [];
+  const journeyCost = opts.account.journeyCost ?? {
+    vehicles: [],
+    tariffs: [],
+    calibrations: [],
+    fillUps: [],
+    journeys: [],
+    savedPlaces: [],
+    settings: null,
+  };
   return zipSync({
     "account.json": strToU8(`${JSON.stringify(opts.account, null, 2)}\n`),
     "visits.jsonl": strToU8(rowsToJsonl(opts.visits)),
     "activities.jsonl": strToU8(rowsToJsonl(opts.activities)),
+    "overrides.jsonl": strToU8(rowsToJsonl(overrides)),
+    "journey-cost.json": strToU8(`${JSON.stringify(journeyCost, null, 2)}\n`),
     "README.html": strToU8(readme),
   });
 }

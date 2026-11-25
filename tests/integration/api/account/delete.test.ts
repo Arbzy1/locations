@@ -31,6 +31,7 @@ vi.mock("@locations/api/billing", async (importOriginal) => {
 });
 
 import { app } from "@locations/api/index";
+import { resetRateLimits } from "@locations/api/rate-limit";
 import { getSubscription, wipeTenantData } from "@locations/api/services";
 
 const env = testEnv();
@@ -41,6 +42,7 @@ function request(path: string, init?: RequestInit, requestEnv: Env = env) {
 
 describe("POST /api/account/delete", () => {
   beforeEach(() => {
+    resetRateLimits();
     getSession.mockReset();
     stripe.customers.del.mockReset();
     stripe.customers.del.mockResolvedValue({ deleted: true, id: "cus_1" });

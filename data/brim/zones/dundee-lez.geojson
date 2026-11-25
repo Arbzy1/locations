@@ -1,0 +1,51 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "dundee-lez",
+    "name": "Dundee Low Emission Zone",
+    "authority": "Dundee City Council",
+    "kind": "lez",
+    "is_restriction": true,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "always": true
+    },
+    "source_url": "https://www.dundeecity.gov.uk/service-area/neighbourhood-services/environment/low-emission-zone",
+    "verified_on": "2026-11-24",
+    "operator_url": "https://www.lowemissionzones.scot/",
+    "dataset_version": "2026-11-24"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -2.978,
+            56.456
+          ],
+          [
+            -2.96,
+            56.456
+          ],
+          [
+            -2.958,
+            56.465
+          ],
+          [
+            -2.976,
+            56.466
+          ],
+          [
+            -2.98,
+            56.461
+          ],
+          [
+            -2.978,
+            56.456
+          ]
+        ]
+      ]
+    ]
+  }
+}

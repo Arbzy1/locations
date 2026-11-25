@@ -21,7 +21,12 @@ export function useThemedMapStyle(): string | StyleSpecification {
   const { data: mapConfig } = usePublicConfig();
 
   return useMemo(() => {
-    const vectorUrl = theme === 'dark' ? mapConfig?.mapStyleDark : mapConfig?.mapStyleLight;
+    const userTiles = theme === 'dark' ? mapTileDarkUrl : mapTileLightUrl;
+    const vectorUrl = !userTiles
+      ? theme === 'dark'
+        ? mapConfig?.mapStyleDark
+        : mapConfig?.mapStyleLight
+      : null;
     if (vectorUrl) return vectorUrl;
     const darkUrl = mapTileDarkUrl || mapConfig?.mapTileDark || CARTO_DARK;
     const lightUrl = mapTileLightUrl || mapConfig?.mapTileLight || CARTO_LIGHT;

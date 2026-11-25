@@ -6,19 +6,16 @@
     "authority": "Sheffield City Council",
     "kind": "caz",
     "caz_class": "C",
-    "charge_pence": 900,
+    "charge_pence": 1000,
     "is_restriction": false,
     "applies_hours_json": {
       "timezone": "Europe/London",
-      "always": true,
-      "exemptDates": [
-        "12-25"
-      ]
+      "always": true
     },
     "source_url": "https://www.sheffield.gov.uk/campaigns/clean-air-zone",
-    "verified_on": "2026-08-16",
+    "verified_on": "2026-11-24",
     "operator_url": "https://www.sheffield.gov.uk/campaigns/clean-air-zone",
-    "dataset_version": "2026-08-16"
+    "dataset_version": "2026-11-24"
   },
   "geometry": {
     "type": "MultiPolygon",
@@ -26,24 +23,32 @@
       [
         [
           [
-            -1.49,
-            53.37
+            -1.484,
+            53.371
           ],
           [
-            -1.45,
-            53.37
+            -1.462,
+            53.371
           ],
           [
-            -1.45,
+            -1.456,
+            53.382
+          ],
+          [
+            -1.465,
             53.39
           ],
           [
-            -1.49,
-            53.39
+            -1.484,
+            53.388
           ],
           [
-            -1.49,
-            53.37
+            -1.489,
+            53.379
+          ],
+          [
+            -1.484,
+            53.371
           ]
         ]
       ]

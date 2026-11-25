@@ -10,41 +10,12 @@
     "is_restriction": false,
     "applies_hours_json": {
       "timezone": "Europe/London",
-      "windows": [
-        {
-          "days": [
-            1,
-            2,
-            3,
-            4,
-            5
-          ],
-          "start": "07:00",
-          "end": "15:00"
-        }
-      ],
-      "exemptDates": [
-        "12-25",
-        "2026-01-01",
-        "2026-04-03",
-        "2026-04-06",
-        "2026-05-04",
-        "2026-05-25",
-        "2026-08-31",
-        "2026-12-28",
-        "2027-01-01"
-      ],
-      "exemptRanges": [
-        {
-          "start": "12-24",
-          "end": "01-01"
-        }
-      ]
+      "always": true
     },
     "source_url": "https://www.bristol.gov.uk/residents/streets-travel/bristol-clean-air-zone",
-    "verified_on": "2026-08-16",
+    "verified_on": "2026-11-24",
     "operator_url": "https://www.bristol.gov.uk/residents/streets-travel/bristol-clean-air-zone",
-    "dataset_version": "2026-08-16"
+    "dataset_version": "2026-11-24"
   },
   "geometry": {
     "type": "MultiPolygon",
@@ -53,23 +24,31 @@
         [
           [
             -2.605,
+            51.444
+          ],
+          [
+            -2.582,
             51.442
           ],
           [
-            -2.56,
-            51.442
+            -2.572,
+            51.451
           ],
           [
-            -2.56,
-            51.465
+            -2.578,
+            51.463
+          ],
+          [
+            -2.598,
+            51.463
+          ],
+          [
+            -2.612,
+            51.452
           ],
           [
             -2.605,
-            51.465
-          ],
-          [
-            -2.605,
-            51.442
+            51.444
           ]
         ]
       ]

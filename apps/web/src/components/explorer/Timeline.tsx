@@ -3,7 +3,7 @@ import type { Visit, Activity, Connector } from '../../types';
 import TimelineItemEditor from './TimelineItemEditor';
 import { useSession } from '../../lib/auth';
 import { MODE_LABELS } from '../../types';
-import { formatTime, formatDuration, formatDistance } from '../../utils/format';
+import { formatTime, formatDuration, formatDistance, type DistanceUnit } from '../../utils/format';
 import { useUnits } from '../../lib/units';
 import {
   continuesPastDate,
@@ -70,7 +70,7 @@ function DirectionIcon({ direction }: { direction: string }) {
   return <ArrowUp size={size} />;
 }
 
-function ActivitySteps({ activity }: { activity: Activity }) {
+function ActivitySteps({ activity, unit }: { activity: Activity; unit: DistanceUnit }) {
   const [expanded, setExpanded] = useState(false);
   const steps = activity.steps?.filter((s) => s.distance_meters > 10) || [];
   if (steps.length === 0) return null;
@@ -84,7 +84,7 @@ function ActivitySteps({ activity }: { activity: Activity }) {
           e.stopPropagation();
           setExpanded(!expanded);
         }}
-        className="flex items-center gap-1 text-xs text-text-muted hover:text-text transition-colors duration-ui-fast ease-ui"
+        className="flex min-h-11 items-center gap-1 text-xs text-text-muted transition-colors duration-ui-fast ease-ui hover:text-text"
       >
         {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
         <Navigation size={9} />
@@ -101,7 +101,7 @@ function ActivitySteps({ activity }: { activity: Activity }) {
                 <span className="text-accent/80 font-medium">{step.direction}</span>
                 {step.name && <span className="text-text/80 ml-1">onto {step.name}</span>}
                 <span className="text-text-muted/60 ml-1">
-                  {formatDistance(step.distance_meters)}
+                  {formatDistance(step.distance_meters, unit)}
                 </span>
               </div>
             </div>
@@ -265,9 +265,12 @@ function buildTimelineEvents(
   return events;
 }
 
-function accuracyTitle(acc: NonNullable<Activity['accuracy']>): string {
+function accuracyTitle(acc: NonNullable<Activity['accuracy']>, unit: DistanceUnit): string {
   if (!acc.fixes) return 'Low confidence: no GPS points were recorded for this journey';
-  const offset = acc.meanOffsetM == null ? '' : `, line sits ${acc.meanOffsetM} m from them on average`;
+  const offset =
+    acc.meanOffsetM == null
+      ? ''
+      : `, line sits ${unit === 'mi' ? `${Math.round(acc.meanOffsetM * 1.09361)} yd` : `${acc.meanOffsetM} m`} from them on average`;
   return `${acc.score[0].toUpperCase()}${acc.score.slice(1)} confidence: ${acc.fixes} GPS points, longest gap ${acc.maxGapMin} min${offset}`;
 }
 
@@ -343,10 +346,10 @@ export default function Timeline({
                     <div className="text-[11px] text-text-muted font-mono mb-1 w-full text-center">
                       {formatTime(v.start, timezone)}
                     </div>
-                    <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[11px] font-bold text-white z-10"
+                    <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[11px] font-bold text-on-accent z-10"
                       style={{
                         background: (v.source_id && sourceColors?.[v.source_id]) || 'var(--visit)',
-                        border: '2.5px solid rgba(255,255,255,0.4)',
+                        border: '2.5px solid color-mix(in srgb, var(--on-accent) 40%, transparent)',
                       }}>
                       {stopNum}
                     </div>
@@ -369,8 +372,8 @@ export default function Timeline({
                     <div className="flex items-center gap-2 mt-1.5">
                       <div className="h-5 rounded flex items-center px-2 gap-1"
                         style={{
-                          backgroundColor: '#bc8cff18',
-                          border: '1px solid #bc8cff33',
+                          backgroundColor: 'color-mix(in srgb, var(--visit) 10%, transparent)',
+                          border: '1px solid color-mix(in srgb, var(--visit) 20%, transparent)',
                           minWidth: Math.min(Math.max(v.duration_minutes / 2, 40), 200),
                         }}>
                         <Clock size={10} className="text-visit shrink-0" />
@@ -539,7 +542,7 @@ export default function Timeline({
                             a.accuracy.score === 'medium' && 'bg-bus/15 text-bus',
                             a.accuracy.score === 'low' && 'bg-text-muted/15 text-text-muted',
                           )}
-                          title={accuracyTitle(a.accuracy)}
+                          title={accuracyTitle(a.accuracy, unit)}
                         >
                           {a.accuracy.score}
                         </span>
@@ -557,7 +560,7 @@ export default function Timeline({
                     )}
                     <ModeDetectionChip activity={a} editable={editable} />
                     {a.note && <p className="mt-1 text-xs text-text whitespace-pre-line">{a.note}</p>}
-                    <ActivitySteps activity={a} />
+                    <ActivitySteps activity={a} unit={unit} />
                   </div>
                 </div>
               </div>

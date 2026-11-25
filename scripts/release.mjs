@@ -25,6 +25,7 @@ export const VERSION_PACKAGE_FILES = [
   "apps/web/package.json",
   "apps/api/package.json",
   "packages/db/package.json",
+  "packages/brim/package.json",
 ];
 
 export const CHANGELOG_PATH = "docs/changelog.md";
@@ -245,6 +246,10 @@ export function bumpLockfileVersions(contents, version) {
       throw new Error("Could not update a workspace version in package-lock.json");
     }
     out = next;
+  }
+  const brimRe = /("packages\/brim"\s*:\s*\{\s*"name"\s*:\s*"@locations\/brim"\s*,\s*"version"\s*:\s*")[^"]+/;
+  if (brimRe.test(out)) {
+    out = out.replace(brimRe, `$1${version}`);
   }
   return out;
 }

@@ -3,7 +3,16 @@ import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card, CardTitle } from "../ui/card";
-import { Dialog, DialogContent } from "../ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import ExportFilesCard from "./ExportFilesCard";
 import RetentionCard from "./RetentionCard";
 
@@ -168,27 +177,28 @@ export default function SettingsPrivacy({ onMessage, onError }: Props) {
         </Button>
       </Card>
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent title="Delete account">
-          <h2 className="text-lg font-semibold">Delete account?</h2>
-          <p className="mt-2 text-sm text-text-muted">
-            This wipes Timeline data, uploads, and billing. This cannot be undone.
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" title="Cancel" onClick={() => setDeleteOpen(false)}>
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent title="Delete account">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This wipes Timeline data, uploads, and billing. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel title="Cancel" onClick={() => setDeleteOpen(false)}>
               Cancel
-            </Button>
-            <Button
-              type="button"
+            </AlertDialogCancel>
+            <AlertDialogAction
               variant="destructive"
               title="Confirm delete account"
               onClick={() => void deleteAccount()}
             >
               Delete
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <LegalFooter />
     </div>
   );

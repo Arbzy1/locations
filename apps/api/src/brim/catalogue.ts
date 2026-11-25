@@ -19,7 +19,7 @@ import {
 } from '@locations/brim/shared';
 import type { Context } from 'hono';
 import { brimVcaVehicles as vcaVehicles } from '@locations/db';
-import { createDb, type BrimContext } from "./context";
+import { requestBrimDb, type BrimContext } from "./context";
 
 function fixtureVehicles(flag: string | undefined): Promise<VcaVehicle[]> {
   return loadFixture<VcaVehicle[]>('vca-vehicles', flag);
@@ -57,7 +57,7 @@ export async function listMakesHandler(c: BrimContext) {
   if (isFixtureMode(c.env.BRIM_FIXTURES)) {
     return c.json({ makes: listVcaMakes(await fixtureVehicles(c.env.BRIM_FIXTURES)) });
   }
-  const db = createDb(c.env);
+  const db = requestBrimDb(c);
   const rows = await db.db
     .select({ name: vcaVehicles.make, n: sql<number>`count(*)::int` })
     .from(vcaVehicles)
@@ -75,7 +75,7 @@ export async function listModelsHandler(c: BrimContext) {
   if (isFixtureMode(c.env.BRIM_FIXTURES)) {
     return c.json({ models: listVcaModels(await fixtureVehicles(c.env.BRIM_FIXTURES), make) });
   }
-  const db = createDb(c.env);
+  const db = requestBrimDb(c);
   const rows = await db.db
     .select({ name: vcaVehicles.model, n: sql<number>`count(*)::int` })
     .from(vcaVehicles)
@@ -97,7 +97,7 @@ export async function listCatalogueHandler(c: BrimContext) {
     if (isFixtureMode(c.env.BRIM_FIXTURES)) {
       return c.json({ vehicles: listVcaTrims(await fixtureVehicles(c.env.BRIM_FIXTURES), make, model) });
     }
-    const db = createDb(c.env);
+    const db = requestBrimDb(c);
     const rows = await db.db
       .select()
       .from(vcaVehicles)
@@ -121,7 +121,7 @@ export async function listCatalogueHandler(c: BrimContext) {
   }
   const needle = q.replace(/[%_]/g, '').trim();
   if (needle.length < MIN_QUERY) return c.json({ vehicles: [] });
-  const db = createDb(c.env);
+  const db = requestBrimDb(c);
   const pattern = `%${needle}%`;
   const rows = await db.db
     .select()
@@ -148,7 +148,7 @@ export async function getCatalogueHandler(c: BrimContext) {
     if (!hit) return c.json({ error: 'not_found' }, 404);
     return c.json(hit);
   }
-  const db = createDb(c.env);
+  const db = requestBrimDb(c);
   const rows = await db.db.select().from(vcaVehicles).where(eq(vcaVehicles.id, id)).limit(1);
   const mapped = rows[0] ? rowToVca(rows[0]) : undefined;
   if (!mapped) return c.json({ error: 'not_found' }, 404);

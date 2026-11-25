@@ -49,22 +49,76 @@ export function formatDuration(minutes: number): string {
   return parts.join(' ');
 }
 
+export function isValidIanaTimeZone(timeZone: string): boolean {
+  const trimmed = timeZone.trim();
+  if (!trimmed) return false;
+  try {
+    new Intl.DateTimeFormat('en-GB', { timeZone: trimmed });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns undefined when no timezone was supplied (use runtime default),
+ * the trimmed valid IANA zone, or 'UTC' if an invalid zone string was stored.
+ */
+export function resolveSafeTimeZone(timeZone?: string | null): string | undefined {
+  if (timeZone == null) return undefined;
+  const trimmed = timeZone.trim();
+  if (!trimmed) return undefined;
+  return isValidIanaTimeZone(trimmed) ? trimmed : 'UTC';
+}
+
+const ISO_DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export function formatTime(isoString: string, timeZone?: string | null): string {
   const d = new Date(isoString);
-  return d.toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: timeZone || undefined,
-  });
+  const safeTz = resolveSafeTimeZone(timeZone);
+  try {
+    return d.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      ...(safeTz ? { timeZone: safeTz } : {}),
+    });
+  } catch {
+    return d.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC',
+    });
+  }
 }
 
 export function formatDate(dateStr: string, timeZone?: string | null): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: timeZone || undefined,
-  });
+  if (ISO_DATE_ONLY_RE.test(dateStr)) {
+    const d = new Date(`${dateStr}T12:00:00Z`);
+    return d.toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+  }
+  const d = new Date(dateStr);
+  const safeTz = resolveSafeTimeZone(timeZone);
+  try {
+    return d.toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      ...(safeTz ? { timeZone: safeTz } : {}),
+    });
+  } catch {
+    return d.toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+  }
 }

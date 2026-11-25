@@ -1,10 +1,10 @@
 import type { Propulsion } from "../types.js";
-import { CURRENT_UK_VRM } from "./types.js";
+import { UK_VRM_PATTERN } from "./types.js";
 
 export function normaliseVrm(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
-  const vrm = raw.toUpperCase().replace(/\s+/g, "");
-  return CURRENT_UK_VRM.test(vrm) ? vrm : undefined;
+  const vrm = raw.toUpperCase().replace(/[\s-]+/g, "");
+  return UK_VRM_PATTERN.test(vrm) ? vrm : undefined;
 }
 
 /** DVLA VES fuelType. Not VCA mapFuel: "HYBRID ELECTRIC" would otherwise become BEV. */

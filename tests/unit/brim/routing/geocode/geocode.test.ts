@@ -3,6 +3,7 @@ import { MemoryCache } from "\@locations/brim/routing/cache.js";
 import { CachedGeocoder } from "\@locations/brim/routing/geocode/cache.js";
 import { FixtureGeocoder } from "\@locations/brim/routing/geocode/fixture.js";
 import { GoogleGeocoder } from "\@locations/brim/routing/geocode/google.js";
+import { NominatimGeocoder } from "\@locations/brim/routing/geocode/nominatim.js";
 import { chooseGeocoder } from "\@locations/brim/routing/geocode/select.js";
 import type { Geocoder } from "\@locations/brim/routing/geocode/types.js";
 
@@ -168,5 +169,43 @@ describe("chooseGeocoder", () => {
     const geo = chooseGeocoder({ fixtureMode: true, googleKey: "key", cache: new MemoryCache() });
     const hits = await geo.autocomplete("York");
     expect(hits.some((h) => h.label === "York")).toBe(true);
+  });
+
+  it("falls back to NominatimGeocoder when live without a Google key", async () => {
+    let calledUrl = "";
+    const nom = new NominatimGeocoder({
+      baseUrl: "https://geocode.example.test",
+      fetchImpl: async (input, init) => {
+        calledUrl = String(input);
+        const headers = new Headers(init?.headers);
+        expect(headers.get("User-Agent")).toBeTruthy();
+        return new Response(
+          JSON.stringify([
+            {
+              place_id: 101,
+              display_name: "10 Downing Street, Westminster, London, SW1A 2AA, United Kingdom",
+              lat: "51.5034",
+              lon: "-0.1276",
+            },
+          ]),
+          { status: 200 },
+        );
+      },
+    });
+    const hits = await nom.autocomplete("SW1A 2AA");
+    expect(calledUrl).toContain("https://geocode.example.test/search?");
+    expect(calledUrl).toContain("countrycodes=gb");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.lat).toBeCloseTo(51.5034, 4);
+    expect(hits[0]?.lng).toBeCloseTo(-0.1276, 4);
+    const resolved = await nom.resolve(hits[0]!.placeId!);
+    expect(resolved?.lat).toBeCloseTo(51.5034, 4);
+
+    const chosen = chooseGeocoder({
+      fixtureMode: false,
+      geocodeBase: "https://geocode.example.test",
+      cache: new MemoryCache(),
+    });
+    expect(chosen).toBeTruthy();
   });
 });

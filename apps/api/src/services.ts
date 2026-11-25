@@ -69,6 +69,7 @@ import {
   type DistanceUnit,
   type MapBookmark,
   landmarkForPlaceId,
+  withTenant,
 } from "@locations/db";
 import {
   datesFromParsed,
@@ -85,7 +86,14 @@ import {
 import { osrmRoot } from "./osrm-base";
 import { IMPORT_IDLE_MS, discardImportJobRows } from "./import-session";
 import type { Env } from "./env";
-import { attachPlaceLabels } from "./catalog";
+import {
+  attachPlaceLabels,
+  listChapters as listChaptersCatalog,
+  listImportJobs as listImportJobsCatalog,
+  listNamedTrips as listNamedTripsCatalog,
+} from "./catalog";
+import { sanitizeJobError } from "./admin-guards";
+import { decodeVrmKey, decryptVrm } from "./brim/vrm-crypto";
 
 const OSRM_BASE_DEFAULT = "https://router.project-osrm.org/route/v1";
 /**
@@ -2267,12 +2275,150 @@ export async function updateImportJob(
     .where(and(eq(importJobs.id, jobId), eq(importJobs.tenant, tenant)));
 }
 
-export async function getAccountExportPayload(db: ReturnType<typeof createDb>, tenant: TenantId) {
+export async function getAccountExportPayload(
+  db: ReturnType<typeof createDb>,
+  tenant: TenantId,
+  opts?: { vrmEncryptionKey?: string },
+) {
+  const overview = await getOverview(db, tenant);
+  const sources = await listSources(db, tenant);
+  const settings = await getUserSettings(db, tenant);
+  const labels = await listPlaceLabels(db, tenant);
+  const trips = await listNamedTripsCatalog(db, tenant);
+  const chapters = await listChaptersCatalog(db, tenant);
+  const overrides = await db
+    .select({
+      kind: timelineOverrides.kind,
+      itemStart: timelineOverrides.itemStart,
+      note: timelineOverrides.note,
+      mode: timelineOverrides.mode,
+      updatedAt: timelineOverrides.updatedAt,
+    })
+    .from(timelineOverrides)
+    .where(eq(timelineOverrides.tenant, tenant))
+    .orderBy(timelineOverrides.itemStart);
+  const sub = await getSubscription(db, tenant);
+  const subscription = sub
+    ? {
+        status: sub.status,
+        currentPeriodEnd: sub.currentPeriodEnd ? sub.currentPeriodEnd.toISOString() : null,
+        graceUntil: sub.graceUntil ? sub.graceUntil.toISOString() : null,
+        updatedAt: sub.updatedAt ? sub.updatedAt.toISOString() : null,
+      }
+    : null;
+  const days = await db
+    .select()
+    .from(dayStats)
+    .where(eq(dayStats.tenant, tenant))
+    .orderBy(dayStats.date);
+  const analytics = await db
+    .select({
+      key: analyticsCache.key,
+      data: analyticsCache.data,
+      updatedAt: analyticsCache.updatedAt,
+    })
+    .from(analyticsCache)
+    .where(and(eq(analyticsCache.tenant, tenant), sql`left(${analyticsCache.key}, 1) <> '_'`));
+  const imports = await listImportJobsCatalog(db, tenant);
+  const rawExports = await db
+    .select()
+    .from(exportJobs)
+    .where(eq(exportJobs.tenant, tenant))
+    .orderBy(desc(exportJobs.createdAt));
+  const exportsList = rawExports.map((row) => ({
+    id: row.id,
+    status: row.status,
+    error: sanitizeJobError(row.error),
+    visitCount: row.visitCount ?? null,
+    activityCount: row.activityCount ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }));
+
+  const rawVehicles = await db
+    .select()
+    .from(brimVehicles)
+    .where(eq(brimVehicles.tenant, tenant));
+  const vrmKeyBytes = opts?.vrmEncryptionKey ? decodeVrmKey(opts.vrmEncryptionKey) : undefined;
+  const vehicles = await Promise.all(
+    rawVehicles.map(async (row) => {
+      let vrm: string | null = null;
+      if (row.vrmEncrypted && vrmKeyBytes) {
+        vrm = (await decryptVrm(vrmKeyBytes, row.vrmEncrypted)) ?? null;
+      }
+      return {
+        id: row.id,
+        nickname: row.nickname,
+        kind: row.kind,
+        propulsion: row.propulsion,
+        make: row.make,
+        model: row.model,
+        derivative: row.derivative,
+        transmission: row.transmission,
+        year: row.year,
+        engineCc: row.engineCc,
+        co2Gkm: row.co2Gkm,
+        euroStatus: row.euroStatus,
+        euroStatusSource: row.euroStatusSource,
+        officialConsumption: row.officialConsumption,
+        officialUnit: row.officialUnit,
+        officialCycle: row.officialCycle,
+        tankLitres: row.tankLitres,
+        batteryKwhUsable: row.batteryKwhUsable,
+        hasHeatPump: row.hasHeatPump,
+        vcaMatchId: row.vcaMatchId,
+        vrm,
+        createdAt: row.createdAt,
+      };
+    }),
+  );
+  const tariffs = await db.select().from(brimTariffs).where(eq(brimTariffs.tenant, tenant));
+  const calibrations = await db
+    .select()
+    .from(brimCalibrations)
+    .where(eq(brimCalibrations.tenant, tenant));
+  const fillUps = await db
+    .select()
+    .from(brimFillUps)
+    .where(eq(brimFillUps.tenant, tenant))
+    .orderBy(desc(brimFillUps.occurredAt));
+  const journeys = await db
+    .select()
+    .from(brimJourneys)
+    .where(eq(brimJourneys.tenant, tenant))
+    .orderBy(desc(brimJourneys.createdAt));
+  const savedPlaces = await db
+    .select()
+    .from(brimSavedPlaces)
+    .where(eq(brimSavedPlaces.tenant, tenant));
+  const brimSettingsRows = await db
+    .select()
+    .from(brimSettings)
+    .where(eq(brimSettings.tenant, tenant))
+    .limit(1);
+
   return {
-    overview: await getOverview(db, tenant),
-    sources: await listSources(db, tenant),
-    settings: await getUserSettings(db, tenant),
-    labels: await listPlaceLabels(db, tenant),
+    overview,
+    sources,
+    settings,
+    labels,
+    namedTrips: trips,
+    lifeChapters: chapters,
+    timelineOverrides: overrides,
+    subscription,
+    dayStats: days,
+    analytics,
+    importJobs: imports,
+    exportJobs: exportsList,
+    journeyCost: {
+      vehicles,
+      tariffs,
+      calibrations,
+      fillUps,
+      journeys,
+      savedPlaces,
+      settings: brimSettingsRows[0] ?? null,
+    },
   };
 }
 
@@ -2432,7 +2578,17 @@ export async function applyRetention(
 ) {
   const cutoff = retentionCutoff(years, now);
   const dayBefore = new Date(Date.parse(cutoff) - 86_400_000).toISOString().slice(0, 10);
-  return deleteDateRange(db, { tenant, from: "0001-01-01", to: dayBefore, aggregates: "mark-stale" });
+  const res = await deleteDateRange(db, { tenant, from: "0001-01-01", to: dayBefore, aggregates: "mark-stale" });
+  await db.delete(dayStats).where(and(eq(dayStats.tenant, tenant), lt(dayStats.date, cutoff)));
+  await db
+    .delete(timelineOverrides)
+    .where(
+      and(
+        eq(timelineOverrides.tenant, tenant),
+        lt(sql`left(${timelineOverrides.itemStart}, 10)`, cutoff),
+      ),
+    );
+  return res;
 }
 
 export async function upsertUserSettings(
@@ -2838,7 +2994,9 @@ export async function rewarmRoutes(
   db: ReturnType<typeof createDb>,
   tenant: TenantId,
 ) {
-  const { candidates, cachedKeys } = await loadRouteCandidates(db, tenant);
+  const { candidates, cachedKeys } = await withTenant(db, tenant, (tx) =>
+    loadRouteCandidates(tx, tenant),
+  );
   const seen = new Set<string>();
   const uncached = candidates.filter((c) => {
     if (cachedKeys.has(c.key) || seen.has(c.key)) return false;
@@ -2846,10 +3004,10 @@ export async function rewarmRoutes(
     return true;
   });
   const batch = uncached.slice(0, REWARM_CAP);
-  for (const a of batch) {
+  await mapLimit(batch, 4, async (a) => {
     if (a.trace) await fetchTraceRoute(db, a.trace, a.mode, a.distanceMeters);
     else await fetchRoute(db, a.startLat, a.startLon, a.endLat, a.endLon, a.mode);
-  }
+  });
   return {
     warmed: batch.length,
     remaining: uncached.length - batch.length,
@@ -2896,7 +3054,19 @@ export async function wipeTenantData(
   await db.delete(brimFillUps).where(eq(brimFillUps.tenant, tenant));
   await db.delete(brimVehicles).where(eq(brimVehicles.tenant, tenant));
   if (email) {
-    await db.delete(verification).where(eq(verification.identifier, email));
+    const escapedEmail = email.replace(/[\\%_]/g, "\\$&");
+    await db
+      .delete(verification)
+      .where(
+        or(
+          eq(verification.identifier, email),
+          sql`${verification.identifier} like ${`%:${escapedEmail}`} escape '\\'`,
+          sql`${verification.identifier} like ${`%-${escapedEmail}`} escape '\\'`,
+          eq(verification.value, userId),
+        ),
+      );
+  } else {
+    await db.delete(verification).where(eq(verification.value, userId));
   }
   await db.delete(session).where(eq(session.userId, userId));
   await db.delete(account).where(eq(account.userId, userId));

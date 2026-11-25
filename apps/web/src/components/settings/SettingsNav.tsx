@@ -23,10 +23,12 @@ type Props = {
   section: SettingsSection;
   onSelect: (section: SettingsSection) => void;
   orientation: "rail" | "chips";
+  isDemo?: boolean;
 };
 
-export default function SettingsNav({ section, onSelect, orientation }: Props) {
+export default function SettingsNav({ section, onSelect, orientation, isDemo = false }: Props) {
   const reduce = useReducedMotion();
+  const visibleItems = isDemo ? ITEMS.filter((item) => item.id === "display") : ITEMS;
   return (
     <nav
       className={cn(
@@ -34,7 +36,7 @@ export default function SettingsNav({ section, onSelect, orientation }: Props) {
       )}
       aria-label="Settings sections"
     >
-      {ITEMS.map((item) => {
+      {visibleItems.map((item) => {
         const Icon = item.icon;
         const active = item.id === section;
         return (

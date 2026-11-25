@@ -6,22 +6,19 @@
     "authority": "Merseyflow",
     "kind": "toll",
     "charge_pence_by_class": {
-      "car": 200,
-      "van": 400,
-      "motorcycle": 100
+      "car": 240,
+      "van": 480,
+      "motorcycle": 0
     },
     "is_restriction": false,
     "applies_hours_json": {
       "timezone": "Europe/London",
-      "always": true,
-      "exemptDates": [
-        "12-25"
-      ]
+      "always": true
     },
     "source_url": "https://www.merseyflow.co.uk/",
-    "verified_on": "2026-08-16",
+    "verified_on": "2026-11-24",
     "operator_url": "https://www.merseyflow.co.uk/",
-    "dataset_version": "2026-08-16"
+    "dataset_version": "2026-11-24"
   },
   "geometry": {
     "type": "MultiPolygon",
@@ -29,24 +26,24 @@
       [
         [
           [
-            -2.745,
-            53.335
+            -2.742,
+            53.344
           ],
           [
-            -2.715,
-            53.335
+            -2.718,
+            53.344
           ],
           [
-            -2.715,
-            53.355
+            -2.718,
+            53.356
           ],
           [
-            -2.745,
-            53.355
+            -2.742,
+            53.356
           ],
           [
-            -2.745,
-            53.335
+            -2.742,
+            53.344
           ]
         ]
       ]

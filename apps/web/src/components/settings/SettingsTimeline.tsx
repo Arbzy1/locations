@@ -8,8 +8,16 @@ import { Button } from "../ui/button";
 import { Card, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
 import { EjectField } from "../ui/eject-field";
-import { Dialog, DialogContent } from "../ui/dialog";
-import { AlertDialog, AlertDialogContent } from "../ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../ui/alert-dialog";
 import ImportDropZone, { TIMEZONE_SKEW_COPY } from "../explorer/ImportDropZone";
 
 type Props = {
@@ -278,7 +286,7 @@ export default function SettingsTimeline({ onMessage, onError }: Props) {
                     <div className="mt-0.5 text-xs text-text-muted">
                       {source.visitCount} visits · {source.activityCount} activities
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-1">
+                    <div className="mt-2 flex flex-wrap items-center gap-1">
                       {PLACE_COLOR_TOKENS.map((token) => (
                         <Button
                           key={token}
@@ -297,6 +305,18 @@ export default function SettingsTimeline({ onMessage, onError }: Props) {
                           />
                         </Button>
                       ))}
+                      {source.color && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          title={`Clear custom colour for ${source.label}`}
+                          onClick={() => void patchSourceColor(source, null)}
+                          disabled={isDemo}
+                        >
+                          Clear colour
+                        </Button>
+                      )}
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-1">
@@ -425,49 +445,52 @@ export default function SettingsTimeline({ onMessage, onError }: Props) {
         </Card>
       </div>
 
-      <Dialog open={Boolean(deleteSource)} onOpenChange={(o) => !o && setDeleteSource(null)}>
-        <DialogContent title="Delete source">
-          <h2 className="text-lg font-semibold">Remove source?</h2>
-          <p className="mt-2 text-sm text-text-muted">
-            Remove “{deleteSource?.label}” and all visits from that Google account? Other sources stay.
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" title="Cancel" onClick={() => setDeleteSource(null)}>
+      <AlertDialog open={Boolean(deleteSource)} onOpenChange={(o) => !o && setDeleteSource(null)}>
+        <AlertDialogContent title="Delete source">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove source?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove "{deleteSource?.label}" and all visits from that Google account? Other sources
+              stay.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel title="Cancel" onClick={() => setDeleteSource(null)}>
               Cancel
-            </Button>
-            <Button
-              type="button"
+            </AlertDialogCancel>
+            <AlertDialogAction
               variant="destructive"
               title="Confirm delete source"
               onClick={() => deleteSource && void onDelete(deleteSource)}
             >
               Remove
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={rangeOpen} onOpenChange={setRangeOpen}>
         <AlertDialogContent title="Delete date range">
-          <h2 className="text-lg font-semibold">Delete this date range?</h2>
-          <p className="mt-2 text-sm text-text-muted">
-            Remove visits from {rangeFrom} to {rangeTo}
-            {rangeSourceId ? " for the selected source" : " for all sources"}. Day stats will
-            rebuild. This cannot be undone.
-          </p>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" title="Cancel" onClick={() => setRangeOpen(false)}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this date range?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove visits from {rangeFrom} to {rangeTo}
+              {rangeSourceId ? " for the selected source" : " for all sources"}. Day stats will
+              rebuild. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel title="Cancel" onClick={() => setRangeOpen(false)}>
               Cancel
-            </Button>
-            <Button
-              type="button"
+            </AlertDialogCancel>
+            <AlertDialogAction
               variant="destructive"
               title="Confirm delete date range"
               onClick={() => void deleteRange()}
             >
               Delete range
-            </Button>
-          </div>
+            </AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>

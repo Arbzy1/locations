@@ -6,6 +6,7 @@ export {
   JOIN_CO2_TOLERANCE,
   JOIN_MAX_USEFUL,
   JOIN_OVERFLOW,
+  UK_VRM_PATTERN,
 } from "./types.js";
 export { mapDvlaFuel, normaliseVrm } from "./normalise.js";
 export { joinOutcome, joinVca } from "./join.js";

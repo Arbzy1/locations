@@ -1,0 +1,112 @@
+{
+  "type": "Feature",
+  "properties": {
+    "id": "blackwall-silvertown-tunnel",
+    "name": "Blackwall and Silvertown Tunnels",
+    "authority": "Transport for London",
+    "kind": "toll",
+    "charge_pence_by_class": {
+      "car": 400,
+      "van": 650,
+      "motorcycle": 250
+    },
+    "offpeak_charge_pence_by_class": {
+      "car": 150,
+      "van": 250,
+      "motorcycle": 150
+    },
+    "peak_hours_json": {
+      "timezone": "Europe/London",
+      "windows": [
+        {
+          "days": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "start": "06:00",
+          "end": "10:00"
+        },
+        {
+          "days": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "start": "16:00",
+          "end": "19:00"
+        }
+      ],
+      "exemptDates": [
+        "12-25",
+        "2026-01-01",
+        "2026-04-03",
+        "2026-04-06",
+        "2026-05-04",
+        "2026-05-25",
+        "2026-08-31",
+        "2026-12-28",
+        "2027-01-01"
+      ]
+    },
+    "is_restriction": false,
+    "applies_hours_json": {
+      "timezone": "Europe/London",
+      "windows": [
+        {
+          "days": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "start": "06:00",
+          "end": "22:00"
+        }
+      ],
+      "exemptDates": [
+        "12-25"
+      ]
+    },
+    "source_url": "https://tfl.gov.uk/modes/driving/silvertown-and-blackwall-tunnels-charge",
+    "verified_on": "2026-11-24",
+    "operator_url": "https://tfl.gov.uk/modes/driving/silvertown-and-blackwall-tunnels-charge",
+    "dataset_version": "2026-11-24"
+  },
+  "geometry": {
+    "type": "MultiPolygon",
+    "coordinates": [
+      [
+        [
+          [
+            -0.002,
+            51.496
+          ],
+          [
+            0.015,
+            51.496
+          ],
+          [
+            0.015,
+            51.507
+          ],
+          [
+            -0.002,
+            51.507
+          ],
+          [
+            -0.002,
+            51.496
+          ]
+        ]
+      ]
+    ]
+  }
+}

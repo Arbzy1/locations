@@ -16,7 +16,8 @@ vi.mock("@locations/api/services", async () => {
   return factory();
 });
 
-import { app } from "@locations/api/index";
+import worker, { app } from "@locations/api/index";
+import { resetRateLimits } from "@locations/api/rate-limit";
 import {
   createExportJob,
   getActiveExportJob,
@@ -32,6 +33,7 @@ function request(path: string, init?: RequestInit, requestEnv = env) {
 
 describe("account export pack", () => {
   beforeEach(() => {
+    resetRateLimits();
     getSession.mockReset();
     vi.mocked(createExportJob).mockReset();
     vi.mocked(getActiveExportJob).mockReset();
@@ -157,5 +159,52 @@ describe("account export pack", () => {
     getSession.mockResolvedValue(null);
     const res = await request("/api/account/export-pack/job-a/file");
     expect(res.status).toBe(401);
+  });
+
+  it("enqueues onto IMPORT_QUEUE when bound and consumes export_pack messages in worker.queue", async () => {
+    getSession.mockResolvedValue(sessionUser({ id: "user-a" }));
+    const send = vi.fn(async () => undefined);
+    const queuedEnv = testEnv({ IMPORT_QUEUE: { send } as unknown as Queue });
+    const res = await request("/api/account/export-pack", { method: "POST" }, queuedEnv);
+    expect(res.status).toBe(200);
+    const { jobId } = (await res.json()) as { jobId: string };
+    expect(send).toHaveBeenCalledWith({
+      kind: "export_pack",
+      jobId,
+      tenant: "user-a",
+      userId: "user-a",
+      r2Key: `exports/user-a/${jobId}.zip`,
+    });
+
+    vi.mocked(getExportJob).mockResolvedValue({
+      id: jobId,
+      tenant: "user-a",
+      userId: "user-a",
+      status: "processing",
+      r2Key: `exports/user-a/${jobId}.zip`,
+    } as never);
+    const ack = vi.fn();
+    const retry = vi.fn();
+    await worker.queue(
+      {
+        messages: [
+          {
+            body: {
+              kind: "export_pack",
+              jobId,
+              tenant: "user-a",
+              userId: "user-a",
+              r2Key: `exports/user-a/${jobId}.zip`,
+            },
+            ack,
+            retry,
+          },
+        ],
+      } as unknown as MessageBatch<unknown>,
+      queuedEnv,
+    );
+    expect(ack).toHaveBeenCalledTimes(1);
+    expect(retry).not.toHaveBeenCalled();
+    expect(queuedEnv.UPLOADS.put).toHaveBeenCalled();
   });
 });

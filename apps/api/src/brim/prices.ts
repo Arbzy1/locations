@@ -168,11 +168,12 @@ export async function resolveEstimatePrice(
   db: BrimDb,
   input: {
     propulsion: Propulsion;
+    fuelGrade?: FuelGrade;
     stationId?: string;
     origin?: { lat: number; lng: number };
   },
 ): Promise<ResolvedFuelPrice | undefined> {
-  const grade = gradeForPropulsion(input.propulsion);
+  const grade = input.fuelGrade ?? gradeForPropulsion(input.propulsion);
   if (!grade) return undefined;
   if (isFixtureMode(env.BRIM_FIXTURES)) {
     const corpus = await fixtureCorpus(env.BRIM_FIXTURES);
@@ -489,9 +490,9 @@ export async function liveAlongRoute(
 export async function resolveEstimateFillBaseline(
   env: Env,
   db: BrimDb,
-  input: { propulsion: Propulsion; origin?: { lat: number; lng: number } },
+  input: { propulsion: Propulsion; fuelGrade?: FuelGrade; origin?: { lat: number; lng: number } },
 ): Promise<ResolvedFuelPrice | undefined> {
-  const grade = gradeForPropulsion(input.propulsion);
+  const grade = input.fuelGrade ?? gradeForPropulsion(input.propulsion);
   if (!grade) return undefined;
   if (isFixtureMode(env.BRIM_FIXTURES)) {
     const corpus = await fixtureCorpus(env.BRIM_FIXTURES);

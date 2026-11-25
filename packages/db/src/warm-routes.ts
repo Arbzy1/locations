@@ -10,7 +10,8 @@ import { makeRouteCacheKey } from "./geo.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 loadEnvFiles();
 
-const OSRM_BASE = "https://router.project-osrm.org/route/v1";
+const rawOsrm = (process.env.OSRM_BASE?.trim() || "https://router.project-osrm.org").replace(/\/+$/, "");
+const OSRM_BASE = rawOsrm.endsWith("/route/v1") ? rawOsrm : `${rawOsrm}/route/v1`;
 const MODE_TO_PROFILE: Record<string, string> = {
   walking: "foot",
   cycling: "bike",
@@ -84,7 +85,16 @@ async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is required");
   const db = drizzle(neon(url));
-  const rows = await db.select().from(activities);
+  const rows = await db
+    .select({
+      id: activities.id,
+      mode: activities.mode,
+      startLat: activities.startLat,
+      startLon: activities.startLon,
+      endLat: activities.endLat,
+      endLon: activities.endLon,
+    })
+    .from(activities);
   console.log(`Warming routes for ${rows.length} activities...`);
 
   let cached = 0;
@@ -110,7 +120,10 @@ async function main() {
       `?overview=full&geometries=geojson&steps=true&annotations=duration,distance`;
 
     try {
-      const resp = await fetch(osrmUrl, { signal: AbortSignal.timeout(10_000) });
+      const resp = await fetch(osrmUrl, {
+        headers: { "User-Agent": "LocationsRouteWarmer/1.0 (+https://locations.aden.website)" },
+        signal: AbortSignal.timeout(10_000),
+      });
       await sleep(1100);
       if (!resp.ok) {
         errors++;

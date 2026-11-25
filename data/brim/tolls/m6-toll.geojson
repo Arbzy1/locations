@@ -6,22 +6,19 @@
     "authority": "Midland Expressway Limited",
     "kind": "toll",
     "charge_pence_by_class": {
-      "car": 880,
+      "car": 1090,
       "van": 1760,
-      "motorcycle": 500
+      "motorcycle": 630
     },
     "is_restriction": false,
     "applies_hours_json": {
       "timezone": "Europe/London",
-      "always": true,
-      "exemptDates": [
-        "12-25"
-      ]
+      "always": true
     },
     "source_url": "https://www.m6toll.co.uk/pricing/",
-    "verified_on": "2026-08-16",
+    "verified_on": "2026-11-24",
     "operator_url": "https://www.m6toll.co.uk/pricing/",
-    "dataset_version": "2026-08-16"
+    "dataset_version": "2026-11-24"
   },
   "geometry": {
     "type": "MultiPolygon",
@@ -29,24 +26,56 @@
       [
         [
           [
-            -2.05,
-            52.49
+            -1.73,
+            52.512
           ],
           [
-            -1.68,
-            52.49
+            -1.71,
+            52.52
           ],
           [
-            -1.68,
-            52.705
+            -1.735,
+            52.562
           ],
           [
-            -2.05,
-            52.705
+            -1.81,
+            52.618
           ],
           [
-            -2.05,
-            52.49
+            -1.865,
+            52.644
+          ],
+          [
+            -1.92,
+            52.664
+          ],
+          [
+            -2,
+            52.684
+          ],
+          [
+            -2.015,
+            52.672
+          ],
+          [
+            -1.935,
+            52.646
+          ],
+          [
+            -1.885,
+            52.626
+          ],
+          [
+            -1.838,
+            52.6
+          ],
+          [
+            -1.76,
+            52.548
+          ],
+          [
+            -1.73,
+            52.512
           ]
         ]
       ]

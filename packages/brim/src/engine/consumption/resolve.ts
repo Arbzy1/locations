@@ -35,11 +35,19 @@ export type ResolveConsumptionInput = {
   providerEstimate?: { litres: number; distanceKm: number } | undefined;
 };
 
+function isCompatibleUnit(unit: ConsumptionUnit, kind: "liquid" | "electric"): boolean {
+  if (kind === "liquid") return unit === "mpg" || unit === "l/100km";
+  return unit === "mi/kWh" || unit === "kWh/100km";
+}
+
 function toCanonical(
   value: number,
   unit: ConsumptionUnit,
   kind: "liquid" | "electric",
-): { value: number; unit: "l/100km" | "kWh/100km" } {
+): { value: number; unit: "l/100km" | "kWh/100km" } | undefined {
+  if (!Number.isFinite(value) || !(value > 0) || !isCompatibleUnit(unit, kind)) {
+    return undefined;
+  }
   if (kind === "liquid") {
     if (unit === "mpg") return { value: mpgToL100km(value), unit: "l/100km" };
     return { value, unit: "l/100km" };
@@ -66,43 +74,52 @@ export function resolveConsumption(inputs: ResolveConsumptionInput): ResolvedCon
   const reasons: string[] = [];
   const unit = inputs.kind === "liquid" ? "l/100km" : "kWh/100km";
 
-  if (inputs.calibration && inputs.calibration.sampleCount >= 3) {
-    const c = toCanonical(inputs.calibration.value, inputs.calibration.unit, inputs.kind);
-    reasons.push(
-      `Used your last ${inputs.calibration.sampleCount} brim-to-brim intervals rather than the brochure figure.`,
-    );
-    return { ...c, tier: 0, label: TIER_LABEL[0], reasons };
-  }
-  if (inputs.calibration && inputs.calibration.sampleCount < 3) {
-    reasons.push("Not enough fill-ups yet for a personal figure - need at least 3 brim-to-brim intervals.");
+  if (inputs.calibration && isCompatibleUnit(inputs.calibration.unit, inputs.kind)) {
+    if (inputs.calibration.sampleCount >= 3) {
+      const c = toCanonical(inputs.calibration.value, inputs.calibration.unit, inputs.kind);
+      if (c) {
+        reasons.push(
+          `Used your last ${inputs.calibration.sampleCount} brim-to-brim intervals rather than the brochure figure.`,
+        );
+        return { ...c, tier: 0, label: TIER_LABEL[0], reasons };
+      }
+    } else {
+      reasons.push("Not enough fill-ups yet for a personal figure - need at least 3 brim-to-brim intervals.");
+    }
   }
 
   if (inputs.userEntered) {
     const c = toCanonical(inputs.userEntered.value, inputs.userEntered.unit, inputs.kind);
-    reasons.push("Used the consumption figure you entered.");
-    return { ...c, tier: 1, label: TIER_LABEL[1], reasons };
+    if (c) {
+      reasons.push("Used the consumption figure you entered.");
+      return { ...c, tier: 1, label: TIER_LABEL[1], reasons };
+    }
   }
 
   if (inputs.official) {
     const c = toCanonical(inputs.official.value, inputs.official.unit, inputs.kind);
-    const factor = correctionFor(inputs.official.cycle, inputs.kind);
-    const pct = Math.round((factor - 1) * 100);
-    reasons.push(
-      `Adjusted the official figure up ${pct}% - official tests run optimistic.`,
-    );
-    return {
-      value: c.value * factor,
-      unit: c.unit,
-      tier: 2,
-      label: TIER_LABEL[2],
-      reasons,
-    };
+    if (c) {
+      const factor = correctionFor(inputs.official.cycle, inputs.kind);
+      const pct = Math.round((factor - 1) * 100);
+      reasons.push(
+        `Adjusted the official figure up ${pct}% - official tests run optimistic.`,
+      );
+      return {
+        value: c.value * factor,
+        unit: c.unit,
+        tier: 2,
+        label: TIER_LABEL[2],
+        reasons,
+      };
+    }
   }
 
   if (inputs.classAverage) {
     const c = toCanonical(inputs.classAverage.value, inputs.classAverage.unit, inputs.kind);
-    reasons.push("No figure for this car, so we used similar vehicles.");
-    return { ...c, tier: 3, label: TIER_LABEL[3], reasons };
+    if (c) {
+      reasons.push("No figure for this car, so we used similar vehicles.");
+      return { ...c, tier: 3, label: TIER_LABEL[3], reasons };
+    }
   }
 
   if (inputs.providerEstimate && inputs.providerEstimate.distanceKm > 0) {

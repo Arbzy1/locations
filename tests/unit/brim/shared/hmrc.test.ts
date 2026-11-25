@@ -31,6 +31,21 @@ describe("HMRC AMAP", () => {
     expect(r.approvedPence).toBe(20 * 25);
     expect(r.crossedThreshold).toBe(false);
   });
+
+  it("uses a flat 24p per mile for motorcycles regardless of YTD miles", () => {
+    const r = hmrcAmapPence(100, 12_000, { kind: "motorcycle" });
+    expect(r.motorcycleMiles).toBe(100);
+    expect(r.bandMiles45).toBe(0);
+    expect(r.bandMiles25).toBe(0);
+    expect(r.approvedPence).toBe(100 * 24);
+    expect(r.crossedThreshold).toBe(false);
+  });
+
+  it("adds 5p per mile per fellow business passenger", () => {
+    const r = hmrcAmapPence(50, 0, { kind: "car", passengers: 2 });
+    expect(r.passengerPence).toBe(50 * 5 * 2);
+    expect(r.approvedPence).toBe(50 * 45 + 50 * 10);
+  });
 });
 
 describe("ukTaxYearStartUtc", () => {

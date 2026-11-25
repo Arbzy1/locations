@@ -1,6 +1,10 @@
 import { findPlaceByLabel } from "@locations/brim/shared";
 import { describe, expect, it } from "vitest";
-import { composeEstimateRequest, composeVehicleInline, tripPlace } from "@locations/web/lib/brim/estimate/compose-request";
+import {
+  composeEstimateRequest,
+  composeVehicleInline,
+  tripPlace,
+} from "@locations/web/lib/brim/estimate/compose-request";
 import { formatEstimateMoney } from "@locations/web/lib/brim/estimate/readout";
 
 const crawley = findPlaceByLabel("Crawley")!;
@@ -40,7 +44,7 @@ describe("composeVehicleInline", () => {
     expect(profile.tankLitres).toBe(45);
   });
 
-  it("sends typed mi/kWh and start charge on a BEV", () => {
+  it("sends typed mi/kWh and start charge (including 0%) on a BEV or PHEV", () => {
     const profile = composeVehicleInline({
       propulsion: "bev",
       vehicleKind: "car",
@@ -54,20 +58,20 @@ describe("composeVehicleInline", () => {
       overrideMiKwh: "",
       tank: "55",
       battery: "64",
-      start: "80",
+      start: "0",
       hasHeatPump: true,
     });
     expect(profile.userEnteredUnit).toBe("mi/kWh");
     expect(profile.userEnteredConsumption).toBe(4);
     expect(profile.batteryKwhUsable).toBe(64);
-    expect(profile.startChargePercent).toBe(80);
+    expect(profile.startChargePercent).toBe(0);
     expect(profile.hasHeatPump).toBe(true);
     expect(profile.tankLitres).toBeUndefined();
   });
 });
 
 describe("composeEstimateRequest", () => {
-  it("puts origin, dest, mpg vehicle, and station on the POST body", () => {
+  it("puts origin, dest, mpg vehicle, fuelGrade, roundTrip, passengers, and station on the POST body", () => {
     const body = composeEstimateRequest({
       origin: "Crawley",
       originPin: crawley,
@@ -75,7 +79,10 @@ describe("composeEstimateRequest", () => {
       destPin: london,
       viaDrafts: [{ id: "1", text: "Birmingham", pin: findPlaceByLabel("Birmingham")! }],
       departsAt: "2026-08-14T08:00",
+      roundTrip: true,
+      passengers: 2,
       propulsion: "petrol",
+      fuelGrade: "E5",
       vehicleId: "inline",
       stationId: "fixture-station",
       priceStrategy: "cheapest-on-route",
@@ -88,18 +95,26 @@ describe("composeEstimateRequest", () => {
       offpeakPence: "",
       offpeakWindow: "",
       evNetworks: [],
-      vehicleInline: { kind: "car", propulsion: "petrol", userEnteredConsumption: 40, userEnteredUnit: "mpg" },
+      vehicleInline: {
+        kind: "car",
+        propulsion: "petrol",
+        userEnteredConsumption: 40,
+        userEnteredUnit: "mpg",
+      },
     });
     expect(body.origin).toEqual({ lat: crawley.lat, lng: crawley.lng, label: "Crawley" });
     expect(body.destination).toEqual({ lat: london.lat, lng: london.lng, label: "London" });
     expect(body.waypoints).toHaveLength(1);
+    expect(body.roundTrip).toBe(true);
+    expect(body.passengers).toBe(2);
+    expect(body.fuelGrade).toBe("E5");
     expect(body.vehicleInline).toMatchObject({ userEnteredUnit: "mpg" });
     expect(body.stationId).toBe("fixture-station");
     expect(body.priceStrategy).toBe("cheapest-on-route");
     expect(body.vehicleId).toBeUndefined();
   });
 
-  it("sends a home EV tariff and start charge", () => {
+  it("sends a home EV tariff and start charge (including 0%)", () => {
     const body = composeEstimateRequest({
       origin: "Crawley",
       originPin: crawley,
@@ -114,8 +129,9 @@ describe("composeEstimateRequest", () => {
       electricTrip: true,
       chargingLocation: "home",
       hasHeatPump: true,
-      start: "80",
+      start: "0",
       homePence: "7.5",
+      publicPence: "74",
       networkId: "",
       offpeakPence: "7",
       offpeakWindow: "00:30-04:30",
@@ -125,9 +141,38 @@ describe("composeEstimateRequest", () => {
     expect(body.stationId).toBeUndefined();
     expect(body.priceStrategy).toBe("user-tariff");
     expect(body.pricePence).toBe(7.5);
-    expect(body.startChargePercent).toBe(80);
+    expect(body.startChargePercent).toBe(0);
     expect(body.chargingLocation).toBe("home");
     expect(body.offpeakWindow).toBe("00:30-04:30");
+  });
+
+  it("forwards custom public charger pricePence without clobbering homePence or requiring networkId", () => {
+    const body = composeEstimateRequest({
+      origin: "Crawley",
+      originPin: crawley,
+      destination: "London",
+      destPin: london,
+      viaDrafts: [],
+      departsAt: "2026-08-14T08:00",
+      propulsion: "bev",
+      vehicleId: "car-1",
+      electricTrip: true,
+      chargingLocation: "public",
+      hasHeatPump: false,
+      start: "65",
+      homePence: "7.5",
+      publicPence: "59",
+      networkId: "",
+      offpeakPence: "",
+      offpeakWindow: "",
+      evNetworks: [],
+      vehicleInline: {},
+    });
+    expect(body.vehicleId).toBe("car-1");
+    expect(body.chargingLocation).toBe("public");
+    expect(body.network).toBeUndefined();
+    expect(body.pricePence).toBe(59);
+    expect(body.startChargePercent).toBe(65);
   });
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import CatalogPage from './CatalogPage';
 import MapView from '../explorer/Map';
@@ -7,7 +7,9 @@ import { Input } from '../ui/input';
 import { EjectField } from '../ui/eject-field';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useDayData, useDays, type DayMissing } from '../../hooks/useApi';
-import type { DayData, Visit } from '../../types';
+import { MODE_LABELS, type Activity, type DayData, type Visit } from '../../types';
+import { formatDistance, formatTime } from '../../utils/format';
+import { useUnits } from '../../lib/units';
 
 /** The loaded day, or undefined while loading or when the date has no data. */
 const loadedDay = (d: DayData | DayMissing | undefined) => (d && 'visits' in d ? d : undefined);
@@ -72,23 +74,50 @@ export function ComparePage() {
   );
 }
 
+type ReplayStep =
+  | { kind: 'visit'; start: string; visit: Visit }
+  | { kind: 'activity'; start: string; activity: Activity };
+
 export function ReplayPage() {
   const { data: days = [] } = useDays();
+  const { unit, timezone } = useUnits();
   const [params, setParams] = useSearchParams();
   const date = params.get('date') || days[days.length - 1]?.date || '';
   const data = loadedDay(useDayData(date).data);
-  const visits = data?.visits ?? [];
+  const visits = useMemo(() => data?.visits ?? [], [data?.visits]);
+  const activities = useMemo(() => data?.activities ?? [], [data?.activities]);
+
+  const steps = useMemo((): ReplayStep[] => {
+    const merged: ReplayStep[] = [
+      ...visits.map((visit) => ({ kind: 'visit' as const, start: visit.start, visit })),
+      ...activities.map((activity) => ({ kind: 'activity' as const, start: activity.start, activity })),
+    ];
+    merged.sort((x, y) => x.start.localeCompare(y.start));
+    return merged;
+  }, [visits, activities]);
+
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
-  const shown: Visit[] = visits.slice(0, Math.max(1, index + 1));
-  const current = visits[index];
+
+  const clampedIndex = steps.length > 0 ? Math.min(index, steps.length - 1) : 0;
+  const currentStep = steps[clampedIndex];
+  const cutoff = currentStep?.start ?? '';
+
+  const shownVisits = useMemo(
+    () => (cutoff ? visits.filter((v) => v.start <= cutoff) : []),
+    [visits, cutoff],
+  );
+  const shownActivities = useMemo(
+    () => (cutoff ? activities.filter((a) => a.start <= cutoff) : []),
+    [activities, cutoff],
+  );
 
   useEffect(() => {
-    if (!playing || visits.length === 0) return;
+    if (!playing || steps.length === 0) return;
     const id = window.setTimeout(() => {
       setIndex((i) => {
-        if (i >= visits.length - 1) {
+        if (i >= steps.length - 1) {
           setPlaying(false);
           return i;
         }
@@ -96,10 +125,25 @@ export function ReplayPage() {
       });
     }, Math.max(200, 800 / speed));
     return () => window.clearTimeout(id);
-  }, [playing, index, speed, visits.length]);
+  }, [playing, clampedIndex, speed, steps.length]);
+
+  const statusText = useMemo(() => {
+    if (!currentStep) return 'No events for this day';
+    if (currentStep.kind === 'visit') {
+      const current = currentStep.visit;
+      const place = current.place_name || current.cluster;
+      return `${place} · ${formatTime(current.start, timezone)} · step ${clampedIndex + 1} of ${steps.length}`;
+    }
+    const act = currentStep.activity;
+    const label =
+      act.from_place && act.to_place
+        ? `${act.from_place} to ${act.to_place}`
+        : MODE_LABELS[act.mode] || act.mode;
+    return `${label} (${formatDistance(act.distance_meters, unit)}) · ${formatTime(act.start, timezone)} · step ${clampedIndex + 1} of ${steps.length}`;
+  }, [currentStep, clampedIndex, steps.length, timezone, unit]);
 
   return (
-    <CatalogPage title="Time-lapse" description="Playback of one imported day. Map tiles stay native.">
+    <CatalogPage title="Time-lapse" description="Chronological playback of stops and journeys on one imported day.">
       <EjectField label="Replay date" htmlFor="replay-date">
         <Input
           id="replay-date"
@@ -116,30 +160,44 @@ export function ReplayPage() {
         />
       </EjectField>
       <div className="h-64 overflow-hidden rounded-lg border border-border">
-          <MapView compact sizeSignal={index} visits={shown} activities={data?.activities ?? []} />
+        <MapView
+          compact
+          sizeSignal={0}
+          dayDate={date}
+          visits={shownVisits}
+          activities={shownActivities}
+        />
       </div>
       <input
         type="range"
         min={0}
-        max={Math.max(0, visits.length - 1)}
-        value={index}
-        title="Scrub visits"
+        max={Math.max(0, steps.length - 1)}
+        value={clampedIndex}
+        title="Scrub day events chronologically"
         onChange={(e) => setIndex(Number(e.target.value))}
-        className="w-full"
+        className="h-11 w-full cursor-pointer accent-accent"
       />
       <div className="flex flex-wrap gap-2">
-        <Button type="button" title={playing ? 'Pause replay' : 'Play replay'} onClick={() => setPlaying((p) => !p)}>
+        <Button
+          type="button"
+          disabled={steps.length === 0}
+          title={playing ? 'Pause replay' : 'Play replay'}
+          onClick={() => {
+            if (!playing && clampedIndex >= steps.length - 1) setIndex(0);
+            setPlaying((p) => !p);
+          }}
+        >
           {playing ? 'Pause' : 'Play'}
         </Button>
-        <Button type="button" variant="outline" title="Slower" onClick={() => setSpeed((s) => Math.max(0.5, s / 2))}>
+        <Button type="button" variant="outline" title="Slow down replay" onClick={() => setSpeed((s) => Math.max(0.5, s / 2))}>
           Slower
         </Button>
-        <Button type="button" variant="outline" title="Faster" onClick={() => setSpeed((s) => Math.min(4, s * 2))}>
+        <Button type="button" variant="outline" title="Speed up replay" onClick={() => setSpeed((s) => Math.min(4, s * 2))}>
           Faster
         </Button>
       </div>
       <p className="text-xs text-text-muted">
-        {current ? `${current.cluster} · stop ${index + 1} of ${visits.length}` : 'No visits'} · speed {speed}x
+        {statusText} · speed {speed}x
       </p>
     </CatalogPage>
   );

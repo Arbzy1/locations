@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useDayTrips, useMultiDayTrips, usePlaceLabels } from '../../hooks/useApi';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useDayTrips, useMultiDayTrips, useNamedTrips, usePlaceLabels } from '../../hooks/useApi';
 import { formatDate, formatMilesOrKm } from '../../utils/format';
 import { useUnits } from '../../lib/units';
 import { MODE_COLORS, MODE_LABELS } from '../../types';
 import type { DayTrip } from '../../types';
-import { multiDayTripLabel } from '../../lib/explorer/trips';
+import { enrichMultiDayTripsWithSaved, multiDayTripLabel } from '../../lib/explorer/trips';
+import { tripPath } from '../../lib/nav/paths';
 import { Button } from '../ui/button';
 import { EjectField } from '../ui/eject-field';
 import FilterPresets from './FilterPresets';
@@ -70,8 +71,10 @@ function SortBtn({
 export default function DayTripsView({ onSelectDate }: Props) {
   const { data: trips, isLoading } = useDayTrips();
   const { data: multiDay } = useMultiDayTrips();
+  const { data: savedNamedTrips } = useNamedTrips();
   const { data: labels } = usePlaceLabels();
   const { unit } = useUnits();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const query = parseDayTripsQuery(params);
   const yearFilter = query.year;
@@ -146,17 +149,17 @@ export default function DayTripsView({ onSelectDate }: Props) {
   );
 
   const namedMultiDay = useMemo(() => {
-    if (!Array.isArray(multiDay)) return [];
-    return multiDay
+    const combined = enrichMultiDayTripsWithSaved(multiDay, savedNamedTrips);
+    return combined
       .filter((t) => {
         if (yearFilter === 'all') return true;
         const dates = t.dates?.length ? t.dates : [t.start, t.end];
         return dates.some((d) => d.startsWith(yearFilter));
       })
       .map((t) => ({ trip: t, name: multiDayTripLabel(t, hiddenKeys) }))
-      .filter((row): row is { trip: (typeof multiDay)[number]; name: string } => Boolean(row.name))
+      .filter((row): row is { trip: (typeof combined)[number]; name: string } => Boolean(row.name))
       .slice(0, 20);
-  }, [multiDay, yearFilter, hiddenKeys]);
+  }, [multiDay, savedNamedTrips, yearFilter, hiddenKeys]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -219,14 +222,21 @@ export default function DayTripsView({ onSelectDate }: Props) {
           <span className="text-xs text-text-muted">Range:</span>
           <input
             type="range"
-            min={1}
-            max={100}
-            value={minRange}
-            onChange={(e) => patchQuery({ min: Number(e.target.value) })}
-            title="Minimum trip range in miles"
-            className="w-20"
+            min={unit === 'km' ? 2 : 1}
+            max={unit === 'km' ? 160 : 100}
+            value={unit === 'km' ? Math.max(2, Math.round(minRange / 0.621371)) : minRange}
+            onChange={(e) => {
+              const raw = Number(e.target.value);
+              patchQuery({
+                min: unit === 'km' ? Math.max(1, Math.round(raw * 0.621371)) : raw,
+              });
+            }}
+            title={unit === 'km' ? 'Minimum trip range in kilometres' : 'Minimum trip range in miles'}
+            className="h-11 w-20 cursor-pointer accent-accent"
           />
-          <span className="w-10 text-xs text-text-muted">{minRange}mi</span>
+          <span className="w-12 text-xs text-text-muted">
+            {unit === 'km' ? `${Math.max(2, Math.round(minRange / 0.621371))} km` : `${minRange} mi`}
+          </span>
         </div>
 
         <EjectField label="Search places" htmlFor="day-trips-search" className="min-w-0 flex-1">
@@ -258,6 +268,9 @@ export default function DayTripsView({ onSelectDate }: Props) {
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <Compass size={20} className="text-accent" />
           <h2 className="text-lg font-semibold">Day Trips</h2>
+          <Button asChild variant="outline" size="sm" title="Create or manage named multi-day trips">
+            <Link to="/trips/new">Name a trip</Link>
+          </Button>
           <span className="ml-auto text-sm text-text-muted">
             {sorted.length} trips
             {activeFilters > 0 && (
@@ -319,9 +332,9 @@ export default function DayTripsView({ onSelectDate }: Props) {
                     key={`${t.start}-${t.end}`}
                     type="button"
                     variant="ghost"
-                    title={`Open Day View for ${t.start}`}
+                    title={`Open trip ${name}`}
                     className="h-auto min-h-11 w-full justify-start whitespace-normal rounded-lg border border-border bg-bg px-3 py-3 text-left font-normal"
-                    onClick={() => onSelectDate(t.start)}
+                    onClick={() => void navigate(tripPath(t.start, t.end))}
                   >
                     <span className="flex min-w-0 flex-col gap-1">
                       <span className="flex items-center justify-between gap-2">

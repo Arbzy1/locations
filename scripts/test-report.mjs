@@ -30,6 +30,8 @@ const result = spawnSync(
     "--project",
     "integration",
     "--project",
+    "admin",
+    "--project",
     "security",
     "--reporter=default",
     "--reporter=json",

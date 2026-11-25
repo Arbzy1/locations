@@ -310,4 +310,113 @@ describe('fill-ups', () => {
     expect(charged.status).toBe(400);
     expect(((await charged.json()) as { error: string }).error).toBe('unknown_station');
   });
+
+  it('accepts out-of-order historical receipts, PATCH edits, and PHEV kwh + litres logs', async () => {
+    const { vehicle, cookie, headers } = await createCar('petrol', 'Historical petrol');
+    const feb = await app.request(
+      '/api/brim/fill-ups',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          vehicleId: vehicle.id,
+          odometerMiles: 10500,
+          quantity: 42,
+          unit: 'litres',
+          price: 6000,
+          brim: true,
+          occurredAt: '2026-02-10T10:00:00Z',
+        }),
+      },
+      env,
+    );
+    expect(feb.status).toBe(201);
+
+    // Backfill an earlier January receipt with a lower odometer reading
+    const jan = await app.request(
+      '/api/brim/fill-ups',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          vehicleId: vehicle.id,
+          odometerMiles: 10100,
+          quantity: 38,
+          unit: 'litres',
+          price: 5400,
+          brim: true,
+          occurredAt: '2026-01-10T10:00:00Z',
+        }),
+      },
+      env,
+    );
+    expect(jan.status).toBe(201);
+    const janRow = (await jan.json()) as { id: string };
+
+    // Edit note & quantity via PATCH
+    const patched = await app.request(
+      `/api/brim/fill-ups/${janRow.id}`,
+      {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ quantity: 39, note: 'Backfilled receipt' }),
+      },
+      env,
+    );
+    expect(patched.status).toBe(200);
+    expect(((await patched.json()) as { quantity: number; note?: string }).note).toBe(
+      'Backfilled receipt',
+    );
+
+    // PHEV supports both litres and kwh
+    const phevRes = await app.request(
+      '/api/brim/vehicles',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ nickname: 'PHEV Golf', kind: 'car', propulsion: 'phev' }),
+      },
+      env,
+    );
+    expect(phevRes.status).toBe(201);
+    const phev = (await phevRes.json()) as { id: string };
+
+    const phevCharge = await app.request(
+      '/api/brim/fill-ups',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          vehicleId: phev.id,
+          odometerMiles: 5000,
+          quantity: 12,
+          unit: 'kwh',
+          price: 90,
+          brim: true,
+          occurredAt: '2026-03-01T08:00:00Z',
+        }),
+      },
+      env,
+    );
+    expect(phevCharge.status).toBe(201);
+
+    const phevFuel = await app.request(
+      '/api/brim/fill-ups',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          vehicleId: phev.id,
+          odometerMiles: 5250,
+          quantity: 35,
+          unit: 'litres',
+          price: 4900,
+          brim: true,
+          occurredAt: '2026-03-05T08:00:00Z',
+        }),
+      },
+      env,
+    );
+    expect(phevFuel.status).toBe(201);
+  });
 });

@@ -15,11 +15,9 @@ export function vehicleChipLabel(input: {
   vehicleKind: string;
 }): string {
   if (input.vehicleId !== "inline" && input.selected) {
-    return (
-      input.selected.nickname ??
-      [input.selected.make, input.selected.model].filter(Boolean).join(" ") ??
-      input.selected.propulsion
-    );
+    const nick = input.selected.nickname?.trim();
+    const makeModel = [input.selected.make, input.selected.model].filter(Boolean).join(" ").trim();
+    return nick || makeModel || input.selected.propulsion;
   }
   if (input.catalogue) return `${input.catalogue.make} ${input.catalogue.model}`;
   return `This trip: ${input.propulsion} ${input.vehicleKind}`;
